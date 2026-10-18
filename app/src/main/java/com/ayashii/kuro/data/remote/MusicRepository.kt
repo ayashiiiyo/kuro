@@ -7,6 +7,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
@@ -155,7 +157,7 @@ class MusicRepository {
             }
 
             val client = okhttp3.OkHttpClient()
-            val mediaType = okhttp3.MediaType.parse("application/json")
+            val reqBody = payload.toString().toRequestBody("application/json".toMediaType())
             val reqBuilder = okhttp3.Request.Builder()
                 .url("$origin/youtubei/v1/browse")
                 .header("Content-Type", "application/json")
@@ -166,7 +168,7 @@ class MusicRepository {
                 .header("X-YouTube-Client-Name", "67")
                 .header("X-YouTube-Client-Version", "1.20240101.01.00")
                 .header("Cookie", cookie)
-                .post(okhttp3.RequestBody.create(mediaType, payload.toString()))
+                .post(reqBody)
 
             if (sapisidHash != null) {
                 reqBuilder.header("Authorization", sapisidHash)

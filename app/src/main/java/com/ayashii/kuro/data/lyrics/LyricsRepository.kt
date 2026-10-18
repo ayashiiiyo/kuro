@@ -203,7 +203,7 @@ class LyricsRepository(private val context: Context) {
                 val tab = tabs.optJSONObject(i)?.optJSONObject("tabRenderer")
                 val title = tab?.optString("title", "")
                 if (title.equals("Lyrics", ignoreCase = true)) {
-                    browseId = tab.optJSONObject("endpoint")?.optJSONObject("browseEndpoint")?.optString("browseId")
+                    browseId = tab?.optJSONObject("endpoint")?.optJSONObject("browseEndpoint")?.optString("browseId")
                     break
                 }
             }
