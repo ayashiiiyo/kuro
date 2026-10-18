@@ -27,6 +27,13 @@ class MusicRepository {
         }
     }
 
+    private fun cleanTrackTitle(raw: String): String {
+        return raw
+            .replace(Regex("""(?i)\s*[\(\[](?:official\s*(?:music\s*)?video|official\s*audio|music\s*video|lyric\s*video|lyrics|audio|visualizer|remastered|remaster|4k|hd|hq|mv|clip\s*officiel|video\s*oficial)[\)\]]"""), "")
+            .replace(Regex("""(?i)\s*\|\s*(?:official\s*(?:music\s*)?video|official\s*audio|visualizer).*"""), "")
+            .trim()
+    }
+
     suspend fun searchTracks(query: String): List<Track> = withContext(Dispatchers.IO) {
         try {
             val searchExtractor = service.getSearchExtractor(
@@ -42,8 +49,8 @@ class MusicRepository {
                     Track(
                         id = item.url.substringAfter("v=").substringBefore("&"),
                         url = item.url,
-                        title = item.name ?: "Unknown Title",
-                        artist = item.uploaderName ?: "Unknown Artist",
+                        title = cleanTrackTitle(item.name ?: "Unknown Title"),
+                        artist = item.uploaderName?.replace(" - Topic", "") ?: "Unknown Artist",
                         thumbnailUrl = item.thumbnails.firstOrNull()?.url ?: "",
                         durationSeconds = item.duration
                     )
@@ -77,8 +84,8 @@ class MusicRepository {
                     Track(
                         id = item.url.substringAfter("v=").substringBefore("&"),
                         url = item.url,
-                        title = item.name ?: "Unknown Title",
-                        artist = item.uploaderName ?: "Unknown Artist",
+                        title = cleanTrackTitle(item.name ?: "Unknown Title"),
+                        artist = item.uploaderName?.replace(" - Topic", "") ?: "Unknown Artist",
                         thumbnailUrl = item.thumbnails.firstOrNull()?.url ?: "",
                         durationSeconds = item.duration
                     )
@@ -137,8 +144,8 @@ class MusicRepository {
                     Track(
                         id = item.url.substringAfter("v=").substringBefore("&"),
                         url = item.url,
-                        title = item.name ?: "Unknown Title",
-                        artist = item.uploaderName ?: "Unknown Artist",
+                        title = cleanTrackTitle(item.name ?: "Unknown Title"),
+                        artist = item.uploaderName?.replace(" - Topic", "") ?: "Unknown Artist",
                         thumbnailUrl = item.thumbnails.firstOrNull()?.url ?: "",
                         durationSeconds = item.duration
                     )

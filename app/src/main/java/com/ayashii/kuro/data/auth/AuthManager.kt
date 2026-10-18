@@ -73,15 +73,25 @@ class AuthManager private constructor(private val context: Context) {
         return bytes.joinToString("") { "%02x".format(it) }
     }
 
-    fun handleLoginSuccess(cookie: String) {
+    fun handleLoginSuccess(cookie: String, initialName: String = "", initialAvatar: String = "") {
+        val savedName = if (initialName.isNotBlank()) initialName else (prefs.getString(KEY_NAME, "YouTube User") ?: "YouTube User")
+        val savedAvatar = if (initialAvatar.isNotBlank()) initialAvatar else (prefs.getString(KEY_AVATAR, "") ?: "")
+
         val initialAccount = UserAccount(
-            name = prefs.getString(KEY_NAME, "YouTube User") ?: "YouTube User",
+            name = savedName,
             email = prefs.getString(KEY_EMAIL, "") ?: "",
             channelHandle = prefs.getString(KEY_HANDLE, "") ?: "",
-            avatarUrl = prefs.getString(KEY_AVATAR, "") ?: "",
+            avatarUrl = savedAvatar,
             cookie = cookie
         )
-        prefs.edit().putString(KEY_COOKIE, cookie).apply()
+        prefs.edit()
+            .putString(KEY_COOKIE, cookie)
+            .apply {
+                if (initialName.isNotBlank()) putString(KEY_NAME, initialName)
+                if (initialAvatar.isNotBlank()) putString(KEY_AVATAR, initialAvatar)
+            }
+            .apply()
+
         _authState.value = initialAccount
 
         // Fetch detailed profile from InnerTube in background
@@ -90,14 +100,47 @@ class AuthManager private constructor(private val context: Context) {
         }
     }
 
+    fun updateProfile(name: String, email: String, avatarUrl: String) {
+        val current = _authState.value ?: return
+        val newName = if (name.isNotBlank()) name else current.name
+        val newEmail = if (email.isNotBlank()) email else current.email
+        val newAvatar = if (avatarUrl.isNotBlank()) avatarUrl else current.avatarUrl
+
+        prefs.edit()
+            .putString(KEY_NAME, newName)
+            .putString(KEY_EMAIL, newEmail)
+            .putString(KEY_AVATAR, newAvatar)
+            .apply()
+
+        _authState.value = current.copy(
+            name = newName,
+            email = newEmail,
+            avatarUrl = newAvatar
+        )
+        Log.d("KuroAuth", "Profile explicitly updated: $newName ($newAvatar)")
+    }
+
     suspend fun fetchAccountInfo(cookie: String) {
+        // Try YouTube Music first, then YouTube Web fallback
+        val success = tryFetchAccountMenu(cookie, isMusic = true)
+        if (!success) {
+            tryFetchAccountMenu(cookie, isMusic = false)
+        }
+    }
+
+    private fun tryFetchAccountMenu(cookie: String, isMusic: Boolean): Boolean {
         try {
-            val sapisidHash = getSapisidHash("https://music.youtube.com")
+            val origin = if (isMusic) "https://music.youtube.com" else "https://www.youtube.com"
+            val clientName = if (isMusic) "WEB_REMIX" else "WEB"
+            val clientNum = if (isMusic) "67" else "1"
+            val clientVer = if (isMusic) "1.20240101.01.00" else "2.20240101.01.00"
+            val sapisidHash = getSapisidHash(origin)
+
             val jsonBody = JSONObject().apply {
                 put("context", JSONObject().apply {
                     put("client", JSONObject().apply {
-                        put("clientName", "WEB_REMIX")
-                        put("clientVersion", "1.20240101.01.00")
+                        put("clientName", clientName)
+                        put("clientVersion", clientVer)
                         put("hl", "en")
                         put("gl", "US")
                     })
@@ -105,11 +148,14 @@ class AuthManager private constructor(private val context: Context) {
             }
 
             val reqBuilder = Request.Builder()
-                .url("https://music.youtube.com/youtubei/v1/account/account_menu")
+                .url("$origin/youtubei/v1/account/account_menu")
                 .header("Content-Type", "application/json")
                 .header("Cookie", cookie)
-                .header("Origin", "https://music.youtube.com")
-                .header("X-Origin", "https://music.youtube.com")
+                .header("Origin", origin)
+                .header("Referer", "$origin/")
+                .header("X-Origin", origin)
+                .header("X-YouTube-Client-Name", clientNum)
+                .header("X-YouTube-Client-Version", clientVer)
                 .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
                 .post(jsonBody.toString().toRequestBody("application/json".toMediaType()))
 
@@ -127,12 +173,29 @@ class AuthManager private constructor(private val context: Context) {
                 val activeAccount = multiPage?.optJSONObject("header")?.optJSONObject("activeAccountHeaderRenderer")
 
                 if (activeAccount != null) {
-                    val name = activeAccount.optJSONObject("accountName")
-                        ?.optJSONArray("runs")?.optJSONObject(0)?.optString("text") ?: "YouTube User"
-                    val email = activeAccount.optJSONObject("email")
-                        ?.optJSONArray("runs")?.optJSONObject(0)?.optString("text") ?: ""
-                    val handle = activeAccount.optJSONObject("channelHandle")
-                        ?.optJSONArray("runs")?.optJSONObject(0)?.optString("text") ?: ""
+                    val name = activeAccount.optString("accountName", "")
+                        .ifBlank {
+                            activeAccount.optJSONObject("accountName")?.optString("simpleText", "") ?: ""
+                        }
+                        .ifBlank {
+                            activeAccount.optJSONObject("accountName")?.optJSONArray("runs")?.optJSONObject(0)?.optString("text") ?: ""
+                        }
+
+                    val email = activeAccount.optString("email", "")
+                        .ifBlank {
+                            activeAccount.optJSONObject("email")?.optString("simpleText", "") ?: ""
+                        }
+                        .ifBlank {
+                            activeAccount.optJSONObject("email")?.optJSONArray("runs")?.optJSONObject(0)?.optString("text") ?: ""
+                        }
+
+                    val handle = activeAccount.optString("channelHandle", "")
+                        .ifBlank {
+                            activeAccount.optJSONObject("channelHandle")?.optString("simpleText", "") ?: ""
+                        }
+                        .ifBlank {
+                            activeAccount.optJSONObject("channelHandle")?.optJSONArray("runs")?.optJSONObject(0)?.optString("text") ?: ""
+                        }
 
                     var avatarUrl = ""
                     val accountPhoto = activeAccount.optJSONObject("accountPhoto")
@@ -141,20 +204,16 @@ class AuthManager private constructor(private val context: Context) {
                         avatarUrl = thumbs.optJSONObject(thumbs.length() - 1)?.optString("url") ?: ""
                     }
 
-                    prefs.edit()
-                        .putString(KEY_NAME, name)
-                        .putString(KEY_EMAIL, email)
-                        .putString(KEY_HANDLE, handle)
-                        .putString(KEY_AVATAR, avatarUrl)
-                        .apply()
-
-                    _authState.value = UserAccount(name, email, handle, avatarUrl, cookie)
-                    Log.d("KuroAuth", "Account updated: $name ($email)")
+                    if (name.isNotBlank() || avatarUrl.isNotBlank()) {
+                        updateProfile(name, email, avatarUrl)
+                        return true
+                    }
                 }
             }
         } catch (e: Exception) {
-            Log.e("KuroAuth", "Failed to fetch account info: ${e.message}", e)
+            Log.d("KuroAuth", "Account menu fetch error: ${e.message}")
         }
+        return false
     }
 
     fun logout() {

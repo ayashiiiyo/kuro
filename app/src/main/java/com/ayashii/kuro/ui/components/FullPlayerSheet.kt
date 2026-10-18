@@ -2,6 +2,7 @@ package com.ayashii.kuro.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,7 +27,9 @@ import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -36,6 +39,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -75,6 +81,11 @@ fun FullPlayerSheet(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isExpanded = viewModel.isPlayerExpanded.collectAsState().value
+    val currentLyrics by viewModel.currentLyrics.collectAsState()
+    val isLoadingLyrics by viewModel.isLoadingLyrics.collectAsState()
+    var showLyrics by remember { mutableStateOf(false) }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -93,7 +104,7 @@ fun FullPlayerSheet(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Top Bar: Dismiss Chevron & Title
+        // Top Bar: Dismiss Chevron, Mode Title & Lyrics/Fav Actions
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -110,7 +121,7 @@ fun FullPlayerSheet(
 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "PLAYING FROM KURO",
+                    text = if (showLyrics) "KARAOKE LYRICS" else "PLAYING FROM KURO",
                     style = Typography.labelSmall,
                     fontSize = 10.sp,
                     letterSpacing = 1.sp,
@@ -118,34 +129,63 @@ fun FullPlayerSheet(
                 )
             }
 
-            IconButton(onClick = onFavoriteClick) {
-                Icon(
-                    imageVector = if (track.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
-                    contentDescription = "Favorite",
-                    tint = if (track.isFavorite) PureWhite else MutedText,
-                    modifier = Modifier.size(24.dp)
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Toggle Lyrics Button
+                IconButton(onClick = { showLyrics = !showLyrics }) {
+                    Icon(
+                        imageVector = if (showLyrics) Icons.Outlined.MusicNote else Icons.Outlined.Article,
+                        contentDescription = "Lyrics",
+                        tint = if (showLyrics) PureWhite else MutedText,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                IconButton(onClick = onFavoriteClick) {
+                    Icon(
+                        imageVector = if (track.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
+                        contentDescription = "Favorite",
+                        tint = if (track.isFavorite) PureWhite else MutedText,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Center: Large Album Cover
+        // Center: Large Album Cover or Live Synced Lyrics
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f, fill = false)
                 .aspectRatio(1f)
-                .clip(RoundedCornerShape(20.dp))
-                .border(1.dp, DarkBorder, RoundedCornerShape(20.dp)),
+                .clip(RoundedCornerShape(20.dp)),
             contentAlignment = Alignment.Center
         ) {
-            AsyncImage(
-                model = track.thumbnailUrl,
-                contentDescription = track.title,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
+            if (showLyrics) {
+                SyncedLyricsView(
+                    lyricsData = currentLyrics,
+                    isLoading = isLoadingLyrics,
+                    positionProvider = { viewModel.getPositionMs() },
+                    onSeekTo = { viewModel.seekTo(it) }
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(20.dp))
+                        .border(1.dp, DarkBorder, RoundedCornerShape(20.dp))
+                        .clickable { showLyrics = true },
+                    contentAlignment = Alignment.Center
+                ) {
+                    AsyncImage(
+                        model = track.thumbnailUrl,
+                        contentDescription = track.title,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))

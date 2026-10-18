@@ -81,11 +81,20 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     val authState = com.ayashii.kuro.data.auth.AuthManager.getInstance().authState
 
+    val lyricsRepository = com.ayashii.kuro.data.lyrics.LyricsRepository(getApplication())
+
+    private val _currentLyrics = MutableStateFlow<com.ayashii.kuro.data.lyrics.LyricsData?>(null)
+    val currentLyrics = _currentLyrics.asStateFlow()
+
+    private val _isLoadingLyrics = MutableStateFlow(false)
+    val isLoadingLyrics = _isLoadingLyrics.asStateFlow()
+
     private val playlistQueue = mutableListOf<Track>()
     private var currentIndex = -1
     private var progressJob: Job? = null
     private var suggestJob: Job? = null
     private var playJob: Job? = null
+    private var lyricsJob: Job? = null
 
     init {
         initializeMediaController()
@@ -236,9 +245,24 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     playlistQueue.add(track)
                     currentIndex = 0
                 }
-            }
+                }
 
-            // Resolve direct audio stream URL via NewPipeExtractor
+                // Fetch Synced Lyrics + Translations in background
+                lyricsJob?.cancel()
+                lyricsJob = viewModelScope.launch(Dispatchers.IO) {
+                _isLoadingLyrics.value = true
+                _currentLyrics.value = null
+                val data = lyricsRepository.getLyrics(
+                    trackId = track.id,
+                    title = track.title,
+                    artist = track.artist,
+                    durationSeconds = track.durationSeconds
+                )
+                _currentLyrics.value = data
+                _isLoadingLyrics.value = false
+                }
+
+                // Resolve direct audio stream URL via NewPipeExtractor
             val streamUrl = repository.getAudioStreamUrl(track.url)
             if (streamUrl != null) {
                 val updatedTrack = track.copy(streamUrl = streamUrl)
@@ -296,6 +320,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         mediaController?.seekTo(positionMs)
         _playbackPosition.value = positionMs
     }
+
+    fun getPositionMs(): Long = _playbackPosition.value
 
     fun skipNext() {
         if (playlistQueue.isEmpty()) return

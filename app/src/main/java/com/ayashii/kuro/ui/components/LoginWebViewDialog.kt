@@ -150,6 +150,15 @@ fun LoginWebViewDialog(
                                 userAgentString = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
                             }
 
+                            addJavascriptInterface(object {
+                                @android.webkit.JavascriptInterface
+                                fun onUserData(name: String?, email: String?, avatarUrl: String?) {
+                                    if (!name.isNullOrBlank() || !avatarUrl.isNullOrBlank()) {
+                                        AuthManager.getInstance().updateProfile(name ?: "", email ?: "", avatarUrl ?: "")
+                                    }
+                                }
+                            }, "KuroBridge")
+
                             webViewClient = object : WebViewClient() {
                                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                                     super.onPageStarted(view, url, favicon)
@@ -160,7 +169,6 @@ fun LoginWebViewDialog(
                                     super.onPageFinished(view, url)
                                     isLoading = false
 
-                                    // Check cookies on page finish
                                     val currentUrl = url ?: ""
                                     val cookies = cookieManager.getCookie("https://music.youtube.com")
                                         ?: cookieManager.getCookie("https://www.youtube.com")
@@ -171,10 +179,53 @@ fun LoginWebViewDialog(
                                             cookies.contains("LOGIN_INFO") ||
                                             cookies.contains("__Secure-3PAPISID")
 
-                                    if (hasAuth && (currentUrl.contains("music.youtube.com") || currentUrl.contains("youtube.com"))) {
-                                        AuthManager.getInstance().handleLoginSuccess(cookies)
-                                        onLoginSuccess()
-                                        onDismiss()
+                                    // Extract Google avatar and name directly from DOM!
+                                    view?.evaluateJavascript(
+                                        """
+                                        (() => {
+                                            try {
+                                                let avatar = '';
+                                                let name = '';
+                                                let email = '';
+                                                const img = document.querySelector("#avatar-btn img, ytmusic-settings-button img, img.yt-img-shadow, img#img, img[src*='googleusercontent.com']");
+                                                if (img && img.src && img.src.startsWith('http')) {
+                                                    avatar = img.src;
+                                                }
+                                                if (window.ytcfg && typeof window.ytcfg.get === 'function') {
+                                                    name = window.ytcfg.get('USER_NAME') || window.ytcfg.get('ACCOUNT_NAME') || '';
+                                                }
+                                                if (!name) {
+                                                    const nameEl = document.querySelector("div[aria-label*='Google Account:']");
+                                                    if (nameEl) {
+                                                        name = (nameEl.getAttribute('aria-label') || '').replace('Google Account:', '').trim();
+                                                    }
+                                                }
+                                                if (window.KuroBridge) {
+                                                    window.KuroBridge.onUserData(name, email, avatar);
+                                                }
+                                                return JSON.stringify({ avatar: avatar, name: name });
+                                            } catch(e) {
+                                                return '{}';
+                                            }
+                                        })()
+                                        """.trimIndent()
+                                    ) { evalResult ->
+                                        var extractedName = ""
+                                        var extractedAvatar = ""
+                                        try {
+                                            if (!evalResult.isNullOrBlank() && evalResult != "null") {
+                                                val unescaped = org.json.JSONTokener(evalResult).nextValue().toString()
+                                                val json = org.json.JSONObject(unescaped)
+                                                extractedName = json.optString("name", "")
+                                                extractedAvatar = json.optString("avatar", "")
+                                            }
+                                        } catch (_: Exception) {}
+
+                                        if (hasAuth && (currentUrl.contains("music.youtube.com") || currentUrl.contains("youtube.com"))) {
+                                            AuthManager.getInstance().handleLoginSuccess(cookies, extractedName, extractedAvatar)
+                                            onLoginSuccess()
+                                            onDismiss()
+                                        }
                                     }
                                 }
 
