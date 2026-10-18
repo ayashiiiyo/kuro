@@ -1,21 +1,13 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="44dp"
-    android:height="44dp"
-    android:viewportWidth="44.022"
-    android:viewportHeight="44.022">
-    <!-- First outline chevron pointing left -->
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Skip Previous: Vertical Bar + Left Triangle -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M41.5,2.5 L23.5,22 L41.5,41.5 L39.5,43 L20.5,22 L39.5,1 Z M39,5.5 L25,22 L39,38.5 Z" />
-    <!-- Second outline chevron pointing left -->
+        android:pathData="M5,5.5h1.5c0.55,0 1,0.45 1,1v11c0,0.55 -0.45,1 -1,1H5c-0.55,0 -1,-0.45 -1,-1v-11c0,-0.55 0.45,-1 1,-1z"/>
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M22.5,2.5 L4.5,22 L22.5,41.5 L20.5,43 L1.5,22 L20.5,1 Z M20,5.5 L6,22 L20,38.5 Z" />
-    <!-- Center solid accent triangles pointing left -->
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M36,15 L29,22 L36,29 Z" />
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M17,15 L10,22 L17,29 Z" />
+        android:pathData="M19,5.37v13.26c0,0.77 -0.84,1.25 -1.5,0.85l-10.2,-6.63c-0.63,-0.41 -0.63,-1.29 0,-1.7l10.2,-6.63c0.66,-0.4 1.5,0.08 1.5,0.85z"/>
 </vector>

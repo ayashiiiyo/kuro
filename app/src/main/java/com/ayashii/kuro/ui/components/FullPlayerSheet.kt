@@ -169,6 +169,7 @@ fun FullPlayerSheet(
                 Text(
                     text = track.artist,
                     style = Typography.titleMedium,
+                    fontWeight = FontWeight.Normal,
                     color = MutedText,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis

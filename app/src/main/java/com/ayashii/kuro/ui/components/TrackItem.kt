@@ -110,15 +110,16 @@ fun TrackItem(
             Text(
                 text = track.title,
                 style = Typography.titleMedium,
-                fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.Medium,
-                color = if (isPlaying) PureWhite else PureWhite.copy(alpha = 0.9f),
+                fontWeight = FontWeight.Bold,
+                color = PureWhite,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-            Spacer(modifier = Modifier.height(2.dp))
+            Spacer(modifier = Modifier.height(3.dp))
             Text(
                 text = track.artist,
                 style = Typography.bodyMedium,
+                fontWeight = FontWeight.Normal,
                 color = MutedText,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis

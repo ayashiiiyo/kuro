@@ -1,20 +1,9 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="44dp"
-    android:height="44dp"
-    android:viewportWidth="44.022"
-    android:viewportHeight="44.022">
-    <!-- Outer pause frame: two thick outline vertical bars -->
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M6,2 h12 v40 h-12 z M8,4 v36 h8 v-36 z" />
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M26,2 h12 v40 h-12 z M28,4 v36 h8 v-36 z" />
-    <!-- Inner small pause accent indicators -->
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M11,14 h2 v16 h-2 z" />
-    <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M31,14 h2 v16 h-2 z" />
+        android:pathData="M6.5,5h2.5c0.83,0 1.5,0.67 1.5,1.5v11c0,0.83 -0.67,1.5 -1.5,1.5h-2.5c-0.83,0 -1.5,-0.67 -1.5,-1.5v-11c0,-0.83 0.67,-1.5 1.5,-1.5z M13.5,5h2.5c0.83,0 1.5,0.67 1.5,1.5v11c0,0.83 -0.67,1.5 -1.5,1.5h-2.5c-0.83,0 -1.5,-0.67 -1.5,-1.5v-11c0,-0.83 0.67,-1.5 1.5,-1.5z"/>
 </vector>

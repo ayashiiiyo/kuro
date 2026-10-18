@@ -83,6 +83,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private var currentIndex = -1
     private var progressJob: Job? = null
     private var suggestJob: Job? = null
+    private var playJob: Job? = null
 
     init {
         initializeMediaController()
@@ -213,17 +214,26 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun playTrack(track: Track, queue: List<Track> = emptyList()) {
-        viewModelScope.launch {
+    fun playTrack(track: Track, newQueue: List<Track> = emptyList()) {
+        playJob?.cancel()
+        playJob = viewModelScope.launch {
             _currentTrack.value = track
             _isLoadingTrack.value = true
             _playbackPosition.value = 0L
             _duration.value = if (track.durationSeconds > 0) track.durationSeconds * 1000L else 0L
 
-            if (queue.isNotEmpty()) {
+            if (newQueue.isNotEmpty() && newQueue !== playlistQueue) {
                 playlistQueue.clear()
-                playlistQueue.addAll(queue)
-                currentIndex = queue.indexOfFirst { it.id == track.id }
+                playlistQueue.addAll(newQueue)
+                currentIndex = playlistQueue.indexOfFirst { it.id == track.id }
+            } else if (currentIndex == -1 || playlistQueue.getOrNull(currentIndex)?.id != track.id) {
+                val idx = playlistQueue.indexOfFirst { it.id == track.id }
+                if (idx != -1) {
+                    currentIndex = idx
+                } else if (playlistQueue.isEmpty()) {
+                    playlistQueue.add(track)
+                    currentIndex = 0
+                }
             }
 
             // Resolve direct audio stream URL via NewPipeExtractor
@@ -286,27 +296,31 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun skipNext() {
-        if (playlistQueue.isNotEmpty()) {
-            if (_isShuffle.value) {
-                currentIndex = (0 until playlistQueue.size).random()
-            } else if (currentIndex + 1 < playlistQueue.size) {
-                currentIndex++
-            } else {
-                currentIndex = 0
-            }
-            playTrack(playlistQueue[currentIndex], playlistQueue)
+        if (playlistQueue.isEmpty()) return
+        if (_repeatMode.value == Player.REPEAT_MODE_ONE) {
+            _currentTrack.value?.let { playTrack(it) }
+            return
         }
+        val nextIndex = if (_isShuffle.value) {
+            (0 until playlistQueue.size).random()
+        } else if (currentIndex + 1 < playlistQueue.size) {
+            currentIndex + 1
+        } else {
+            0
+        }
+        currentIndex = nextIndex
+        playTrack(playlistQueue[nextIndex])
     }
 
     fun skipPrevious() {
-        if (playlistQueue.isNotEmpty()) {
-            if (currentIndex - 1 >= 0) {
-                currentIndex--
-            } else {
-                currentIndex = playlistQueue.size - 1
-            }
-            playTrack(playlistQueue[currentIndex], playlistQueue)
+        if (playlistQueue.isEmpty()) return
+        val prevIndex = if (currentIndex - 1 >= 0) {
+            currentIndex - 1
+        } else {
+            playlistQueue.size - 1
         }
+        currentIndex = prevIndex
+        playTrack(playlistQueue[prevIndex])
     }
 
     fun toggleShuffle() {

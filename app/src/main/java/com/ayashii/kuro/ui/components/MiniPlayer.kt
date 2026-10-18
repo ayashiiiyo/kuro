@@ -97,7 +97,7 @@ fun MiniPlayer(
                 Text(
                     text = track.title,
                     style = Typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Bold,
                     color = PureWhite,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -106,6 +106,7 @@ fun MiniPlayer(
                 Text(
                     text = track.artist,
                     style = Typography.bodyMedium,
+                    fontWeight = FontWeight.Normal,
                     color = MutedText,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis

@@ -9,16 +9,15 @@ import androidx.compose.ui.unit.sp
 import com.ayashii.kuro.R
 
 val OutfitFontFamily = FontFamily(
-    Font(R.font.outfit, FontWeight.Normal),
-    Font(R.font.outfit, FontWeight.Medium),
-    Font(R.font.outfit, FontWeight.SemiBold),
-    Font(R.font.outfit, FontWeight.Bold)
+    Font(R.font.outfit_regular, FontWeight.Normal),
+    Font(R.font.outfit_medium, FontWeight.Medium),
+    Font(R.font.outfit_semibold, FontWeight.SemiBold),
+    Font(R.font.outfit_bold, FontWeight.Bold)
 )
 
 val FredokaFontFamily = FontFamily(
-    Font(R.font.fredoka, FontWeight.Normal),
-    Font(R.font.fredoka, FontWeight.SemiBold),
-    Font(R.font.fredoka, FontWeight.Bold)
+    Font(R.font.fredoka_bold, FontWeight.Bold),
+    Font(R.font.fredoka_bold, FontWeight.Normal)
 )
 
 val UbuntuMonoFontFamily = FontFamily(
@@ -30,27 +29,27 @@ val Typography = Typography(
     headlineLarge = TextStyle(
         fontFamily = FredokaFontFamily,
         fontWeight = FontWeight.Bold,
-        fontSize = 30.sp,
+        fontSize = 32.sp,
         letterSpacing = (-0.5).sp,
         color = PureWhite
     ),
     headlineMedium = TextStyle(
         fontFamily = OutfitFontFamily,
         fontWeight = FontWeight.Bold,
-        fontSize = 22.sp,
+        fontSize = 24.sp,
         letterSpacing = (-0.3).sp,
         color = PureWhite
     ),
     titleLarge = TextStyle(
         fontFamily = OutfitFontFamily,
-        fontWeight = FontWeight.SemiBold,
+        fontWeight = FontWeight.Bold,
         fontSize = 18.sp,
         color = PureWhite
     ),
     titleMedium = TextStyle(
         fontFamily = OutfitFontFamily,
-        fontWeight = FontWeight.Medium,
-        fontSize = 16.sp,
+        fontWeight = FontWeight.Bold,
+        fontSize = 15.sp,
         color = PureWhite
     ),
     bodyLarge = TextStyle(
@@ -68,7 +67,7 @@ val Typography = Typography(
     labelSmall = TextStyle(
         fontFamily = UbuntuMonoFontFamily,
         fontWeight = FontWeight.Bold,
-        fontSize = 11.sp,
+        fontSize = 12.sp,
         letterSpacing = 0.5.sp,
         color = SubtleGray
     )
