@@ -80,9 +80,8 @@ dependencies {
     // Coil Image Loading
     implementation("io.coil-kt:coil-compose:2.6.0")
 
-    // NewPipeExtractor & Protobuf
+    // NewPipeExtractor
     implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.5")
-    implementation("com.google.protobuf:protobuf-java:3.25.3")
 
     // OkHttp (for networking & downloader)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
