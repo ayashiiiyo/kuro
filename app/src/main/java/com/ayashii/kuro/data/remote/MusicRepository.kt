@@ -1,5 +1,6 @@
 package com.ayashii.kuro.data.remote
 
+import android.util.Log
 import com.ayashii.kuro.data.model.Track
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -33,7 +34,18 @@ class MusicRepository {
                     )
                 }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("MusicRepository", "Search failed: ${e.message}", e)
+            emptyList()
+        }
+    }
+
+    suspend fun getSuggestions(query: String): List<String> = withContext(Dispatchers.IO) {
+        if (query.isBlank()) return@withContext emptyList()
+        try {
+            val extractor = service.suggestionExtractor
+            extractor.suggestionList(query)
+        } catch (e: Exception) {
+            Log.e("MusicRepository", "Suggestions failed: ${e.message}", e)
             emptyList()
         }
     }
@@ -43,9 +55,9 @@ class MusicRepository {
             val kiosk = service.kioskList.defaultKioskExtractor
             kiosk.fetchPage()
             val page = kiosk.initialPage
-            page.items
+            val tracks = page.items
                 .filterIsInstance<StreamInfoItem>()
-                .take(25)
+                .take(30)
                 .map { item ->
                     Track(
                         id = item.url.substringAfter("v=").substringBefore("&"),
@@ -56,9 +68,10 @@ class MusicRepository {
                         durationSeconds = item.duration
                     )
                 }
+            if (tracks.isNotEmpty()) tracks else searchTracks("Top Global Hits 2026")
         } catch (e: Exception) {
-            e.printStackTrace()
-            searchTracks("Top Global Hits")
+            Log.e("MusicRepository", "Trending failed: ${e.message}", e)
+            searchTracks("Top Global Hits 2026")
         }
     }
 
@@ -66,9 +79,14 @@ class MusicRepository {
         try {
             val streamInfo = StreamInfo.getInfo(service, url)
             val audioStreams = streamInfo.audioStreams
-            audioStreams.maxByOrNull { it.averageBitrate }?.content
+            val bestAudio = audioStreams
+                .filter { it.content != null && it.content.startsWith("http") }
+                .maxByOrNull { it.averageBitrate }
+                ?: audioStreams.firstOrNull()
+
+            bestAudio?.content
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("MusicRepository", "Get stream URL failed: ${e.message}", e)
             null
         }
     }

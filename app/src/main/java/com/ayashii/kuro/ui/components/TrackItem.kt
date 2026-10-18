@@ -1,10 +1,20 @@
 package com.ayashii.kuro.ui.components
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -12,18 +22,23 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.ayashii.kuro.data.model.Track
+import com.ayashii.kuro.ui.theme.DarkCard
 import com.ayashii.kuro.ui.theme.MutedText
 import com.ayashii.kuro.ui.theme.PureWhite
 import com.ayashii.kuro.ui.theme.SubtleGray
@@ -33,6 +48,7 @@ import com.ayashii.kuro.ui.theme.Typography
 fun TrackItem(
     track: Track,
     isPlaying: Boolean,
+    isLoading: Boolean = false,
     onClick: () -> Unit,
     onFavoriteClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -40,20 +56,51 @@ fun TrackItem(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (isPlaying) DarkCard else Color.Transparent)
             .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        AsyncImage(
-            model = track.thumbnailUrl,
-            contentDescription = track.title,
-            modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(8.dp)),
-            contentScale = ContentScale.Crop
-        )
+        Box(
+            modifier = Modifier.size(50.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            AsyncImage(
+                model = track.thumbnailUrl,
+                contentDescription = track.title,
+                modifier = Modifier
+                    .size(50.dp)
+                    .clip(RoundedCornerShape(8.dp)),
+                contentScale = ContentScale.Crop
+            )
 
-        Spacer(modifier = Modifier.width(12.dp))
+            if (isLoading) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        color = PureWhite,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            } else if (isPlaying) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    EqualizerAnimation()
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.width(14.dp))
 
         Column(
             modifier = Modifier.weight(1f)
@@ -61,10 +108,12 @@ fun TrackItem(
             Text(
                 text = track.title,
                 style = Typography.titleMedium,
+                fontWeight = if (isPlaying) FontWeight.Bold else FontWeight.Medium,
                 color = if (isPlaying) PureWhite else PureWhite.copy(alpha = 0.9f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = track.artist,
                 style = Typography.bodyMedium,
@@ -94,5 +143,38 @@ fun TrackItem(
                 modifier = Modifier.size(20.dp)
             )
         }
+    }
+}
+
+@Composable
+fun EqualizerAnimation() {
+    val transition = rememberInfiniteTransition(label = "eq")
+    val h1 by transition.animateFloat(
+        initialValue = 0.2f,
+        targetValue = 0.9f,
+        animationSpec = infiniteRepeatable(tween(400, easing = LinearEasing), RepeatMode.Reverse),
+        label = "h1"
+    )
+    val h2 by transition.animateFloat(
+        initialValue = 0.9f,
+        targetValue = 0.3f,
+        animationSpec = infiniteRepeatable(tween(550, easing = LinearEasing), RepeatMode.Reverse),
+        label = "h2"
+    )
+    val h3 by transition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(tween(480, easing = LinearEasing), RepeatMode.Reverse),
+        label = "h3"
+    )
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.Bottom,
+        modifier = Modifier.height(18.dp)
+    ) {
+        Box(modifier = Modifier.width(3.dp).height((18 * h1).dp).background(PureWhite, RoundedCornerShape(1.dp)))
+        Box(modifier = Modifier.width(3.dp).height((18 * h2).dp).background(PureWhite, RoundedCornerShape(1.dp)))
+        Box(modifier = Modifier.width(3.dp).height((18 * h3).dp).background(PureWhite, RoundedCornerShape(1.dp)))
     }
 }

@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -26,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -33,7 +35,6 @@ import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.ui.theme.DarkBorder
 import com.ayashii.kuro.ui.theme.DarkCard
 import com.ayashii.kuro.ui.theme.MutedText
-import com.ayashii.kuro.ui.theme.PureBlack
 import com.ayashii.kuro.ui.theme.PureWhite
 import com.ayashii.kuro.ui.theme.Typography
 
@@ -41,6 +42,7 @@ import com.ayashii.kuro.ui.theme.Typography
 fun MiniPlayer(
     track: Track,
     isPlaying: Boolean,
+    isLoading: Boolean = false,
     progress: Float,
     onPlayPauseClick: () -> Unit,
     onSkipNextClick: () -> Unit,
@@ -50,10 +52,10 @@ fun MiniPlayer(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(14.dp))
             .background(DarkCard)
-            .border(1.dp, DarkBorder, RoundedCornerShape(12.dp))
+            .border(1.dp, DarkBorder, RoundedCornerShape(14.dp))
             .clickable { onClick() }
     ) {
         LinearProgressIndicator(
@@ -71,14 +73,19 @@ fun MiniPlayer(
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AsyncImage(
-                model = track.thumbnailUrl,
-                contentDescription = track.title,
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(6.dp)),
-                contentScale = ContentScale.Crop
-            )
+            Box(
+                modifier = Modifier.size(44.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                AsyncImage(
+                    model = track.thumbnailUrl,
+                    contentDescription = track.title,
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(8.dp)),
+                    contentScale = ContentScale.Crop
+                )
+            }
 
             Spacer(modifier = Modifier.width(12.dp))
 
@@ -88,10 +95,12 @@ fun MiniPlayer(
                 Text(
                     text = track.title,
                     style = Typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
                     color = PureWhite,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = track.artist,
                     style = Typography.bodyMedium,
@@ -101,13 +110,26 @@ fun MiniPlayer(
                 )
             }
 
-            IconButton(onClick = onPlayPauseClick) {
-                Icon(
-                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (isPlaying) "Pause" else "Play",
-                    tint = PureWhite,
-                    modifier = Modifier.size(28.dp)
-                )
+            if (isLoading) {
+                Box(
+                    modifier = Modifier.size(48.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        color = PureWhite,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            } else {
+                IconButton(onClick = onPlayPauseClick) {
+                    Icon(
+                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (isPlaying) "Pause" else "Play",
+                        tint = PureWhite,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
             }
 
             IconButton(onClick = onSkipNextClick) {

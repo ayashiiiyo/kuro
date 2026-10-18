@@ -2,9 +2,11 @@ package com.ayashii.kuro.viewmodel
 
 import android.app.Application
 import android.content.ComponentName
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -31,6 +33,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying = _isPlaying.asStateFlow()
 
+    private val _isLoadingTrack = MutableStateFlow(false)
+    val isLoadingTrack = _isLoadingTrack.asStateFlow()
+
     private val _playbackPosition = MutableStateFlow(0L)
     val playbackPosition = _playbackPosition.asStateFlow()
 
@@ -46,6 +51,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val _searchResults = MutableStateFlow<List<Track>>(emptyList())
     val searchResults = _searchResults.asStateFlow()
 
+    private val _suggestions = MutableStateFlow<List<String>>(emptyList())
+    val suggestions = _suggestions.asStateFlow()
+
     private val _favorites = MutableStateFlow<List<Track>>(emptyList())
     val favorites = _favorites.asStateFlow()
 
@@ -55,9 +63,16 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val _isSearching = MutableStateFlow(false)
     val isSearching = _isSearching.asStateFlow()
 
+    private val _isShuffle = MutableStateFlow(false)
+    val isShuffle = _isShuffle.asStateFlow()
+
+    private val _repeatMode = MutableStateFlow(Player.REPEAT_MODE_OFF)
+    val repeatMode = _repeatMode.asStateFlow()
+
     private val playlistQueue = mutableListOf<Track>()
     private var currentIndex = -1
     private var progressJob: Job? = null
+    private var suggestJob: Job? = null
 
     init {
         initializeMediaController()
@@ -76,13 +91,40 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 mediaController?.addListener(object : Player.Listener {
                     override fun onIsPlayingChanged(playing: Boolean) {
                         _isPlaying.value = playing
-                        if (playing) startProgressTracking() else stopProgressTracking()
+                        if (playing) {
+                            _isLoadingTrack.value = false
+                            startProgressTracking()
+                        } else {
+                            stopProgressTracking()
+                        }
                     }
 
                     override fun onPlaybackStateChanged(playbackState: Int) {
-                        if (playbackState == Player.STATE_ENDED) {
-                            skipNext()
+                        when (playbackState) {
+                            Player.STATE_BUFFERING -> {
+                                _isLoadingTrack.value = true
+                            }
+                            Player.STATE_READY -> {
+                                _isLoadingTrack.value = false
+                                mediaController?.let { controller ->
+                                    val d = controller.duration
+                                    if (d > 0) _duration.value = d
+                                }
+                            }
+                            Player.STATE_ENDED -> {
+                                _isLoadingTrack.value = false
+                                skipNext()
+                            }
+                            Player.STATE_IDLE -> {
+                                _isLoadingTrack.value = false
+                            }
                         }
+                    }
+
+                    override fun onPlayerError(error: PlaybackException) {
+                        Log.e("KuroMusicViewModel", "Player error: ${error.message}", error)
+                        _isLoadingTrack.value = false
+                        _isPlaying.value = false
                     }
                 })
             } catch (e: Exception) {
@@ -97,9 +139,12 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             while (true) {
                 mediaController?.let { controller ->
                     _playbackPosition.value = controller.currentPosition.coerceAtLeast(0)
-                    _duration.value = controller.duration.coerceAtLeast(0)
+                    val realDuration = controller.duration
+                    if (realDuration > 0) {
+                        _duration.value = realDuration
+                    }
                 }
-                delay(500)
+                delay(300)
             }
         }
     }
@@ -117,7 +162,21 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun loadSuggestions(query: String) {
+        suggestJob?.cancel()
+        if (query.isBlank()) {
+            _suggestions.value = emptyList()
+            return
+        }
+        suggestJob = viewModelScope.launch {
+            delay(200)
+            val list = repository.getSuggestions(query)
+            _suggestions.value = list
+        }
+    }
+
     fun search(query: String) {
+        _suggestions.value = emptyList()
         if (query.isBlank()) {
             _searchResults.value = emptyList()
             return
@@ -133,6 +192,10 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     fun playTrack(track: Track, queue: List<Track> = emptyList()) {
         viewModelScope.launch {
             _currentTrack.value = track
+            _isLoadingTrack.value = true
+            _playbackPosition.value = 0L
+            _duration.value = if (track.durationSeconds > 0) track.durationSeconds * 1000L else 0L
+
             if (queue.isNotEmpty()) {
                 playlistQueue.clear()
                 playlistQueue.addAll(queue)
@@ -151,6 +214,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     controller.prepare()
                     controller.play()
                 }
+            } else {
+                _isLoadingTrack.value = false
+                Log.e("KuroMusicViewModel", "Failed to resolve stream URL for ${track.title}")
             }
         }
     }
@@ -171,17 +237,41 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun skipNext() {
-        if (playlistQueue.isNotEmpty() && currentIndex + 1 < playlistQueue.size) {
-            currentIndex++
+        if (playlistQueue.isNotEmpty()) {
+            if (_isShuffle.value) {
+                currentIndex = (0 until playlistQueue.size).random()
+            } else if (currentIndex + 1 < playlistQueue.size) {
+                currentIndex++
+            } else {
+                currentIndex = 0
+            }
             playTrack(playlistQueue[currentIndex], playlistQueue)
         }
     }
 
     fun skipPrevious() {
-        if (playlistQueue.isNotEmpty() && currentIndex - 1 >= 0) {
-            currentIndex--
+        if (playlistQueue.isNotEmpty()) {
+            if (currentIndex - 1 >= 0) {
+                currentIndex--
+            } else {
+                currentIndex = playlistQueue.size - 1
+            }
             playTrack(playlistQueue[currentIndex], playlistQueue)
         }
+    }
+
+    fun toggleShuffle() {
+        _isShuffle.value = !_isShuffle.value
+    }
+
+    fun toggleRepeat() {
+        val next = when (_repeatMode.value) {
+            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+            Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+            else -> Player.REPEAT_MODE_OFF
+        }
+        _repeatMode.value = next
+        mediaController?.repeatMode = next
     }
 
     fun toggleFavorite(track: Track) {
@@ -206,6 +296,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         super.onCleared()
         stopProgressTracking()
+        suggestJob?.cancel()
         controllerFuture?.let { MediaController.releaseFuture(it) }
     }
 }

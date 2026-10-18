@@ -65,11 +65,15 @@ fun MainAppScreen(viewModel: MusicViewModel) {
 
     val currentTrack by viewModel.currentTrack.collectAsState()
     val isPlaying by viewModel.isPlaying.collectAsState()
+    val isLoadingTrack by viewModel.isLoadingTrack.collectAsState()
     val position by viewModel.playbackPosition.collectAsState()
     val duration by viewModel.duration.collectAsState()
     val isExpanded by viewModel.isPlayerExpanded.collectAsState()
+    val isShuffle by viewModel.isShuffle.collectAsState()
+    val repeatMode by viewModel.repeatMode.collectAsState()
 
-    val progress = if (duration > 0) (position.toFloat() / duration.toFloat()) else 0f
+    val effectiveDuration = if (duration > 0) duration else ((currentTrack?.durationSeconds ?: 0) * 1000L).coerceAtLeast(1L)
+    val progress = if (effectiveDuration > 0) (position.toFloat() / effectiveDuration.toFloat()) else 0f
 
     BackHandler(enabled = isExpanded) {
         viewModel.expandPlayer(false)
@@ -141,6 +145,7 @@ fun MainAppScreen(viewModel: MusicViewModel) {
                     MiniPlayer(
                         track = currentTrack!!,
                         isPlaying = isPlaying,
+                        isLoading = isLoadingTrack,
                         progress = progress,
                         onPlayPauseClick = { viewModel.togglePlayPause() },
                         onSkipNextClick = { viewModel.skipNext() },
@@ -163,11 +168,16 @@ fun MainAppScreen(viewModel: MusicViewModel) {
                 FullPlayerSheet(
                     track = track,
                     isPlaying = isPlaying,
+                    isLoading = isLoadingTrack,
+                    isShuffle = isShuffle,
+                    repeatMode = repeatMode,
                     currentPositionMs = position,
-                    durationMs = duration,
+                    durationMs = effectiveDuration,
                     onPlayPauseClick = { viewModel.togglePlayPause() },
                     onSkipNextClick = { viewModel.skipNext() },
                     onSkipPreviousClick = { viewModel.skipPrevious() },
+                    onShuffleClick = { viewModel.toggleShuffle() },
+                    onRepeatClick = { viewModel.toggleRepeat() },
                     onSeekTo = { viewModel.seekTo(it) },
                     onFavoriteClick = { viewModel.toggleFavorite(track) },
                     onDismiss = { viewModel.expandPlayer(false) }
