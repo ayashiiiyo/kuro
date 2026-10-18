@@ -27,10 +27,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.ayashii.kuro.R
 import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.ui.theme.DarkBorder
 import com.ayashii.kuro.ui.theme.DarkCard
@@ -124,20 +126,20 @@ fun MiniPlayer(
             } else {
                 IconButton(onClick = onPlayPauseClick) {
                     Icon(
-                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        painter = if (isPlaying) painterResource(R.drawable.ic_kuro_pause) else painterResource(R.drawable.ic_kuro_play),
                         contentDescription = if (isPlaying) "Pause" else "Play",
                         tint = PureWhite,
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(26.dp)
                     )
                 }
             }
 
             IconButton(onClick = onSkipNextClick) {
                 Icon(
-                    imageVector = Icons.Default.SkipNext,
+                    painter = painterResource(R.drawable.ic_kuro_fast_forward),
                     contentDescription = "Next",
                     tint = PureWhite,
-                    modifier = Modifier.size(26.dp)
+                    modifier = Modifier.size(24.dp)
                 )
             }
         }

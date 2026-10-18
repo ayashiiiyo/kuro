@@ -1,0 +1,21 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="44dp"
+    android:height="44dp"
+    android:viewportWidth="44.022"
+    android:viewportHeight="44.022">
+    <!-- First outline chevron pointing left -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M41.5,2.5 L23.5,22 L41.5,41.5 L39.5,43 L20.5,22 L39.5,1 Z M39,5.5 L25,22 L39,38.5 Z" />
+    <!-- Second outline chevron pointing left -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M22.5,2.5 L4.5,22 L22.5,41.5 L20.5,43 L1.5,22 L20.5,1 Z M20,5.5 L6,22 L20,38.5 Z" />
+    <!-- Center solid accent triangles pointing left -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M36,15 L29,22 L36,29 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M17,15 L10,22 L17,29 Z" />
+</vector>

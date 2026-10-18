@@ -40,12 +40,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.Player
 import coil.compose.AsyncImage
+import com.ayashii.kuro.R
 import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.ui.theme.DarkBorder
 import com.ayashii.kuro.ui.theme.DarkCard
@@ -221,19 +223,19 @@ fun FullPlayerSheet(
 
             IconButton(
                 onClick = onSkipPreviousClick,
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.size(52.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Default.SkipPrevious,
+                    painter = painterResource(R.drawable.ic_kuro_rewind),
                     contentDescription = "Previous Track",
                     tint = PureWhite,
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(34.dp)
                 )
             }
 
             Box(
                 modifier = Modifier
-                    .size(72.dp)
+                    .size(74.dp)
                     .clip(CircleShape)
                     .background(PureWhite),
                 contentAlignment = Alignment.Center
@@ -247,13 +249,13 @@ fun FullPlayerSheet(
                 } else {
                     IconButton(
                         onClick = onPlayPauseClick,
-                        modifier = Modifier.size(72.dp)
+                        modifier = Modifier.size(74.dp)
                     ) {
                         Icon(
-                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            painter = if (isPlaying) painterResource(R.drawable.ic_kuro_pause) else painterResource(R.drawable.ic_kuro_play),
                             contentDescription = if (isPlaying) "Pause" else "Play",
                             tint = PureBlack,
-                            modifier = Modifier.size(38.dp)
+                            modifier = Modifier.size(36.dp)
                         )
                     }
                 }
@@ -261,13 +263,13 @@ fun FullPlayerSheet(
 
             IconButton(
                 onClick = onSkipNextClick,
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.size(52.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Default.SkipNext,
+                    painter = painterResource(R.drawable.ic_kuro_fast_forward),
                     contentDescription = "Next Track",
                     tint = PureWhite,
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(34.dp)
                 )
             }
 
