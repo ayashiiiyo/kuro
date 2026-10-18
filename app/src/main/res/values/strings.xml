@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">Kuro</string>
+    <string name="tab_home">Home</string>
+    <string name="tab_search">Search</string>
+    <string name="tab_library">Library</string>
+    <string name="search_placeholder">Search songs, artists, albums…</string>
+    <string name="trending_title">Trending Now</string>
+    <string name="library_title">Your Collection</string>
+</resources>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Sleek Minimalist White Music Waveform Circle -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:pathData="M54,20 A34,34 0 1,1 53.9,20" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M44,48 L44,60 M50,42 L50,66 M56,38 L56,70 M62,45 L62,63 M68,50 L68,58"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4"
+        android:strokeLineCap="round" />
+</vector>

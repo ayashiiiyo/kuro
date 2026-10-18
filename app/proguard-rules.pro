@@ -1,0 +1,3 @@
+-keep class org.schabi.newpipe.extractor.** { *; }
+-dontwarn org.schabi.newpipe.extractor.**
+-keep class com.ayashii.kuro.** { *; }
