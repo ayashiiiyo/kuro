@@ -2,6 +2,8 @@ package com.ayashii.kuro.viewmodel
 
 import android.app.Application
 import android.content.ComponentName
+import android.graphics.Bitmap
+import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
@@ -12,16 +14,22 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import coil.Coil
+import coil.request.ImageRequest
+import coil.request.SuccessResult
 import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.data.remote.MusicRepository
 import com.ayashii.kuro.service.PlaybackService
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
+import java.io.ByteArrayOutputStream
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -210,10 +218,31 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 val updatedTrack = track.copy(streamUrl = streamUrl)
                 _currentTrack.value = updatedTrack
 
+                // Load artwork asynchronously into memory byte array for instant notification display
+                val artworkBytes = withContext(Dispatchers.IO) {
+                    try {
+                        val loader = Coil.imageLoader(getApplication())
+                        val req = ImageRequest.Builder(getApplication())
+                            .data(updatedTrack.thumbnailUrl)
+                            .size(300, 300)
+                            .allowHardware(false)
+                            .build()
+                        val result = (loader.execute(req) as? SuccessResult)?.drawable
+                        (result as? BitmapDrawable)?.bitmap?.let { b ->
+                            val stream = ByteArrayOutputStream()
+                            b.compress(Bitmap.CompressFormat.JPEG, 85, stream)
+                            stream.toByteArray()
+                        }
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+
                 mediaController?.let { controller ->
                     val mediaMetadata = MediaMetadata.Builder()
                         .setTitle(updatedTrack.title)
                         .setArtist(updatedTrack.artist)
+                        .setArtworkData(artworkBytes, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
                         .setArtworkUri(Uri.parse(updatedTrack.thumbnailUrl))
                         .setDisplayTitle(updatedTrack.title)
                         .build()
@@ -227,6 +256,14 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     controller.setMediaItem(mediaItem)
                     controller.prepare()
                     controller.play()
+                }
+
+                // Pre-fetch next track in background for instantaneous next play!
+                if (playlistQueue.isNotEmpty() && currentIndex + 1 < playlistQueue.size) {
+                    val nextTrack = playlistQueue[currentIndex + 1]
+                    launch(Dispatchers.IO) {
+                        repository.getAudioStreamUrl(nextTrack.url)
+                    }
                 }
             } else {
                 _isLoadingTrack.value = false

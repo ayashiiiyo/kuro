@@ -12,7 +12,7 @@ import org.schabi.newpipe.extractor.NewPipe
 class KuroApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
-        val downloader = KuroDownloader.init()
+        val downloader = KuroDownloader.init(this)
         NewPipe.init(downloader)
     }
 

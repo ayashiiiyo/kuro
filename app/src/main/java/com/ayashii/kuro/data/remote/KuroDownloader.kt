@@ -1,18 +1,30 @@
 package com.ayashii.kuro.data.remote
 
+import android.content.Context
+import okhttp3.Cache
+import okhttp3.ConnectionPool
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.schabi.newpipe.extractor.downloader.Downloader
 import org.schabi.newpipe.extractor.downloader.Request
 import org.schabi.newpipe.extractor.downloader.Response
+import java.io.File
 import java.util.concurrent.TimeUnit
 
-class KuroDownloader(
+class KuroDownloader private constructor(context: Context? = null) : Downloader() {
+
     private val client: OkHttpClient = OkHttpClient.Builder()
-        .readTimeout(30, TimeUnit.SECONDS)
-        .connectTimeout(30, TimeUnit.SECONDS)
+        .connectionPool(ConnectionPool(8, 5, TimeUnit.MINUTES))
+        .apply {
+            context?.let { ctx ->
+                val cacheDir = File(ctx.cacheDir, "http_cache")
+                cache(Cache(cacheDir, 30L * 1024 * 1024))
+            }
+        }
+        .readTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
         .build()
-) : Downloader() {
 
     override fun execute(request: Request): Response {
         val httpMethod = request.httpMethod()
@@ -58,9 +70,9 @@ class KuroDownloader(
         @Volatile
         private var instance: KuroDownloader? = null
 
-        fun init(): KuroDownloader {
+        fun init(context: Context? = null): KuroDownloader {
             return instance ?: synchronized(this) {
-                instance ?: KuroDownloader().also { instance = it }
+                instance ?: KuroDownloader(context).also { instance = it }
             }
         }
 
