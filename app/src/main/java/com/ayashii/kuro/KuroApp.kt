@@ -6,12 +6,14 @@ import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import coil.request.CachePolicy
+import com.ayashii.kuro.data.auth.AuthManager
 import com.ayashii.kuro.data.remote.KuroDownloader
 import org.schabi.newpipe.extractor.NewPipe
 
 class KuroApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
+        AuthManager.init(this)
         val downloader = KuroDownloader.init(this)
         NewPipe.init(downloader)
     }

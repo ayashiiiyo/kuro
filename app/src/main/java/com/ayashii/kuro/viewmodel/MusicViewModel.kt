@@ -79,6 +79,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val _repeatMode = MutableStateFlow(Player.REPEAT_MODE_OFF)
     val repeatMode = _repeatMode.asStateFlow()
 
+    val authState = com.ayashii.kuro.data.auth.AuthManager.getInstance().authState
+
     private val playlistQueue = mutableListOf<Track>()
     private var currentIndex = -1
     private var progressJob: Job? = null
@@ -354,6 +356,27 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun expandPlayer(expand: Boolean) {
         _isPlayerExpanded.value = expand
+    }
+
+    fun syncLikedSongs() {
+        viewModelScope.launch {
+            _isLoadingTrending.value = true
+            val liked = repository.getLikedTracks()
+            if (liked.isNotEmpty()) {
+                val currentFavs = _favorites.value.toMutableList()
+                liked.forEach { track ->
+                    if (currentFavs.none { it.id == track.id }) {
+                        currentFavs.add(track.copy(isFavorite = true))
+                    }
+                }
+                _favorites.value = currentFavs
+            }
+            _isLoadingTrending.value = false
+        }
+    }
+
+    fun logout() {
+        com.ayashii.kuro.data.auth.AuthManager.getInstance().logout()
     }
 
     override fun onCleared() {

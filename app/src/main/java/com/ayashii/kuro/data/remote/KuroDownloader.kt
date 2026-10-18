@@ -47,6 +47,26 @@ class KuroDownloader private constructor(context: Context? = null) : Downloader(
             )
         }
 
+        // Inject YouTube auth cookies & SAPISID header if user is logged in
+        try {
+            val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
+            val cookie = auth.getCookie()
+            if (!cookie.isNullOrBlank() && (url.contains("youtube.com") || url.contains("googlevideo.com") || url.contains("ytimg.com"))) {
+                if (headers["Cookie"] == null && headers["cookie"] == null) {
+                    reqBuilder.header("Cookie", cookie)
+                }
+                val origin = if (url.contains("music.youtube.com")) "https://music.youtube.com" else "https://www.youtube.com"
+                auth.getSapisidHash(origin)?.let { sapisidHash ->
+                    if (headers["Authorization"] == null && headers["authorization"] == null) {
+                        reqBuilder.header("Authorization", sapisidHash)
+                    }
+                    if (headers["x-origin"] == null && headers["X-Origin"] == null) {
+                        reqBuilder.header("x-origin", origin)
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
         val requestBody = if (httpMethod == "POST" || httpMethod == "PUT") {
             (dataToSend ?: ByteArray(0)).toRequestBody(null)
         } else null

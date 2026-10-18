@@ -121,8 +121,31 @@ class MusicRepository {
             }
             resolved
         } catch (e: Exception) {
-            Log.e("MusicRepository", "Get stream URL failed: ${e.message}", e)
+            Log.e("MusicRepository", "Failed to get audio stream for $url: ${e.message}", e)
             null
+        }
+    }
+
+    suspend fun getLikedTracks(): List<Track> = withContext(Dispatchers.IO) {
+        try {
+            val playlistExtractor = service.getPlaylistExtractor("https://www.youtube.com/playlist?list=LL")
+            playlistExtractor.fetchPage()
+            val page = playlistExtractor.initialPage
+            page.items
+                .filterIsInstance<StreamInfoItem>()
+                .map { item ->
+                    Track(
+                        id = item.url.substringAfter("v=").substringBefore("&"),
+                        url = item.url,
+                        title = item.name ?: "Unknown Title",
+                        artist = item.uploaderName ?: "Unknown Artist",
+                        thumbnailUrl = item.thumbnails.firstOrNull()?.url ?: "",
+                        durationSeconds = item.duration
+                    )
+                }
+        } catch (e: Exception) {
+            Log.e("MusicRepository", "Failed to fetch liked tracks: ${e.message}", e)
+            emptyList()
         }
     }
 }

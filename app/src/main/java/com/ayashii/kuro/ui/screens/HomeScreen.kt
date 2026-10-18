@@ -13,11 +13,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -28,14 +33,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import com.ayashii.kuro.data.auth.UserAccount
+import com.ayashii.kuro.ui.components.AccountDialog
+import com.ayashii.kuro.ui.components.LoginWebViewDialog
 import com.ayashii.kuro.ui.components.TrackItem
 import com.ayashii.kuro.ui.theme.DarkBorder
 import com.ayashii.kuro.ui.theme.DarkCard
 import com.ayashii.kuro.ui.theme.MutedText
 import com.ayashii.kuro.ui.theme.PureBlack
 import com.ayashii.kuro.ui.theme.PureWhite
+import com.ayashii.kuro.ui.theme.SubtleGray
 import com.ayashii.kuro.ui.theme.Typography
 import com.ayashii.kuro.viewmodel.MusicViewModel
 
@@ -48,6 +59,10 @@ fun HomeScreen(
     val isLoading by viewModel.isLoadingTrending.collectAsState()
     val isLoadingTrack by viewModel.isLoadingTrack.collectAsState()
     val currentTrack by viewModel.currentTrack.collectAsState()
+    val currentAccount by viewModel.authState.collectAsState()
+
+    var showAccountDialog by remember { mutableStateOf(false) }
+    var showLoginWebView by remember { mutableStateOf(false) }
 
     var selectedGenre by remember { mutableStateOf("Trending") }
     val genres = listOf("Trending", "Top Global", "Pop", "Lo-Fi", "Hip-Hop", "R&B", "Rock", "Acoustic", "Electronic")
@@ -58,17 +73,31 @@ fun HomeScreen(
             .background(PureBlack)
             .padding(top = 16.dp)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-            Text(
-                text = "Kuro",
-                style = Typography.headlineLarge,
-                color = PureWhite
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = "Discover & Stream without limits",
-                style = Typography.bodyMedium,
-                color = MutedText
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "Kuro",
+                    style = Typography.headlineLarge,
+                    color = PureWhite
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Discover & Stream without limits",
+                    style = Typography.bodyMedium,
+                    color = MutedText
+                )
+            }
+
+            // Account Avatar or Login Button
+            AccountTopButton(
+                account = currentAccount,
+                onClick = { showAccountDialog = true }
             )
         }
 
@@ -134,6 +163,63 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.height(100.dp))
                 }
             }
+        }
+    }
+
+    if (showAccountDialog) {
+        AccountDialog(
+            account = currentAccount,
+            onDismiss = { showAccountDialog = false },
+            onLoginClick = { showLoginWebView = true },
+            onLogoutClick = { viewModel.logout() },
+            onSyncLikedClick = { viewModel.syncLikedSongs() }
+        )
+    }
+
+    if (showLoginWebView) {
+        LoginWebViewDialog(
+            onDismiss = { showLoginWebView = false },
+            onLoginSuccess = { showAccountDialog = true }
+        )
+    }
+}
+
+@Composable
+fun AccountTopButton(
+    account: UserAccount?,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(DarkCard)
+            .border(1.dp, if (account != null) PureWhite else DarkBorder, CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        if (account != null && account.avatarUrl.isNotBlank()) {
+            AsyncImage(
+                model = account.avatarUrl,
+                contentDescription = "Account Profile",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(CircleShape)
+            )
+        } else if (account != null) {
+            Text(
+                text = account.name.take(1).uppercase(),
+                style = Typography.titleMedium,
+                color = PureWhite
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Outlined.AccountCircle,
+                contentDescription = "Login YouTube",
+                tint = SubtleGray,
+                modifier = Modifier.size(24.dp)
+            )
         }
     }
 }
