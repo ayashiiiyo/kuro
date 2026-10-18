@@ -64,8 +64,55 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val _suggestions = MutableStateFlow<List<String>>(emptyList())
     val suggestions = _suggestions.asStateFlow()
 
-    private val _favorites = MutableStateFlow<List<Track>>(emptyList())
+    private val favPrefs = getApplication<android.app.Application>().getSharedPreferences("kuro_favorites", android.content.Context.MODE_PRIVATE)
+
+    private val _favorites = MutableStateFlow<List<Track>>(loadStoredFavorites())
     val favorites = _favorites.asStateFlow()
+
+    private fun loadStoredFavorites(): List<Track> {
+        val jsonStr = favPrefs.getString("fav_list", null) ?: return emptyList()
+        return try {
+            val arr = org.json.JSONArray(jsonStr)
+            val list = mutableListOf<Track>()
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                list.add(
+                    Track(
+                        id = obj.getString("id"),
+                        url = obj.getString("url"),
+                        title = obj.getString("title"),
+                        artist = obj.getString("artist"),
+                        thumbnailUrl = obj.getString("thumbnailUrl"),
+                        durationSeconds = obj.optLong("durationSeconds", 0L),
+                        isFavorite = true
+                    )
+                )
+            }
+            list
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun saveStoredFavorites(list: List<Track>) {
+        try {
+            val arr = org.json.JSONArray()
+            list.forEach { t ->
+                val obj = org.json.JSONObject().apply {
+                    put("id", t.id)
+                    put("url", t.url)
+                    put("title", t.title)
+                    put("artist", t.artist)
+                    put("thumbnailUrl", t.thumbnailUrl)
+                    put("durationSeconds", t.durationSeconds)
+                }
+                arr.put(obj)
+            }
+            favPrefs.edit().putString("fav_list", arr.toString()).apply()
+        } catch (e: Exception) {
+            android.util.Log.e("KuroVM", "Save favorites error: ${e.message}")
+        }
+    }
 
     private val _isLoadingTrending = MutableStateFlow(false)
     val isLoadingTrending = _isLoadingTrending.asStateFlow()
@@ -374,6 +421,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             currentFavs.add(track.copy(isFavorite = true))
         }
         _favorites.value = currentFavs
+        saveStoredFavorites(currentFavs)
 
         if (_currentTrack.value?.id == track.id) {
             _currentTrack.value = _currentTrack.value?.copy(isFavorite = !exists)
@@ -396,6 +444,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
                 _favorites.value = currentFavs
+                saveStoredFavorites(currentFavs)
             }
             _isLoadingTrending.value = false
         }

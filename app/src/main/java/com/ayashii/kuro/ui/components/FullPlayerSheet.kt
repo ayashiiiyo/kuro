@@ -15,21 +15,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.outlined.Article
 import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -39,9 +35,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -81,15 +74,15 @@ fun FullPlayerSheet(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val isExpanded = viewModel.isPlayerExpanded.collectAsState().value
     val currentLyrics by viewModel.currentLyrics.collectAsState()
     val isLoadingLyrics by viewModel.isLoadingLyrics.collectAsState()
-    var showLyrics by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(PureBlack)
+            .verticalScroll(scrollState)
             .padding(horizontal = 24.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -104,7 +97,7 @@ fun FullPlayerSheet(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Top Bar: Dismiss Chevron, Mode Title & Lyrics/Fav Actions
+        // Top Bar: Dismiss Chevron, Title & Favorite
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -121,7 +114,7 @@ fun FullPlayerSheet(
 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = if (showLyrics) "KARAOKE LYRICS" else "PLAYING FROM KURO",
+                    text = "PLAYING FROM KURO",
                     style = Typography.labelSmall,
                     fontSize = 10.sp,
                     letterSpacing = 1.sp,
@@ -129,114 +122,63 @@ fun FullPlayerSheet(
                 )
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Toggle Lyrics Button
-                IconButton(onClick = { showLyrics = !showLyrics }) {
-                    Icon(
-                        imageVector = if (showLyrics) Icons.Outlined.MusicNote else Icons.Outlined.Article,
-                        contentDescription = "Lyrics",
-                        tint = if (showLyrics) PureWhite else MutedText,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                IconButton(onClick = onFavoriteClick) {
-                    Icon(
-                        imageVector = if (track.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
-                        contentDescription = "Favorite",
-                        tint = if (track.isFavorite) PureWhite else MutedText,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
+            IconButton(onClick = onFavoriteClick) {
+                Icon(
+                    imageVector = if (track.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
+                    contentDescription = "Favorite",
+                    tint = if (track.isFavorite) PureWhite else MutedText,
+                    modifier = Modifier.size(24.dp)
+                )
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Center: Large Album Cover or Live Synced Lyrics
+        // Center: Large Album Cover
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f, fill = false)
                 .aspectRatio(1f)
-                .clip(RoundedCornerShape(20.dp)),
+                .clip(RoundedCornerShape(20.dp))
+                .border(1.dp, DarkBorder, RoundedCornerShape(20.dp)),
             contentAlignment = Alignment.Center
         ) {
-            if (showLyrics) {
-                SyncedLyricsView(
-                    lyricsData = currentLyrics,
-                    isLoading = isLoadingLyrics,
-                    positionProvider = { viewModel.getPositionMs() },
-                    onSeekTo = { viewModel.seekTo(it) }
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(20.dp))
-                        .border(1.dp, DarkBorder, RoundedCornerShape(20.dp))
-                        .clickable { showLyrics = true },
-                    contentAlignment = Alignment.Center
-                ) {
-                    AsyncImage(
-                        model = track.thumbnailUrl,
-                        contentDescription = track.title,
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                }
-            }
+            AsyncImage(
+                model = track.thumbnailUrl,
+                contentDescription = track.title,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop
+            )
         }
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Title & Artist + Audio Quality Badge
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        // Title & Artist (Lossless badge deleted as requested!)
+        Column(
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = track.title,
-                    style = Typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = PureWhite,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = track.artist,
-                    style = Typography.titleMedium,
-                    fontWeight = FontWeight.Normal,
-                    color = MutedText,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(DarkCard)
-                    .border(1.dp, DarkBorder, RoundedCornerShape(6.dp))
-                    .padding(horizontal = 8.dp, vertical = 4.dp)
-            ) {
-                Text(
-                    text = "LOSSLESS",
-                    style = Typography.labelSmall,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp,
-                    color = PureWhite
-                )
-            }
+            Text(
+                text = track.title,
+                style = Typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                color = PureWhite,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = track.artist,
+                style = Typography.titleMedium,
+                fontWeight = FontWeight.Normal,
+                color = MutedText,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Isolated Scrubber to prevent full sheet recomposition
+        // Scrubber
         PlayerScrubber(
             viewModel = viewModel,
             track = track
@@ -329,7 +271,20 @@ fun FullPlayerSheet(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(28.dp))
+
+        // Spotify-Style Lyrics Card Below Playback Controls!
+        SyncedLyricsView(
+            lyricsData = currentLyrics,
+            isLoading = isLoadingLyrics,
+            positionProvider = { viewModel.getPositionMs() },
+            onSeekTo = { viewModel.seekTo(it) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(340.dp)
+        )
+
+        Spacer(modifier = Modifier.height(36.dp))
     }
 }
 

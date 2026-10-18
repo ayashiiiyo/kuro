@@ -5,8 +5,10 @@ import android.util.Log
 import android.util.LruCache
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -56,7 +58,12 @@ class LyricsRepository(private val context: Context) {
         // 4. Fetch from LRCLIB
         var lyrics = fetchFromLrcLib(trackId, title, artist, cleanTitle, cleanArtist, durationSeconds)
 
-        // 5. If lyrics found and translation requested:
+        // 5. If LRCLIB had no lyrics, fallback to YouTube Music Official Lyrics
+        if (lyrics == null) {
+            lyrics = fetchFromYouTubeMusic(trackId, title, artist, durationSeconds)
+        }
+
+        // 6. If lyrics found and translation requested:
         if (lyrics != null && autoTranslate && lyrics.lines.isNotEmpty()) {
             val translatedLines = translateLinesToIndonesian(lyrics.lines)
             lyrics = lyrics.copy(lines = translatedLines)
@@ -148,6 +155,106 @@ class LyricsRepository(private val context: Context) {
             }
         } catch (e: Exception) {
             Log.e("LyricsRepository", "LRCLIB fetch error: ${e.message}")
+        }
+        return null
+    }
+
+    private fun fetchFromYouTubeMusic(
+        trackId: String,
+        origTitle: String,
+        origArtist: String,
+        durationSeconds: Long
+    ): LyricsData? {
+        try {
+            val nextPayload = JSONObject().apply {
+                put("context", JSONObject().apply {
+                    put("client", JSONObject().apply {
+                        put("clientName", "WEB_REMIX")
+                        put("clientVersion", "1.20240101.01.00")
+                        put("hl", "en")
+                        put("gl", "US")
+                    })
+                })
+                put("videoId", trackId)
+            }
+
+            val nextReq = Request.Builder()
+                .url("https://music.youtube.com/youtubei/v1/next")
+                .header("Content-Type", "application/json")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .header("Origin", "https://music.youtube.com")
+                .header("Referer", "https://music.youtube.com/")
+                .header("X-YouTube-Client-Name", "67")
+                .header("X-YouTube-Client-Version", "1.20240101.01.00")
+                .post(nextPayload.toString().toRequestBody("application/json".toMediaType()))
+                .build()
+
+            val nextResp = httpClient.newCall(nextReq).execute()
+            if (!nextResp.isSuccessful) return null
+            val nextJson = JSONObject(nextResp.body?.string().orEmpty())
+            val tabs = nextJson.optJSONObject("contents")
+                ?.optJSONObject("singleColumnMusicWatchNextResultsRenderer")
+                ?.optJSONObject("tabbedRenderer")
+                ?.optJSONObject("watchNextTabbedResultsRenderer")
+                ?.optJSONArray("tabs") ?: return null
+
+            var browseId: String? = null
+            for (i in 0 until tabs.length()) {
+                val tab = tabs.optJSONObject(i)?.optJSONObject("tabRenderer")
+                val title = tab?.optString("title", "")
+                if (title.equals("Lyrics", ignoreCase = true)) {
+                    browseId = tab.optJSONObject("endpoint")?.optJSONObject("browseEndpoint")?.optString("browseId")
+                    break
+                }
+            }
+
+            if (!browseId.isNullOrBlank()) {
+                val browsePayload = JSONObject().apply {
+                    put("context", JSONObject().apply {
+                        put("client", JSONObject().apply {
+                            put("clientName", "WEB_REMIX")
+                            put("clientVersion", "1.20240101.01.00")
+                            put("hl", "en")
+                            put("gl", "US")
+                        })
+                    })
+                    put("browseId", browseId)
+                }
+
+                val browseReq = Request.Builder()
+                    .url("https://music.youtube.com/youtubei/v1/browse")
+                    .header("Content-Type", "application/json")
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .header("Origin", "https://music.youtube.com")
+                    .header("Referer", "https://music.youtube.com/")
+                    .header("X-YouTube-Client-Name", "67")
+                    .header("X-YouTube-Client-Version", "1.20240101.01.00")
+                    .post(browsePayload.toString().toRequestBody("application/json".toMediaType()))
+                    .build()
+
+                val browseResp = httpClient.newCall(browseReq).execute()
+                if (browseResp.isSuccessful) {
+                    val browseJson = JSONObject(browseResp.body?.string().orEmpty())
+                    val contents = browseJson.optJSONObject("contents")
+                        ?.optJSONObject("sectionListRenderer")
+                        ?.optJSONArray("contents")
+                    val shelf = contents?.optJSONObject(0)?.optJSONObject("musicDescriptionShelfRenderer")
+                    val runs = shelf?.optJSONObject("description")?.optJSONArray("runs")
+                    if (runs != null && runs.length() > 0) {
+                        val sb = StringBuilder()
+                        for (j in 0 until runs.length()) {
+                            sb.append(runs.optJSONObject(j)?.optString("text", ""))
+                        }
+                        val rawText = sb.toString().trim()
+                        if (rawText.isNotBlank()) {
+                            val lines = LrcParser.parsePlain(rawText, durationSeconds * 1000L)
+                            return LyricsData(trackId, origTitle, origArtist, lines, isSynced = false)
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.d("LyricsRepository", "YTM Lyrics fetch error: ${e.message}")
         }
         return null
     }

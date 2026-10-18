@@ -134,6 +134,118 @@ class MusicRepository {
     }
 
     suspend fun getLikedTracks(): List<Track> = withContext(Dispatchers.IO) {
+        val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
+        val cookie = auth.getCookie()
+        if (cookie.isNullOrBlank()) return@withContext emptyList()
+
+        try {
+            val origin = "https://music.youtube.com"
+            val sapisidHash = auth.getSapisidHash(origin)
+
+            val payload = org.json.JSONObject().apply {
+                put("context", org.json.JSONObject().apply {
+                    put("client", org.json.JSONObject().apply {
+                        put("clientName", "WEB_REMIX")
+                        put("clientVersion", "1.20240101.01.00")
+                        put("hl", "en")
+                        put("gl", "US")
+                    })
+                })
+                put("browseId", "FEmusic_liked_videos")
+            }
+
+            val client = okhttp3.OkHttpClient()
+            val mediaType = okhttp3.MediaType.parse("application/json")
+            val reqBuilder = okhttp3.Request.Builder()
+                .url("$origin/youtubei/v1/browse")
+                .header("Content-Type", "application/json")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .header("Origin", origin)
+                .header("Referer", "$origin/")
+                .header("X-Origin", origin)
+                .header("X-YouTube-Client-Name", "67")
+                .header("X-YouTube-Client-Version", "1.20240101.01.00")
+                .header("Cookie", cookie)
+                .post(okhttp3.RequestBody.create(mediaType, payload.toString()))
+
+            if (sapisidHash != null) {
+                reqBuilder.header("Authorization", sapisidHash)
+            }
+
+            val resp = client.newCall(reqBuilder.build()).execute()
+            if (resp.isSuccessful) {
+                val json = org.json.JSONObject(resp.body?.string().orEmpty())
+                val contents = json.optJSONObject("contents")
+                    ?.optJSONObject("singleColumnBrowseResultsRenderer")
+                    ?.optJSONArray("tabs")
+                    ?.optJSONObject(0)
+                    ?.optJSONObject("tabRenderer")
+                    ?.optJSONObject("content")
+                    ?.optJSONObject("sectionListRenderer")
+                    ?.optJSONArray("contents")
+
+                val trackList = mutableListOf<Track>()
+                val musicShelf = contents?.optJSONObject(0)?.optJSONObject("musicShelfRenderer")
+                val items = musicShelf?.optJSONArray("contents")
+                if (items != null) {
+                    for (i in 0 until items.length()) {
+                        val row = items.optJSONObject(i)?.optJSONObject("musicResponsiveListItemRenderer")
+                        if (row != null) {
+                            val cols = row.optJSONArray("flexColumns")
+                            val title = cols?.optJSONObject(0)
+                                ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
+                                ?.optJSONObject("text")
+                                ?.optJSONArray("runs")
+                                ?.optJSONObject(0)
+                                ?.optString("text") ?: ""
+
+                            val videoId = cols?.optJSONObject(0)
+                                ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
+                                ?.optJSONObject("text")
+                                ?.optJSONArray("runs")
+                                ?.optJSONObject(0)
+                                ?.optJSONObject("navigationEndpoint")
+                                ?.optJSONObject("watchEndpoint")
+                                ?.optString("videoId") ?: ""
+
+                            val artist = cols?.optJSONObject(1)
+                                ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
+                                ?.optJSONObject("text")
+                                ?.optJSONArray("runs")
+                                ?.optJSONObject(0)
+                                ?.optString("text") ?: "YouTube Music"
+
+                            val thumb = row.optJSONObject("thumbnail")
+                                ?.optJSONObject("musicThumbnailRenderer")
+                                ?.optJSONObject("thumbnail")
+                                ?.optJSONArray("thumbnails")
+                                ?.let { it.optJSONObject(it.length() - 1)?.optString("url") } ?: ""
+
+                            if (videoId.isNotBlank() && title.isNotBlank()) {
+                                trackList.add(
+                                    Track(
+                                        id = videoId,
+                                        url = "https://www.youtube.com/watch?v=$videoId",
+                                        title = cleanTrackTitle(title),
+                                        artist = artist.replace(" - Topic", ""),
+                                        thumbnailUrl = thumb,
+                                        durationSeconds = 0,
+                                        isFavorite = true
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+                if (trackList.isNotEmpty()) {
+                    return@withContext trackList
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("MusicRepository", "Liked songs InnerTube fetch error: ${e.message}", e)
+        }
+
+        // Fallback: NewPipe playlist extractor
         try {
             val playlistExtractor = service.getPlaylistExtractor("https://www.youtube.com/playlist?list=LL")
             playlistExtractor.fetchPage()
@@ -147,11 +259,12 @@ class MusicRepository {
                         title = cleanTrackTitle(item.name ?: "Unknown Title"),
                         artist = item.uploaderName?.replace(" - Topic", "") ?: "Unknown Artist",
                         thumbnailUrl = item.thumbnails.firstOrNull()?.url ?: "",
-                        durationSeconds = item.duration
+                        durationSeconds = item.duration,
+                        isFavorite = true
                     )
                 }
         } catch (e: Exception) {
-            Log.e("MusicRepository", "Failed to fetch liked tracks: ${e.message}", e)
+            Log.e("MusicRepository", "Failed to fetch liked tracks via NewPipe: ${e.message}")
             emptyList()
         }
     }
