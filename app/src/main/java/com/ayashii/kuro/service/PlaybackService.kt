@@ -30,6 +30,8 @@ class PlaybackService : MediaSessionService() {
     companion object {
         const val CHANNEL_ID = "kuro_playback_channel"
         const val NOTIFICATION_ID = 1001
+        const val ACTION_NEXT = "com.ayashii.kuro.ACTION_NEXT"
+        const val ACTION_PREV = "com.ayashii.kuro.ACTION_PREV"
     }
 
     @OptIn(UnstableApi::class)
@@ -76,7 +78,44 @@ class PlaybackService : MediaSessionService() {
             }
         })
 
-        player = exoPlayer
+        val forwardingPlayer = object : androidx.media3.common.ForwardingPlayer(exoPlayer) {
+            override fun isCommandAvailable(command: Int): Boolean {
+                return when (command) {
+                    Player.COMMAND_SEEK_TO_NEXT,
+                    Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
+                    Player.COMMAND_SEEK_TO_PREVIOUS,
+                    Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> true
+                    else -> super.isCommandAvailable(command)
+                }
+            }
+
+            override fun getAvailableCommands(): Player.Commands {
+                return super.getAvailableCommands().buildUpon()
+                    .add(Player.COMMAND_SEEK_TO_NEXT)
+                    .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+                    .add(Player.COMMAND_SEEK_TO_PREVIOUS)
+                    .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+                    .build()
+            }
+
+            override fun seekToNext() {
+                sendBroadcast(Intent(ACTION_NEXT).setPackage(packageName))
+            }
+
+            override fun seekToNextMediaItem() {
+                sendBroadcast(Intent(ACTION_NEXT).setPackage(packageName))
+            }
+
+            override fun seekToPrevious() {
+                sendBroadcast(Intent(ACTION_PREV).setPackage(packageName))
+            }
+
+            override fun seekToPreviousMediaItem() {
+                sendBroadcast(Intent(ACTION_PREV).setPackage(packageName))
+            }
+        }
+
+        player = forwardingPlayer
 
         val openAppIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -97,7 +136,7 @@ class PlaybackService : MediaSessionService() {
 
         setMediaNotificationProvider(notificationProvider)
 
-        mediaSession = MediaSession.Builder(this, exoPlayer)
+        mediaSession = MediaSession.Builder(this, forwardingPlayer)
             .setSessionActivity(pendingIntent)
             .build()
     }

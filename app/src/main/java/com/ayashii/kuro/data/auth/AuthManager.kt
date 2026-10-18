@@ -38,11 +38,37 @@ class AuthManager private constructor(private val context: Context) {
 
     private fun loadStoredAccount(): UserAccount? {
         val cookie = prefs.getString(KEY_COOKIE, null) ?: return null
-        val name = prefs.getString(KEY_NAME, "YouTube User") ?: "YouTube User"
-        val email = prefs.getString(KEY_EMAIL, "") ?: ""
-        val handle = prefs.getString(KEY_HANDLE, "") ?: ""
+        var name = prefs.getString(KEY_NAME, "YouTube User") ?: "YouTube User"
+        var email = prefs.getString(KEY_EMAIL, "") ?: ""
+        var handle = prefs.getString(KEY_HANDLE, "") ?: ""
         val avatar = prefs.getString(KEY_AVATAR, "") ?: ""
+
+        // Sanitize if previously saved as raw JSON object string
+        if (name.startsWith("{") || name.contains("\"runs\"")) {
+            name = parseRawJsonRuns(name).ifBlank { "YouTube User" }
+        }
+        if (email.startsWith("{") || email.contains("\"runs\"")) {
+            email = parseRawJsonRuns(email)
+        }
+        if (handle.startsWith("{") || handle.contains("\"runs\"")) {
+            handle = parseRawJsonRuns(handle)
+        }
+
         return UserAccount(name, email, handle, avatar, cookie)
+    }
+
+    private fun parseRawJsonRuns(jsonStr: String): String {
+        return try {
+            val json = JSONObject(jsonStr)
+            val runs = json.optJSONArray("runs")
+            if (runs != null && runs.length() > 0) {
+                runs.optJSONObject(0)?.optString("text", "") ?: ""
+            } else {
+                json.optString("simpleText", "")
+            }
+        } catch (_: Exception) {
+            jsonStr
+        }
     }
 
     fun isLoggedIn(): Boolean = _authState.value != null
@@ -173,29 +199,29 @@ class AuthManager private constructor(private val context: Context) {
                 val activeAccount = multiPage?.optJSONObject("header")?.optJSONObject("activeAccountHeaderRenderer")
 
                 if (activeAccount != null) {
-                    val name = activeAccount.optString("accountName", "")
-                        .ifBlank {
-                            activeAccount.optJSONObject("accountName")?.optString("simpleText", "") ?: ""
-                        }
-                        .ifBlank {
-                            activeAccount.optJSONObject("accountName")?.optJSONArray("runs")?.optJSONObject(0)?.optString("text") ?: ""
-                        }
+                    val nameObj = activeAccount.opt("accountName")
+                    val name = when (nameObj) {
+                        is JSONObject -> nameObj.optJSONArray("runs")?.optJSONObject(0)?.optString("text", "")
+                            ?: nameObj.optString("simpleText", "")
+                        is String -> nameObj
+                        else -> ""
+                    }
 
-                    val email = activeAccount.optString("email", "")
-                        .ifBlank {
-                            activeAccount.optJSONObject("email")?.optString("simpleText", "") ?: ""
-                        }
-                        .ifBlank {
-                            activeAccount.optJSONObject("email")?.optJSONArray("runs")?.optJSONObject(0)?.optString("text") ?: ""
-                        }
+                    val emailObj = activeAccount.opt("email")
+                    val email = when (emailObj) {
+                        is JSONObject -> emailObj.optJSONArray("runs")?.optJSONObject(0)?.optString("text", "")
+                            ?: emailObj.optString("simpleText", "")
+                        is String -> emailObj
+                        else -> ""
+                    }
 
-                    val handle = activeAccount.optString("channelHandle", "")
-                        .ifBlank {
-                            activeAccount.optJSONObject("channelHandle")?.optString("simpleText", "") ?: ""
-                        }
-                        .ifBlank {
-                            activeAccount.optJSONObject("channelHandle")?.optJSONArray("runs")?.optJSONObject(0)?.optString("text") ?: ""
-                        }
+                    val handleObj = activeAccount.opt("channelHandle")
+                    val handle = when (handleObj) {
+                        is JSONObject -> handleObj.optJSONArray("runs")?.optJSONObject(0)?.optString("text", "")
+                            ?: handleObj.optString("simpleText", "")
+                        is String -> handleObj
+                        else -> ""
+                    }
 
                     var avatarUrl = ""
                     val accountPhoto = activeAccount.optJSONObject("accountPhoto")

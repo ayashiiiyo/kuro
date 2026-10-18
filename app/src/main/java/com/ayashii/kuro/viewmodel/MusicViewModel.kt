@@ -143,9 +143,30 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private var playJob: Job? = null
     private var lyricsJob: Job? = null
 
+    private val mediaActionReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+            when (intent?.action) {
+                PlaybackService.ACTION_NEXT -> skipNext()
+                PlaybackService.ACTION_PREV -> skipPrevious()
+            }
+        }
+    }
+
     init {
         initializeMediaController()
         loadTrending()
+        try {
+            val filter = android.content.IntentFilter().apply {
+                addAction(PlaybackService.ACTION_NEXT)
+                addAction(PlaybackService.ACTION_PREV)
+            }
+            androidx.core.content.ContextCompat.registerReceiver(
+                getApplication(),
+                mediaActionReceiver,
+                filter,
+                androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+        } catch (_: Exception) {}
     }
 
     private fun initializeMediaController() {
@@ -364,8 +385,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun seekTo(positionMs: Long) {
-        mediaController?.seekTo(positionMs)
-        _playbackPosition.value = positionMs
+        val target = positionMs.coerceAtLeast(0L)
+        mediaController?.seekTo(target)
+        _playbackPosition.value = target
     }
 
     fun getPositionMs(): Long = _playbackPosition.value
@@ -456,6 +478,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         super.onCleared()
+        try {
+            getApplication<android.app.Application>().unregisterReceiver(mediaActionReceiver)
+        } catch (_: Exception) {}
         stopProgressTracking()
         suggestJob?.cancel()
         controllerFuture?.let { MediaController.releaseFuture(it) }

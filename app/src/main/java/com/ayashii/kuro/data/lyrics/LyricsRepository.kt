@@ -127,7 +127,34 @@ class LyricsRepository(private val context: Context) {
                 }
             }
 
-            // Attempt 2: General query search
+            // Attempt 2: Targeted track & artist search (Highly accurate for synced LRC!)
+            val targetedUrl = "https://lrclib.net/api/search?track_name=${encode(cleanTitle)}&artist_name=${encode(cleanArtist)}"
+            val targetedReq = Request.Builder()
+                .url(targetedUrl)
+                .header("User-Agent", "KuroMusic/1.6.0 (Android)")
+                .build()
+
+            val targetedResp = httpClient.newCall(targetedReq).execute()
+            if (targetedResp.isSuccessful) {
+                val arr = JSONArray(targetedResp.body?.string().orEmpty())
+                for (i in 0 until arr.length()) {
+                    val item = arr.getJSONObject(i)
+                    val synced = item.optString("syncedLyrics")
+                    val plain = item.optString("plainLyrics")
+
+                    if (synced.isNotBlank()) {
+                        val lines = LrcParser.parse(synced)
+                        if (lines.isNotEmpty()) {
+                            return LyricsData(trackId, origTitle, origArtist, lines, isSynced = true)
+                        }
+                    } else if (plain.isNotBlank()) {
+                        val lines = LrcParser.parsePlain(plain, durationSeconds * 1000L)
+                        return LyricsData(trackId, origTitle, origArtist, lines, isSynced = false)
+                    }
+                }
+            }
+
+            // Attempt 3: General query search
             val searchUrl = "https://lrclib.net/api/search?q=${encode("$cleanTitle $cleanArtist")}"
             val searchReq = Request.Builder()
                 .url(searchUrl)

@@ -52,24 +52,24 @@ import com.ayashii.kuro.ui.theme.Typography
 fun SyncedLyricsView(
     lyricsData: LyricsData?,
     isLoading: Boolean,
-    positionProvider: () -> Long,
+    currentPositionMs: Long,
     onSeekTo: (Long) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showTranslation by remember { mutableStateOf(true) }
     val listState = rememberLazyListState()
 
-    // Derived active index ensures zero recomposition on every ms tick!
-    val activeIndex by remember(lyricsData) {
+    // Derived active index dynamically reacts to currentPositionMs!
+    val activeIndex by remember(lyricsData, currentPositionMs) {
         derivedStateOf {
-            lyricsData?.getCurrentLineIndex(positionProvider()) ?: -1
+            lyricsData?.getCurrentLineIndex(currentPositionMs) ?: -1
         }
     }
 
     // Auto-scroll to center current lyric smoothly
     LaunchedEffect(activeIndex) {
         if (activeIndex >= 0) {
-            val targetScroll = (activeIndex - 2).coerceAtLeast(0)
+            val targetScroll = (activeIndex - 1).coerceAtLeast(0)
             listState.animateScrollToItem(targetScroll)
         }
     }
@@ -178,7 +178,9 @@ fun SyncedLyricsView(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
-                                .clickable { onSeekTo(line.timeMs) }
+                                .clickable(enabled = lyricsData.isSynced && line.timeMs >= 0) {
+                                    onSeekTo(line.timeMs)
+                                }
                                 .padding(vertical = 4.dp)
                         ) {
                             Text(
