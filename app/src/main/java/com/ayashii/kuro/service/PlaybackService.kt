@@ -93,7 +93,6 @@ class PlaybackService : MediaSessionService() {
             .setChannelId(CHANNEL_ID)
             .setChannelName(R.string.app_name)
             .setNotificationId(NOTIFICATION_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
             .build()
 
         setMediaNotificationProvider(notificationProvider)
