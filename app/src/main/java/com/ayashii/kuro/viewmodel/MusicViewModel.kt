@@ -169,6 +169,13 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             val tracks = repository.getTrendingTracks()
             _trendingTracks.value = tracks
             _isLoadingTrending.value = false
+
+            // Pre-warm audio URLs for top 2 tracks in background
+            launch(Dispatchers.IO) {
+                tracks.take(2).forEach {
+                    repository.getAudioStreamUrl(it.url)
+                }
+            }
         }
     }
 
@@ -196,6 +203,13 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             val results = repository.searchTracks(query)
             _searchResults.value = results
             _isSearching.value = false
+
+            // Pre-warm audio URLs for top 2 search results in background
+            launch(Dispatchers.IO) {
+                results.take(2).forEach {
+                    repository.getAudioStreamUrl(it.url)
+                }
+            }
         }
     }
 
@@ -218,31 +232,10 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 val updatedTrack = track.copy(streamUrl = streamUrl)
                 _currentTrack.value = updatedTrack
 
-                // Load artwork asynchronously into memory byte array for instant notification display
-                val artworkBytes = withContext(Dispatchers.IO) {
-                    try {
-                        val loader = Coil.imageLoader(getApplication())
-                        val req = ImageRequest.Builder(getApplication())
-                            .data(updatedTrack.thumbnailUrl)
-                            .size(300, 300)
-                            .allowHardware(false)
-                            .build()
-                        val result = (loader.execute(req) as? SuccessResult)?.drawable
-                        (result as? BitmapDrawable)?.bitmap?.let { b ->
-                            val stream = ByteArrayOutputStream()
-                            b.compress(Bitmap.CompressFormat.JPEG, 85, stream)
-                            stream.toByteArray()
-                        }
-                    } catch (e: Exception) {
-                        null
-                    }
-                }
-
                 mediaController?.let { controller ->
                     val mediaMetadata = MediaMetadata.Builder()
                         .setTitle(updatedTrack.title)
                         .setArtist(updatedTrack.artist)
-                        .setArtworkData(artworkBytes, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
                         .setArtworkUri(Uri.parse(updatedTrack.thumbnailUrl))
                         .setDisplayTitle(updatedTrack.title)
                         .build()

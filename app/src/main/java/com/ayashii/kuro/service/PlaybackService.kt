@@ -68,7 +68,6 @@ class PlaybackService : MediaSessionService() {
             .setLoadControl(loadControl)
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
-            .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
 
         exoPlayer.addListener(object : Player.Listener {
@@ -94,6 +93,7 @@ class PlaybackService : MediaSessionService() {
             .setChannelName(R.string.app_name)
             .setNotificationId(NOTIFICATION_ID)
             .build()
+        notificationProvider.setSmallIcon(R.drawable.ic_notification)
 
         setMediaNotificationProvider(notificationProvider)
 
