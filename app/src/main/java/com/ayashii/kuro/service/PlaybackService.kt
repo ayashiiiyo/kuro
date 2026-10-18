@@ -24,7 +24,7 @@ import com.ayashii.kuro.R
 
 class PlaybackService : MediaSessionService() {
 
-    private var player: ExoPlayer? = null
+    private var player: Player? = null
     private var mediaSession: MediaSession? = null
 
     companion object {
