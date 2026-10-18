@@ -285,7 +285,7 @@ fun SearchScreen(
                 LazyColumn(
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(searchResults, key = { it.id }) { track ->
+                    items(searchResults, key = { it.id }, contentType = { "track" }) { track ->
                         TrackItem(
                             track = track,
                             isPlaying = currentTrack?.id == track.id,

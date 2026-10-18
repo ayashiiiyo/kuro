@@ -34,6 +34,8 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,34 +54,25 @@ import com.ayashii.kuro.ui.theme.PureBlack
 import com.ayashii.kuro.ui.theme.PureWhite
 import com.ayashii.kuro.ui.theme.SubtleGray
 import com.ayashii.kuro.ui.theme.Typography
+import com.ayashii.kuro.viewmodel.MusicViewModel
 
 @Composable
 fun FullPlayerSheet(
     track: Track,
+    viewModel: MusicViewModel,
     isPlaying: Boolean,
     isLoading: Boolean = false,
     isShuffle: Boolean = false,
     repeatMode: Int = Player.REPEAT_MODE_OFF,
-    currentPositionMs: Long,
-    durationMs: Long,
     onPlayPauseClick: () -> Unit,
     onSkipNextClick: () -> Unit,
     onSkipPreviousClick: () -> Unit,
     onShuffleClick: () -> Unit,
     onRepeatClick: () -> Unit,
-    onSeekTo: (Long) -> Unit,
     onFavoriteClick: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val effectiveDuration = if (durationMs > 0) durationMs else (track.durationSeconds * 1000L).coerceAtLeast(1L)
-    val progress = if (effectiveDuration > 0) {
-        (currentPositionMs.toFloat() / effectiveDuration.toFloat()).coerceIn(0f, 1f)
-    } else 0f
-
-    val currentFormatted = formatMs(currentPositionMs)
-    val totalFormatted = formatMs(effectiveDuration)
-
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -200,27 +193,11 @@ fun FullPlayerSheet(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Scrubber / Seek Bar
-        Slider(
-            value = progress,
-            onValueChange = { newProgress ->
-                onSeekTo((newProgress * effectiveDuration).toLong())
-            },
-            colors = SliderDefaults.colors(
-                thumbColor = PureWhite,
-                activeTrackColor = PureWhite,
-                inactiveTrackColor = DarkBorder
-            ),
-            modifier = Modifier.fillMaxWidth()
+        // Isolated Scrubber to prevent full sheet recomposition
+        PlayerScrubber(
+            viewModel = viewModel,
+            track = track
         )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(text = currentFormatted, style = Typography.bodyMedium, color = SubtleGray)
-            Text(text = totalFormatted, style = Typography.bodyMedium, color = SubtleGray)
-        }
 
         Spacer(modifier = Modifier.height(20.dp))
 
@@ -310,6 +287,47 @@ fun FullPlayerSheet(
         }
 
         Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
+@Composable
+fun PlayerScrubber(
+    viewModel: MusicViewModel,
+    track: Track,
+    modifier: Modifier = Modifier
+) {
+    val currentPositionMs by viewModel.playbackPosition.collectAsState()
+    val durationMs by viewModel.duration.collectAsState()
+
+    val effectiveDuration = if (durationMs > 0) durationMs else (track.durationSeconds * 1000L).coerceAtLeast(1L)
+    val progress = if (effectiveDuration > 0) {
+        (currentPositionMs.toFloat() / effectiveDuration.toFloat()).coerceIn(0f, 1f)
+    } else 0f
+
+    val currentFormatted = formatMs(currentPositionMs)
+    val totalFormatted = formatMs(effectiveDuration)
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Slider(
+            value = progress,
+            onValueChange = { newProgress ->
+                viewModel.seekTo((newProgress * effectiveDuration).toLong())
+            },
+            colors = SliderDefaults.colors(
+                thumbColor = PureWhite,
+                activeTrackColor = PureWhite,
+                inactiveTrackColor = DarkBorder
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(text = currentFormatted, style = Typography.bodyMedium, color = SubtleGray)
+            Text(text = totalFormatted, style = Typography.bodyMedium, color = SubtleGray)
+        }
     }
 }
 

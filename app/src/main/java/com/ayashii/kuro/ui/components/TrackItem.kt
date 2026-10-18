@@ -32,6 +32,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -173,8 +175,35 @@ fun EqualizerAnimation() {
         verticalAlignment = Alignment.Bottom,
         modifier = Modifier.height(18.dp)
     ) {
-        Box(modifier = Modifier.width(3.dp).height((18 * h1).dp).background(PureWhite, RoundedCornerShape(1.dp)))
-        Box(modifier = Modifier.width(3.dp).height((18 * h2).dp).background(PureWhite, RoundedCornerShape(1.dp)))
-        Box(modifier = Modifier.width(3.dp).height((18 * h3).dp).background(PureWhite, RoundedCornerShape(1.dp)))
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(18.dp)
+                .graphicsLayer {
+                    scaleY = h1
+                    transformOrigin = TransformOrigin(0.5f, 1f)
+                }
+                .background(PureWhite, RoundedCornerShape(1.dp))
+        )
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(18.dp)
+                .graphicsLayer {
+                    scaleY = h2
+                    transformOrigin = TransformOrigin(0.5f, 1f)
+                }
+                .background(PureWhite, RoundedCornerShape(1.dp))
+        )
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(18.dp)
+                .graphicsLayer {
+                    scaleY = h3
+                    transformOrigin = TransformOrigin(0.5f, 1f)
+                }
+                .background(PureWhite, RoundedCornerShape(1.dp))
+        )
     }
 }

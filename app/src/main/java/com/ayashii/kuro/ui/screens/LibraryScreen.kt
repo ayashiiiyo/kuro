@@ -89,7 +89,7 @@ fun LibraryScreen(
             LazyColumn(
                 modifier = Modifier.fillMaxSize()
             ) {
-                items(favorites, key = { it.id }) { track ->
+                items(favorites, key = { it.id }, contentType = { "track" }) { track ->
                     TrackItem(
                         track = track,
                         isPlaying = currentTrack?.id == track.id,

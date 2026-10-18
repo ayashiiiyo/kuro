@@ -121,7 +121,7 @@ fun HomeScreen(
             LazyColumn(
                 modifier = Modifier.fillMaxSize()
             ) {
-                items(trendingTracks, key = { it.id }) { track ->
+                items(trendingTracks, key = { it.id }, contentType = { "track" }) { track ->
                     TrackItem(
                         track = track,
                         isPlaying = currentTrack?.id == track.id,

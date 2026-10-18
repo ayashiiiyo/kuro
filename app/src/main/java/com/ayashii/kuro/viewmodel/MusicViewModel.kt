@@ -2,10 +2,12 @@ package com.ayashii.kuro.viewmodel
 
 import android.app.Application
 import android.content.ComponentName
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
@@ -209,7 +211,19 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 _currentTrack.value = updatedTrack
 
                 mediaController?.let { controller ->
-                    val mediaItem = MediaItem.fromUri(streamUrl)
+                    val mediaMetadata = MediaMetadata.Builder()
+                        .setTitle(updatedTrack.title)
+                        .setArtist(updatedTrack.artist)
+                        .setArtworkUri(Uri.parse(updatedTrack.thumbnailUrl))
+                        .setDisplayTitle(updatedTrack.title)
+                        .build()
+
+                    val mediaItem = MediaItem.Builder()
+                        .setMediaId(updatedTrack.id)
+                        .setUri(streamUrl)
+                        .setMediaMetadata(mediaMetadata)
+                        .build()
+
                     controller.setMediaItem(mediaItem)
                     controller.prepare()
                     controller.play()
@@ -229,6 +243,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 controller.play()
             }
         }
+    }
+
+    fun getProgress(): Float {
+        val d = if (_duration.value > 0) _duration.value else ((_currentTrack.value?.durationSeconds ?: 0) * 1000L)
+        return if (d > 0) (_playbackPosition.value.toFloat() / d.toFloat()).coerceIn(0f, 1f) else 0f
     }
 
     fun seekTo(positionMs: Long) {

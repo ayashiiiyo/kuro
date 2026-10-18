@@ -43,7 +43,7 @@ fun MiniPlayer(
     track: Track,
     isPlaying: Boolean,
     isLoading: Boolean = false,
-    progress: Float,
+    progressProvider: () -> Float,
     onPlayPauseClick: () -> Unit,
     onSkipNextClick: () -> Unit,
     onClick: () -> Unit,
@@ -59,7 +59,7 @@ fun MiniPlayer(
             .clickable { onClick() }
     ) {
         LinearProgressIndicator(
-            progress = { progress.coerceIn(0f, 1f) },
+            progress = progressProvider,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(2.dp),
