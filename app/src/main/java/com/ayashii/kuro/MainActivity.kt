@@ -34,6 +34,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.ui.components.FullPlayerSheet
 import com.ayashii.kuro.ui.components.MiniPlayer
 import com.ayashii.kuro.ui.navigation.Screen
