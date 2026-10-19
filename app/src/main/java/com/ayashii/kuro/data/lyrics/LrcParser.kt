@@ -36,7 +36,7 @@ object LrcParser {
         return result.sortedBy { it.timeMs }
     }
 
-    fun parsePlain(plainContent: String, durationMs: Long): List<LyricLine> {
+    fun parsePlain(plainContent: String, durationMs: Long = 0L): List<LyricLine> {
         val lines = plainContent.lineSequence()
             .map { it.trim() }
             .filter { it.isNotBlank() }
@@ -44,9 +44,8 @@ object LrcParser {
 
         if (lines.isEmpty()) return emptyList()
 
-        val interval = if (durationMs > 0) durationMs / lines.size else 4000L
-        return lines.mapIndexed { index, text ->
-            LyricLine(timeMs = index * interval, text = text)
+        return lines.map { text ->
+            LyricLine(timeMs = -1L, text = text)
         }
     }
 }

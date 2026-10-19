@@ -23,7 +23,7 @@ class LyricsRepository(private val context: Context) {
         .build()
 
     private val memCache = LruCache<String, LyricsData>(100)
-    private val diskCacheDir = File(context.cacheDir, "lyrics_cache_v2").apply { mkdirs() }
+    private val diskCacheDir = File(context.cacheDir, "lyrics_cache_v3").apply { mkdirs() }
 
     suspend fun getLyrics(
         trackId: String,
@@ -173,8 +173,43 @@ class LyricsRepository(private val context: Context) {
                     } else plainCandidates.firstOrNull()
 
                     if (bestPlain != null) {
-                        val lines = LrcParser.parsePlain(bestPlain.getString("plainLyrics"), durationSeconds * 1000L)
+                        val lines = LrcParser.parsePlain(bestPlain.getString("plainLyrics"))
                         return LyricsData(trackId, origTitle, origArtist, lines, isSynced = false)
+                    }
+                }
+            }
+
+            // Attempt 3: General query search (Ensures we never miss synced lyrics!)
+            val generalUrl = "https://lrclib.net/api/search?q=${encode("$cleanTitle $cleanArtist")}"
+            val generalReq = Request.Builder()
+                .url(generalUrl)
+                .header("User-Agent", "KuroMusic/2.5.0 (Android)")
+                .build()
+
+            val generalResp = httpClient.newCall(generalReq).execute()
+            if (generalResp.isSuccessful) {
+                val arr = JSONArray(generalResp.body?.string().orEmpty())
+                val candidates = mutableListOf<JSONObject>()
+                for (i in 0 until arr.length()) {
+                    candidates.add(arr.getJSONObject(i))
+                }
+                val syncedCandidates = candidates.filter { it.optString("syncedLyrics").isNotBlank() }
+                if (syncedCandidates.isNotEmpty()) {
+                    val best = if (durationSeconds > 0) {
+                        val closeMatch = syncedCandidates.filter {
+                            val dur = it.optDouble("duration", 0.0)
+                            kotlin.math.abs(dur - durationSeconds) <= 2.5
+                        }.minByOrNull { kotlin.math.abs(it.optDouble("duration", 0.0) - durationSeconds) }
+                        closeMatch ?: syncedCandidates.minByOrNull { kotlin.math.abs(it.optDouble("duration", 0.0) - durationSeconds) }
+                    } else {
+                        syncedCandidates.firstOrNull()
+                    }
+
+                    if (best != null) {
+                        val lines = LrcParser.parse(best.getString("syncedLyrics"))
+                        if (lines.isNotEmpty()) {
+                            return LyricsData(trackId, origTitle, origArtist, lines, isSynced = true)
+                        }
                     }
                 }
             }
