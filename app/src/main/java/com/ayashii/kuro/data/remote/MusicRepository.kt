@@ -14,6 +14,11 @@ import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 
+data class ResolvedStream(
+    val url: String,
+    val mimeType: String? = null
+)
+
 class MusicRepository {
 
     private val service = ServiceList.YouTube
@@ -566,13 +571,16 @@ class MusicRepository {
                         ?: httpAudios.sortedBy { it.averageBitrate }.getOrNull(httpAudios.size / 2)
                 }
                 com.ayashii.kuro.data.settings.AudioQuality.HIGH -> {
-                    httpAudios.sortedWith(
-                        compareByDescending<org.schabi.newpipe.extractor.stream.AudioStream> {
-                            it.format.toString().contains("M4A")
-                        }.thenByDescending { it.averageBitrate }
-                    ).firstOrNull()
+                    val m4aStreams = httpAudios.filter {
+                        it.format == org.schabi.newpipe.extractor.MediaFormat.M4A ||
+                        it.format?.name.equals("m4a", ignoreCase = true) ||
+                        it.format?.suffix.equals("m4a", ignoreCase = true) ||
+                        it.format.toString().contains("M4A", ignoreCase = true)
+                    }
+                    m4aStreams.maxByOrNull { it.averageBitrate }
+                        ?: httpAudios.maxByOrNull { it.averageBitrate }
                 }
-            } ?: httpAudios.firstOrNull()
+            } ?: httpAudios.maxByOrNull { it.averageBitrate } ?: httpAudios.firstOrNull()
 
             val resolved = chosenAudio?.content ?: run {
                 // Fallback to muxed video/audio stream if separate audio stream is unavailable
@@ -588,6 +596,40 @@ class MusicRepository {
             resolved
         } catch (e: Exception) {
             Log.e("MusicRepository", "Failed to get audio stream for $url: ${e.message}", e)
+            null
+        }
+    }
+
+    suspend fun getAudioStream(
+        url: String,
+        quality: com.ayashii.kuro.data.settings.AudioQuality = com.ayashii.kuro.data.settings.AudioQuality.HIGH
+    ): ResolvedStream? = withContext(Dispatchers.IO) {
+        val streamUrl = getAudioStreamUrl(url, quality) ?: return@withContext null
+        val mime = if (streamUrl.contains("audio%2Fwebm") || streamUrl.contains("audio/webm")) {
+            "audio/webm"
+        } else if (streamUrl.contains("audio%2Fmp4") || streamUrl.contains("audio/mp4") || streamUrl.contains("itag=140") || streamUrl.contains("itag=141") || streamUrl.contains("itag=139")) {
+            "audio/mp4"
+        } else if (quality == com.ayashii.kuro.data.settings.AudioQuality.HIGH) {
+            "audio/mp4"
+        } else {
+            null
+        }
+        ResolvedStream(streamUrl, mime)
+    }
+
+    suspend fun getFallbackStreamUrl(url: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val streamInfo = StreamInfo.getInfo(service, url)
+            val audioStreams = streamInfo.audioStreams
+            val httpAudios = audioStreams.filter { it.content != null && it.content.startsWith("http") }
+            val opusStream = httpAudios.filter {
+                it.format == org.schabi.newpipe.extractor.MediaFormat.WEBMA_OPUS ||
+                it.format == org.schabi.newpipe.extractor.MediaFormat.WEBMA ||
+                it.format?.name.equals("webm", ignoreCase = true) ||
+                it.format?.name.equals("opus", ignoreCase = true)
+            }.maxByOrNull { it.averageBitrate }
+            opusStream?.content ?: httpAudios.maxByOrNull { it.averageBitrate }?.content
+        } catch (_: Exception) {
             null
         }
     }

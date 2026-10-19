@@ -11,6 +11,7 @@ data class Track(
     val thumbnailUrl: String,
     val durationSeconds: Long = 0,
     val streamUrl: String? = null,
+    val mimeType: String? = null,
     val isFavorite: Boolean = false
 ) {
     val formattedDuration: String

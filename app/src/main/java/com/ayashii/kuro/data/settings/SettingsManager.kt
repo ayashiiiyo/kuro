@@ -12,7 +12,7 @@ enum class ThemeMode {
 }
 
 enum class AudioQuality(val title: String, val description: String) {
-    HIGH("High Quality (256 kbps)", "Crisp sound, best audio fidelity"),
+    HIGH("High Quality (M4A / 256 kbps)", "Crisp sound, best audio fidelity"),
     MEDIUM("Normal Quality (128 kbps)", "Balanced speed & data usage"),
     LOW("Data Saver (64 kbps)", "Fastest buffer, minimal data usage")
 }

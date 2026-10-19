@@ -151,6 +151,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private var lyricsJob: Job? = null
     private var searchJob: Job? = null
     private var pendingTrackToPlay: Track? = null
+    private var hasRetriedFallback = false
 
     private val mediaActionReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
@@ -248,8 +249,49 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
                     override fun onPlayerError(error: PlaybackException) {
                         Log.e("KuroMusicViewModel", "Player error: ${error.message}", error)
-                        _isLoadingTrack.value = false
-                        _isPlaying.value = false
+                        val track = _currentTrack.value
+                        if (track != null && track.streamUrl != null && !hasRetriedFallback) {
+                            hasRetriedFallback = true
+                            viewModelScope.launch(Dispatchers.IO) {
+                                val fallbackUrl = repository.getFallbackStreamUrl(track.url)
+                                if (fallbackUrl != null && fallbackUrl != track.streamUrl) {
+                                    val fallbackTrack = track.copy(streamUrl = fallbackUrl, mimeType = "audio/webm")
+                                    withContext(Dispatchers.Main) {
+                                        _currentTrack.value = fallbackTrack
+                                        mediaController?.let { ctrl ->
+                                            val meta = MediaMetadata.Builder()
+                                                .setTitle(fallbackTrack.title)
+                                                .setArtist(fallbackTrack.artist)
+                                                .setArtworkUri(Uri.parse(fallbackTrack.thumbnailUrl))
+                                                .setDisplayTitle(fallbackTrack.title)
+                                                .build()
+
+                                            val item = MediaItem.Builder()
+                                                .setMediaId(fallbackTrack.id)
+                                                .setUri(fallbackUrl)
+                                                .setMimeType("audio/webm")
+                                                .setMediaMetadata(meta)
+                                                .build()
+
+                                            ctrl.setMediaItem(item)
+                                            ctrl.prepare()
+                                            ctrl.play()
+                                        }
+                                    }
+                                    return@launch
+                                }
+                                withContext(Dispatchers.Main) {
+                                    _isLoadingTrack.value = false
+                                    _isPlaying.value = false
+                                    skipNext()
+                                }
+                            }
+                        } else {
+                            hasRetriedFallback = false
+                            _isLoadingTrack.value = false
+                            _isPlaying.value = false
+                            skipNext()
+                        }
                     }
                 })
             } catch (e: Exception) {
@@ -423,9 +465,10 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 // Resolve direct audio stream URL via NewPipeExtractor with user chosen Audio Quality!
-            val streamUrl = repository.getAudioStreamUrl(track.url, settingsManager.audioQuality.value)
-            if (streamUrl != null) {
-                val updatedTrack = track.copy(streamUrl = streamUrl)
+            hasRetriedFallback = false
+            val resolvedStream = repository.getAudioStream(track.url, settingsManager.audioQuality.value)
+            if (resolvedStream != null) {
+                val updatedTrack = track.copy(streamUrl = resolvedStream.url, mimeType = resolvedStream.mimeType)
                 _currentTrack.value = updatedTrack
 
                 val controller = mediaController
@@ -437,13 +480,16 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                         .setDisplayTitle(updatedTrack.title)
                         .build()
 
-                    val mediaItem = MediaItem.Builder()
+                    val mediaItemBuilder = MediaItem.Builder()
                         .setMediaId(updatedTrack.id)
-                        .setUri(streamUrl)
+                        .setUri(resolvedStream.url)
                         .setMediaMetadata(mediaMetadata)
-                        .build()
 
-                    controller.setMediaItem(mediaItem)
+                    if (!resolvedStream.mimeType.isNullOrBlank()) {
+                        mediaItemBuilder.setMimeType(resolvedStream.mimeType)
+                    }
+
+                    controller.setMediaItem(mediaItemBuilder.build())
                     controller.prepare()
                     controller.play()
                 } else {
