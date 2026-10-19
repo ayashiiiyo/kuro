@@ -14,6 +14,7 @@ class KuroApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         AuthManager.init(this)
+        com.ayashii.kuro.data.settings.SettingsManager.init(this)
         val downloader = KuroDownloader.init(this)
         NewPipe.init(downloader)
     }

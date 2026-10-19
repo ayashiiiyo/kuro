@@ -271,20 +271,25 @@ fun FullPlayerSheet(
             }
         }
 
-        Spacer(modifier = Modifier.height(28.dp))
+        // Spotify-Style Lyrics Card Below Playback Controls (Only when valid lyrics exist!)
+        val hasLyrics = currentLyrics != null && currentLyrics!!.lines.isNotEmpty() &&
+                currentLyrics!!.lines.none { it.text.trim().equals("null", ignoreCase = true) }
 
-        // Spotify-Style Lyrics Card Below Playback Controls!
-        SyncedLyricsView(
-            lyricsData = currentLyrics,
-            isLoading = isLoadingLyrics,
-            playbackPositionFlow = viewModel.playbackPosition,
-            onSeekTo = { viewModel.seekTo(it) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(340.dp)
-        )
-
-        Spacer(modifier = Modifier.height(36.dp))
+        if (hasLyrics) {
+            Spacer(modifier = Modifier.height(28.dp))
+            SyncedLyricsView(
+                lyricsData = currentLyrics,
+                isLoading = isLoadingLyrics,
+                playbackPositionFlow = viewModel.playbackPosition,
+                onSeekTo = { viewModel.seekTo(it) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(340.dp)
+            )
+            Spacer(modifier = Modifier.height(36.dp))
+        } else {
+            Spacer(modifier = Modifier.height(36.dp))
+        }
     }
 }
 

@@ -306,9 +306,11 @@ class LyricsRepository(private val context: Context) {
                             sb.append(runs.optJSONObject(j)?.optString("text", ""))
                         }
                         val rawText = sb.toString().trim()
-                        if (rawText.isNotBlank()) {
-                            val lines = LrcParser.parsePlain(rawText, durationSeconds * 1000L)
-                            return LyricsData(trackId, origTitle, origArtist, lines, isSynced = false)
+                        if (isValidLyricsText(rawText)) {
+                            val lines = LrcParser.parsePlain(rawText)
+                            if (isValidLyricsLines(lines)) {
+                                return LyricsData(trackId, origTitle, origArtist, lines, isSynced = false)
+                            }
                         }
                     }
                 }
@@ -317,6 +319,29 @@ class LyricsRepository(private val context: Context) {
             Log.d("LyricsRepository", "YTM Lyrics fetch error: ${e.message}")
         }
         return null
+    }
+
+    private fun isValidLyricsText(text: String): Boolean {
+        val trimmed = text.trim()
+        if (trimmed.length < 25) return false
+        val lower = trimmed.lowercase()
+        if (lower == "null" || lower == "cancel" || lower == "batal") return false
+        val lines = lower.lines().map { it.trim() }.filter { it.isNotBlank() }
+        if (lines.all { it in listOf("null", "cancel", "batal", "ok", "error") }) return false
+        return true
+    }
+
+    fun isValidLyricsLines(lines: List<LyricLine>): Boolean {
+        if (lines.isEmpty()) return false
+        val nonBlank = lines.filter { it.text.isNotBlank() }
+        if (nonBlank.isEmpty()) return false
+        if (nonBlank.size <= 2) {
+            val combined = nonBlank.joinToString(" ") { it.text.lowercase().trim() }
+            if (combined.contains("null") || combined.contains("batal") || combined.contains("cancel")) {
+                return false
+            }
+        }
+        return true
     }
 
     suspend fun translateLyrics(lyrics: LyricsData): LyricsData = withContext(Dispatchers.IO) {

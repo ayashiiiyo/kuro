@@ -22,8 +22,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -72,6 +74,7 @@ fun HomeScreen(
 
     var showAccountDialog by remember { mutableStateOf(false) }
     var showLoginWebView by remember { mutableStateOf(false) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
 
     var selectedGenre by remember { mutableStateOf("Trending") }
     val genres = listOf("Trending", "Top Global", "Pop", "Lo-Fi", "Hip-Hop", "R&B", "Rock", "Acoustic", "Electronic")
@@ -103,11 +106,32 @@ fun HomeScreen(
                 )
             }
 
-            // Account Avatar or Login Button
-            AccountTopButton(
-                account = currentAccount,
-                onClick = { showAccountDialog = true }
-            )
+            // Top Action Buttons: Settings & Account Avatar
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                IconButton(
+                    onClick = { showSettingsDialog = true },
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(DarkCard)
+                        .border(1.dp, DarkBorder, CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Settings,
+                        contentDescription = "Pengaturan",
+                        tint = PureWhite,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                AccountTopButton(
+                    account = currentAccount,
+                    onClick = { showAccountDialog = true }
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(14.dp))
@@ -234,7 +258,8 @@ fun HomeScreen(
             onDismiss = { showAccountDialog = false },
             onLoginClick = { showLoginWebView = true },
             onLogoutClick = { viewModel.logout() },
-            onSyncLikedClick = { viewModel.syncLikedSongs() }
+            onSyncLikedClick = { viewModel.syncLikedSongs() },
+            onSettingsClick = { showSettingsDialog = true }
         )
     }
 
@@ -242,6 +267,12 @@ fun HomeScreen(
         LoginWebViewDialog(
             onDismiss = { showLoginWebView = false },
             onLoginSuccess = { showAccountDialog = true }
+        )
+    }
+
+    if (showSettingsDialog) {
+        com.ayashii.kuro.ui.components.SettingsDialog(
+            onDismiss = { showSettingsDialog = false }
         )
     }
 }

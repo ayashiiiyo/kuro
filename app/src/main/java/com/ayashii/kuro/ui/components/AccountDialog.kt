@@ -21,8 +21,10 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -50,7 +52,8 @@ fun AccountDialog(
     onDismiss: () -> Unit,
     onLoginClick: () -> Unit,
     onLogoutClick: () -> Unit,
-    onSyncLikedClick: () -> Unit
+    onSyncLikedClick: () -> Unit,
+    onSettingsClick: () -> Unit = {}
 ) {
     Dialog(onDismissRequest = onDismiss) {
         Box(
@@ -200,6 +203,33 @@ fun AccountDialog(
                     Spacer(modifier = Modifier.height(16.dp))
 
                     // Log Out Button
+                    // Settings Button
+                    OutlinedButton(
+                        onClick = { onSettingsClick(); onDismiss() },
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = DarkCard
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, DarkBorder, RoundedCornerShape(12.dp))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Settings,
+                            contentDescription = null,
+                            tint = PureWhite,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Pengaturan",
+                            style = Typography.bodyLarge,
+                            color = PureWhite
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
                     Button(
                         onClick = { onLogoutClick(); onDismiss() },
                         colors = ButtonDefaults.buttonColors(

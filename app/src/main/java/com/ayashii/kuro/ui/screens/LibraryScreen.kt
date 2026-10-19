@@ -16,15 +16,21 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.outlined.LibraryMusic
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,6 +55,7 @@ fun LibraryScreen(
     val isLoadingTrack by viewModel.isLoadingTrack.collectAsState()
     val currentTrack by viewModel.currentTrack.collectAsState()
     val currentAccount by viewModel.authState.collectAsState()
+    var showSettingsDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -77,28 +84,49 @@ fun LibraryScreen(
                 )
             }
 
-            if (currentAccount != null) {
-                Row(
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (currentAccount != null) {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(DarkCard)
+                            .border(1.dp, DarkBorder, RoundedCornerShape(16.dp))
+                            .clickable { viewModel.syncLikedSongs() }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Sync,
+                            contentDescription = "Sync Liked Songs",
+                            tint = PureWhite,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Sync YT",
+                            style = Typography.labelSmall,
+                            color = PureWhite,
+                            fontSize = 11.sp
+                        )
+                    }
+                }
+
+                IconButton(
+                    onClick = { showSettingsDialog = true },
                     modifier = Modifier
-                        .clip(RoundedCornerShape(16.dp))
+                        .size(36.dp)
+                        .clip(CircleShape)
                         .background(DarkCard)
-                        .border(1.dp, DarkBorder, RoundedCornerShape(16.dp))
-                        .clickable { viewModel.syncLikedSongs() }
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .border(1.dp, DarkBorder, CircleShape)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Sync,
-                        contentDescription = "Sync Liked Songs",
+                        imageVector = Icons.Outlined.Settings,
+                        contentDescription = "Pengaturan",
                         tint = PureWhite,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Sync YT",
-                        style = Typography.labelSmall,
-                        color = PureWhite,
-                        fontSize = 11.sp
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
@@ -150,5 +178,11 @@ fun LibraryScreen(
                 }
             }
         }
+    }
+
+    if (showSettingsDialog) {
+        com.ayashii.kuro.ui.components.SettingsDialog(
+            onDismiss = { showSettingsDialog = false }
+        )
     }
 }

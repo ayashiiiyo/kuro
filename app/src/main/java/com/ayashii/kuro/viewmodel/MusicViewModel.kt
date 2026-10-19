@@ -131,6 +131,10 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     val authState = com.ayashii.kuro.data.auth.AuthManager.getInstance().authState
 
+    val settingsManager = com.ayashii.kuro.data.settings.SettingsManager.getInstance()
+    val themeMode = settingsManager.themeMode
+    val audioQuality = settingsManager.audioQuality
+
     val lyricsRepository = com.ayashii.kuro.data.lyrics.LyricsRepository(getApplication())
 
     private val _currentLyrics = MutableStateFlow<com.ayashii.kuro.data.lyrics.LyricsData?>(null)
@@ -334,6 +338,31 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun playTrackFromSearch(track: Track) {
+        playJob?.cancel()
+        playlistQueue.clear()
+        playlistQueue.add(track)
+        currentIndex = 0
+        playTrack(track)
+
+        // Spotify & YouTube Music style: Search play starts an Automix radio station based on the seed song!
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val radioTracks = repository.getRadioTracks(track.id)
+                if (radioTracks.isNotEmpty()) {
+                    val existingIds = playlistQueue.map { it.id }.toSet()
+                    val freshTracks = radioTracks.filter { it.id !in existingIds }
+                    playlistQueue.addAll(freshTracks)
+                    if (playlistQueue.size > 1) {
+                        repository.getAudioStreamUrl(playlistQueue[1].url, settingsManager.audioQuality.value)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.d("KuroVM", "Automix radio error: ${e.message}")
+            }
+        }
+    }
+
     fun playTrack(track: Track, newQueue: List<Track> = emptyList()) {
         playJob?.cancel()
         playJob = viewModelScope.launch {
@@ -386,8 +415,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                         _currentLyrics.value = data
                         _isLoadingLyrics.value = false
 
-                        // If lyrics loaded, fetch translation asynchronously without blocking UI!
-                        if (data != null && data.lines.isNotEmpty()) {
+                        // If lyrics loaded and autoTranslate enabled, fetch translation asynchronously without blocking UI!
+                        if (data != null && data.lines.isNotEmpty() && settingsManager.autoTranslate.value) {
                             val translated = lyricsRepository.translateLyrics(data)
                             if (_currentTrack.value?.id == track.id) {
                                 _currentLyrics.value = translated
@@ -399,8 +428,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
 
-                // Resolve direct audio stream URL via NewPipeExtractor
-            val streamUrl = repository.getAudioStreamUrl(track.url)
+                // Resolve direct audio stream URL via NewPipeExtractor with user chosen Audio Quality!
+            val streamUrl = repository.getAudioStreamUrl(track.url, settingsManager.audioQuality.value)
             if (streamUrl != null) {
                 val updatedTrack = track.copy(streamUrl = streamUrl)
                 _currentTrack.value = updatedTrack
@@ -428,7 +457,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 if (playlistQueue.isNotEmpty() && currentIndex + 1 < playlistQueue.size) {
                     val nextTrack = playlistQueue[currentIndex + 1]
                     launch(Dispatchers.IO) {
-                        repository.getAudioStreamUrl(nextTrack.url)
+                        repository.getAudioStreamUrl(nextTrack.url, settingsManager.audioQuality.value)
                     }
                 }
             } else {
@@ -487,6 +516,19 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
         currentIndex = nextIndex
         playTrack(playlistQueue[nextIndex])
+
+        // When nearing the end of the queue, auto-replenish with more radio tracks!
+        if (playlistQueue.size - nextIndex <= 3 && playlistQueue.isNotEmpty()) {
+            val seed = playlistQueue[nextIndex]
+            viewModelScope.launch(Dispatchers.IO) {
+                try {
+                    val freshRadio = repository.getRadioTracks(seed.id)
+                    val existingIds = playlistQueue.map { it.id }.toSet()
+                    val toAdd = freshRadio.filter { it.id !in existingIds }
+                    playlistQueue.addAll(toAdd)
+                } catch (_: Exception) {}
+            }
+        }
     }
 
     fun skipPrevious() {

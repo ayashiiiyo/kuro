@@ -135,15 +135,22 @@ fun TrackItem(
             modifier = Modifier.padding(end = 4.dp)
         )
 
-        IconButton(
-            onClick = onFavoriteClick,
-            modifier = Modifier.size(36.dp)
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .clickable(
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                    indication = androidx.compose.material.ripple.rememberRipple(bounded = false, radius = 20.dp),
+                    onClick = onFavoriteClick
+                ),
+            contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = if (track.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
                 contentDescription = "Favorite",
                 tint = if (track.isFavorite) PureWhite else MutedText,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(22.dp)
             )
         }
     }

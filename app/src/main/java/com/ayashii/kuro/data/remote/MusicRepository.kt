@@ -530,10 +530,14 @@ class MusicRepository {
         return null
     }
 
-    suspend fun getAudioStreamUrl(url: String): String? = withContext(Dispatchers.IO) {
+    suspend fun getAudioStreamUrl(
+        url: String,
+        quality: com.ayashii.kuro.data.settings.AudioQuality = com.ayashii.kuro.data.settings.AudioQuality.HIGH
+    ): String? = withContext(Dispatchers.IO) {
+        val cacheKey = "$url#${quality.name}"
         val now = System.currentTimeMillis()
         synchronized(streamUrlCache) {
-            streamUrlCache.get(url)?.let { (cachedUrl, timestamp) ->
+            streamUrlCache.get(cacheKey)?.let { (cachedUrl, timestamp) ->
                 if (now - timestamp < CACHE_EXPIRY_MS) {
                     return@withContext cachedUrl
                 }
@@ -543,17 +547,27 @@ class MusicRepository {
         try {
             val streamInfo = StreamInfo.getInfo(service, url)
             val audioStreams = streamInfo.audioStreams
+            val httpAudios = audioStreams.filter { it.content != null && it.content.startsWith("http") }
 
-            val bestAudio = audioStreams
-                .filter { it.content != null && it.content.startsWith("http") }
-                .sortedWith(
-                    compareByDescending<org.schabi.newpipe.extractor.stream.AudioStream> {
-                        it.format.toString().contains("M4A")
-                    }.thenByDescending { it.averageBitrate }
-                )
-                .firstOrNull() ?: audioStreams.firstOrNull()
+            val chosenAudio = when (quality) {
+                com.ayashii.kuro.data.settings.AudioQuality.LOW -> {
+                    httpAudios.minByOrNull { it.averageBitrate }
+                }
+                com.ayashii.kuro.data.settings.AudioQuality.MEDIUM -> {
+                    httpAudios.filter { it.averageBitrate in 90..180 }
+                        .minByOrNull { kotlin.math.abs(it.averageBitrate - 128) }
+                        ?: httpAudios.sortedBy { it.averageBitrate }.getOrNull(httpAudios.size / 2)
+                }
+                com.ayashii.kuro.data.settings.AudioQuality.HIGH -> {
+                    httpAudios.sortedWith(
+                        compareByDescending<org.schabi.newpipe.extractor.stream.AudioStream> {
+                            it.format.toString().contains("M4A")
+                        }.thenByDescending { it.averageBitrate }
+                    ).firstOrNull()
+                }
+            } ?: httpAudios.firstOrNull()
 
-            val resolved = bestAudio?.content ?: run {
+            val resolved = chosenAudio?.content ?: run {
                 // Fallback to muxed video/audio stream if separate audio stream is unavailable
                 streamInfo.videoStreams
                     .filter { it.content != null && it.content.startsWith("http") }
@@ -561,7 +575,7 @@ class MusicRepository {
             }
             if (resolved != null) {
                 synchronized(streamUrlCache) {
-                    streamUrlCache.put(url, Pair(resolved, now))
+                    streamUrlCache.put(cacheKey, Pair(resolved, now))
                 }
             }
             resolved

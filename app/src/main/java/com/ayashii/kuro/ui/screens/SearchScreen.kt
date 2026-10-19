@@ -292,7 +292,7 @@ fun SearchScreen(
                             track = track.copy(isFavorite = isFav),
                             isPlaying = currentTrack?.id == track.id,
                             isLoading = isLoadingTrack && currentTrack?.id == track.id,
-                            onClick = { viewModel.playTrack(track, searchResults) },
+                            onClick = { viewModel.playTrackFromSearch(track) },
                             onFavoriteClick = { viewModel.toggleFavorite(track) }
                         )
                     }

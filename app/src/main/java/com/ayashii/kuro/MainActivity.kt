@@ -62,7 +62,8 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            KuroTheme {
+            val themeMode by viewModel.themeMode.collectAsState()
+            KuroTheme(themeMode = themeMode) {
                 MainAppScreen(viewModel = viewModel)
             }
         }
@@ -86,12 +87,14 @@ fun MainAppScreen(viewModel: MusicViewModel) {
         viewModel.expandPlayer(false)
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(PureBlack)) {
+    val colors = com.ayashii.kuro.ui.theme.KuroAppTheme.colors
+
+    Box(modifier = Modifier.fillMaxSize().background(colors.background)) {
         Scaffold(
-            containerColor = PureBlack,
+            containerColor = colors.background,
             bottomBar = {
                 NavigationBar(
-                    containerColor = PureBlack,
+                    containerColor = colors.background,
                     tonalElevation = 0.dp
                 ) {
                     Screen.bottomNavItems.forEach { screen ->
@@ -115,11 +118,11 @@ fun MainAppScreen(viewModel: MusicViewModel) {
                             },
                             label = { Text(screen.title) },
                             colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = PureWhite,
-                                selectedTextColor = PureWhite,
-                                unselectedIconColor = MutedText,
-                                unselectedTextColor = MutedText,
-                                indicatorColor = DarkCard
+                                selectedIconColor = colors.textPrimary,
+                                selectedTextColor = colors.textPrimary,
+                                unselectedIconColor = colors.textMuted,
+                                unselectedTextColor = colors.textMuted,
+                                indicatorColor = colors.card
                             )
                         )
                     }
