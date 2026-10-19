@@ -364,7 +364,7 @@ fun YtmMusicCard(
                 .background(colors.card)
         ) {
             AsyncImage(
-                model = track.thumbnailUrl,
+                model = track.highResThumbnailUrl,
                 contentDescription = track.title,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()

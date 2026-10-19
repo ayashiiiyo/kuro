@@ -441,13 +441,13 @@ fun PlaylistCollageIcon(playlist: Playlist, size: Int = 50) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(modifier = Modifier.weight(1f)) {
                     AsyncImage(
-                        model = tracks[0].thumbnailUrl,
+                        model = tracks[0].highResThumbnailUrl,
                         contentDescription = null,
                         modifier = Modifier.weight(1f).fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
                     AsyncImage(
-                        model = tracks[1].thumbnailUrl,
+                        model = tracks[1].highResThumbnailUrl,
                         contentDescription = null,
                         modifier = Modifier.weight(1f).fillMaxSize(),
                         contentScale = ContentScale.Crop
@@ -455,13 +455,13 @@ fun PlaylistCollageIcon(playlist: Playlist, size: Int = 50) {
                 }
                 Row(modifier = Modifier.weight(1f)) {
                     AsyncImage(
-                        model = tracks[2].thumbnailUrl,
+                        model = tracks[2].highResThumbnailUrl,
                         contentDescription = null,
                         modifier = Modifier.weight(1f).fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
                     AsyncImage(
-                        model = tracks[3].thumbnailUrl,
+                        model = tracks[3].highResThumbnailUrl,
                         contentDescription = null,
                         modifier = Modifier.weight(1f).fillMaxSize(),
                         contentScale = ContentScale.Crop
@@ -470,7 +470,7 @@ fun PlaylistCollageIcon(playlist: Playlist, size: Int = 50) {
             }
         } else if (tracks.isNotEmpty()) {
             AsyncImage(
-                model = tracks[0].thumbnailUrl,
+                model = tracks[0].highResThumbnailUrl,
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop

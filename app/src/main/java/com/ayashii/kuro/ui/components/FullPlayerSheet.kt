@@ -46,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -53,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.Player
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.ayashii.kuro.R
 import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.ui.theme.DarkBorder
@@ -165,7 +167,10 @@ fun FullPlayerSheet(
             contentAlignment = Alignment.Center
         ) {
             AsyncImage(
-                model = track.thumbnailUrl,
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(track.highResThumbnailUrl)
+                    .crossfade(true)
+                    .build(),
                 contentDescription = track.title,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop

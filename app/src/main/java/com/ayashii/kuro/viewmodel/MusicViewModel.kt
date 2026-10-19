@@ -288,7 +288,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                                             val meta = MediaMetadata.Builder()
                                                 .setTitle(fallbackTrack.title)
                                                 .setArtist(fallbackTrack.artist)
-                                                .setArtworkUri(Uri.parse(fallbackTrack.thumbnailUrl))
+                                                .setArtworkUri(Uri.parse(fallbackTrack.highResThumbnailUrl))
                                                 .setDisplayTitle(fallbackTrack.title)
                                                 .build()
 
@@ -502,8 +502,13 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             hasRetriedFallback = false
             trackStartTime = System.currentTimeMillis()
             val resolvedStream = repository.getAudioStream(track.url, settingsManager.audioQuality.value)
+            val bestThumbnail = repository.resolveBestThumbnail(track)
             if (resolvedStream != null) {
-                val updatedTrack = track.copy(streamUrl = resolvedStream.url, mimeType = resolvedStream.mimeType)
+                val updatedTrack = track.copy(
+                    streamUrl = resolvedStream.url,
+                    mimeType = resolvedStream.mimeType,
+                    thumbnailUrl = bestThumbnail
+                )
                 _currentTrack.value = updatedTrack
 
                 val controller = mediaController
@@ -511,7 +516,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     val mediaMetadata = MediaMetadata.Builder()
                         .setTitle(updatedTrack.title)
                         .setArtist(updatedTrack.artist)
-                        .setArtworkUri(Uri.parse(updatedTrack.thumbnailUrl))
+                        .setArtworkUri(Uri.parse(updatedTrack.highResThumbnailUrl))
                         .setDisplayTitle(updatedTrack.title)
                         .build()
 

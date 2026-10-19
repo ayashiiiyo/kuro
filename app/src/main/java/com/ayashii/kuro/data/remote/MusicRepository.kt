@@ -42,6 +42,53 @@ class MusicRepository {
             .trim()
     }
 
+    fun upgradeThumbnailUrl(rawUrl: String): String {
+        if (rawUrl.isBlank()) return rawUrl
+        var u = rawUrl.trim()
+        if (u.startsWith("//")) {
+            u = "https:$u"
+        }
+        if (u.contains("googleusercontent.com")) {
+            return if (u.contains(Regex("=w\\d+-h\\d+"))) {
+                u.replace(Regex("=w\\d+-h\\d+[^&?]*"), "=w1080-h1080-l90-rj")
+            } else if (u.contains(Regex("=s\\d+"))) {
+                u.replace(Regex("=s\\d+[^&?]*"), "=w1080-h1080-l90-rj")
+            } else if (u.contains("=")) {
+                u.replace(Regex("=[^=]*$"), "=w1080-h1080-l90-rj")
+            } else {
+                "$u=w1080-h1080-l90-rj"
+            }
+        }
+        if (u.contains("ytimg.com")) {
+            return u
+                .replace("/default.jpg", "/hqdefault.jpg")
+                .replace("/default.webp", "/hqdefault.webp")
+                .replace("/mqdefault.jpg", "/hqdefault.jpg")
+                .replace("/mqdefault.webp", "/hqdefault.webp")
+        }
+        return u
+    }
+
+    suspend fun resolveBestThumbnail(track: Track): String = withContext(Dispatchers.IO) {
+        val upgraded = upgradeThumbnailUrl(track.thumbnailUrl)
+        if (upgraded.contains("ytimg.com") && track.id.isNotBlank()) {
+            val maxres = "https://i.ytimg.com/vi/${track.id}/maxresdefault.jpg"
+            try {
+                val req = okhttp3.Request.Builder()
+                    .url(maxres)
+                    .head()
+                    .header("User-Agent", "Mozilla/5.0")
+                    .build()
+                val client = okhttp3.OkHttpClient()
+                val resp = client.newCall(req).execute()
+                if (resp.isSuccessful) {
+                    return@withContext maxres
+                }
+            } catch (_: Exception) {}
+        }
+        upgraded
+    }
+
     private fun parseDurationToSeconds(durationStr: String): Long {
         if (durationStr.isBlank()) return 0L
         val clean = durationStr.replace(".", ":").trim()
@@ -77,12 +124,16 @@ class MusicRepository {
             page.items
                 .filterIsInstance<StreamInfoItem>()
                 .map { item ->
+                    val rawThumb = item.thumbnails.maxByOrNull { it.width * it.height }?.url
+                        ?: item.thumbnails.lastOrNull()?.url
+                        ?: item.thumbnails.firstOrNull()?.url
+                        ?: ""
                     Track(
                         id = item.url.substringAfter("v=").substringBefore("&"),
                         url = item.url,
                         title = cleanTrackTitle(item.name ?: "Unknown Title"),
                         artist = item.uploaderName?.replace(" - Topic", "") ?: "Unknown Artist",
-                        thumbnailUrl = item.thumbnails.firstOrNull()?.url ?: "",
+                        thumbnailUrl = upgradeThumbnailUrl(rawThumb),
                         durationSeconds = item.duration
                     )
                 }
@@ -197,7 +248,7 @@ class MusicRepository {
                             url = "https://www.youtube.com/watch?v=$videoId",
                             title = cleanTrackTitle(title),
                             artist = artist.replace(" - Topic", ""),
-                            thumbnailUrl = thumbUrl,
+                            thumbnailUrl = upgradeThumbnailUrl(thumbUrl),
                             durationSeconds = durationSec
                         )
                     )
@@ -329,7 +380,7 @@ class MusicRepository {
                         url = "https://www.youtube.com/watch?v=$vid",
                         title = cleanTrackTitle(t),
                         artist = a.replace(" - Topic", ""),
-                        thumbnailUrl = thumbUrl,
+                        thumbnailUrl = upgradeThumbnailUrl(thumbUrl),
                         durationSeconds = durSec
                     )
                 )
@@ -504,7 +555,7 @@ class MusicRepository {
                     url = "https://www.youtube.com/watch?v=$videoId",
                     title = cleanTrackTitle(title),
                     artist = artist.replace(" - Topic", ""),
-                    thumbnailUrl = thumbUrl,
+                    thumbnailUrl = upgradeThumbnailUrl(thumbUrl),
                     durationSeconds = durationSec
                 )
             } else if (it.has("musicTwoRowItemRenderer")) {
@@ -534,7 +585,7 @@ class MusicRepository {
                     url = "https://www.youtube.com/watch?v=$videoId",
                     title = cleanTrackTitle(title),
                     artist = artist.replace(" - Topic", ""),
-                    thumbnailUrl = thumbUrl,
+                    thumbnailUrl = upgradeThumbnailUrl(thumbUrl),
                     durationSeconds = 0L
                 )
             }
@@ -729,7 +780,7 @@ class MusicRepository {
                                         url = "https://www.youtube.com/watch?v=$videoId",
                                         title = cleanTrackTitle(title),
                                         artist = artist.replace(" - Topic", ""),
-                                        thumbnailUrl = thumb,
+                                        thumbnailUrl = upgradeThumbnailUrl(thumb),
                                         durationSeconds = 0,
                                         isFavorite = true
                                     )
@@ -754,12 +805,16 @@ class MusicRepository {
             page.items
                 .filterIsInstance<StreamInfoItem>()
                 .map { item ->
+                    val rawThumb = item.thumbnails.maxByOrNull { it.width * it.height }?.url
+                        ?: item.thumbnails.lastOrNull()?.url
+                        ?: item.thumbnails.firstOrNull()?.url
+                        ?: ""
                     Track(
                         id = item.url.substringAfter("v=").substringBefore("&"),
                         url = item.url,
                         title = cleanTrackTitle(item.name ?: "Unknown Title"),
                         artist = item.uploaderName?.replace(" - Topic", "") ?: "Unknown Artist",
-                        thumbnailUrl = item.thumbnails.firstOrNull()?.url ?: "",
+                        thumbnailUrl = upgradeThumbnailUrl(rawThumb),
                         durationSeconds = item.duration,
                         isFavorite = true
                     )

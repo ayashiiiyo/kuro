@@ -14,6 +14,34 @@ data class Track(
     val mimeType: String? = null,
     val isFavorite: Boolean = false
 ) {
+    val highResThumbnailUrl: String
+        get() {
+            if (thumbnailUrl.isBlank()) return thumbnailUrl
+            var u = thumbnailUrl.trim()
+            if (u.startsWith("//")) {
+                u = "https:$u"
+            }
+            if (u.contains("googleusercontent.com")) {
+                return if (u.contains(Regex("=w\\d+-h\\d+"))) {
+                    u.replace(Regex("=w\\d+-h\\d+[^&?]*"), "=w1080-h1080-l90-rj")
+                } else if (u.contains(Regex("=s\\d+"))) {
+                    u.replace(Regex("=s\\d+[^&?]*"), "=w1080-h1080-l90-rj")
+                } else if (u.contains("=")) {
+                    u.replace(Regex("=[^=]*$"), "=w1080-h1080-l90-rj")
+                } else {
+                    "$u=w1080-h1080-l90-rj"
+                }
+            }
+            if (u.contains("ytimg.com")) {
+                return u
+                    .replace("/default.jpg", "/hqdefault.jpg")
+                    .replace("/default.webp", "/hqdefault.webp")
+                    .replace("/mqdefault.jpg", "/hqdefault.jpg")
+                    .replace("/mqdefault.webp", "/hqdefault.webp")
+            }
+            return u
+        }
+
     val formattedDuration: String
         get() {
             if (durationSeconds <= 0) return "--:--"

@@ -82,7 +82,7 @@ fun MiniPlayer(
                 contentAlignment = Alignment.Center
             ) {
                 AsyncImage(
-                    model = track.thumbnailUrl,
+                    model = track.highResThumbnailUrl,
                     contentDescription = track.title,
                     modifier = Modifier
                         .size(44.dp)

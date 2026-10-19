@@ -354,7 +354,7 @@ fun ProfileMenuSheet(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 AsyncImage(
-                                    model = track.thumbnailUrl,
+                                    model = track.highResThumbnailUrl,
                                     contentDescription = track.title,
                                     modifier = Modifier
                                         .size(38.dp)
