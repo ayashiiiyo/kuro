@@ -43,10 +43,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.ayashii.kuro.data.model.Track
-import com.ayashii.kuro.ui.theme.DarkCard
-import com.ayashii.kuro.ui.theme.MutedText
-import com.ayashii.kuro.ui.theme.PureWhite
-import com.ayashii.kuro.ui.theme.SubtleGray
+import com.ayashii.kuro.ui.theme.KuroAppTheme
 import com.ayashii.kuro.ui.theme.Typography
 
 @Composable
@@ -59,11 +56,13 @@ fun TrackItem(
     onMoreClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val colors = KuroAppTheme.colors
+
     Row(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(if (isPlaying) DarkCard else Color.Transparent)
+            .background(if (isPlaying) colors.card else Color.Transparent)
             .clickable { onClick() }
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -89,7 +88,7 @@ fun TrackItem(
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator(
-                        color = PureWhite,
+                        color = colors.accent,
                         strokeWidth = 2.dp,
                         modifier = Modifier.size(22.dp)
                     )
@@ -115,7 +114,7 @@ fun TrackItem(
                 text = track.title,
                 style = Typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = PureWhite,
+                color = colors.textPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -124,7 +123,7 @@ fun TrackItem(
                 text = track.artist,
                 style = Typography.bodyMedium,
                 fontWeight = FontWeight.Normal,
-                color = MutedText,
+                color = colors.textMuted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -135,7 +134,7 @@ fun TrackItem(
         Text(
             text = track.formattedDuration,
             style = Typography.labelSmall,
-            color = SubtleGray,
+            color = colors.textSecondary,
             modifier = Modifier.padding(end = 4.dp)
         )
 
@@ -153,7 +152,7 @@ fun TrackItem(
             Icon(
                 imageVector = if (track.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
                 contentDescription = "Favorite",
-                tint = if (track.isFavorite) PureWhite else MutedText,
+                tint = if (track.isFavorite) colors.textPrimary else colors.textMuted,
                 modifier = Modifier.size(22.dp)
             )
         }
@@ -171,9 +170,9 @@ fun TrackItem(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = androidx.compose.material.icons.Icons.Default.MoreVert,
+                    imageVector = Icons.Default.MoreVert,
                     contentDescription = "More Options",
-                    tint = MutedText,
+                    tint = colors.textMuted,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -183,6 +182,7 @@ fun TrackItem(
 
 @Composable
 fun EqualizerAnimation() {
+    val colors = KuroAppTheme.colors
     val transition = rememberInfiniteTransition(label = "eq")
     val h1 by transition.animateFloat(
         initialValue = 0.2f,
@@ -216,7 +216,7 @@ fun EqualizerAnimation() {
                     scaleY = h1
                     transformOrigin = TransformOrigin(0.5f, 1f)
                 }
-                .background(PureWhite, RoundedCornerShape(1.dp))
+                .background(colors.accent, RoundedCornerShape(1.dp))
         )
         Box(
             modifier = Modifier
@@ -226,7 +226,7 @@ fun EqualizerAnimation() {
                     scaleY = h2
                     transformOrigin = TransformOrigin(0.5f, 1f)
                 }
-                .background(PureWhite, RoundedCornerShape(1.dp))
+                .background(colors.accent, RoundedCornerShape(1.dp))
         )
         Box(
             modifier = Modifier
@@ -236,7 +236,7 @@ fun EqualizerAnimation() {
                     scaleY = h3
                     transformOrigin = TransformOrigin(0.5f, 1f)
                 }
-                .background(PureWhite, RoundedCornerShape(1.dp))
+                .background(colors.accent, RoundedCornerShape(1.dp))
         )
     }
 }

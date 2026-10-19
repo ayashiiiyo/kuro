@@ -2,9 +2,11 @@ package com.ayashii.kuro.data.settings
 
 import android.content.Context
 import android.content.SharedPreferences
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 import java.io.File
 
 enum class ThemeMode {
@@ -90,6 +92,13 @@ class SettingsManager private constructor(private val context: Context) {
         return bytes
     }
 
+    suspend fun getFormattedCacheSizeAsync(): String = withContext(Dispatchers.IO) {
+        val bytes = getCacheSizeBytes()
+        if (bytes <= 0) return@withContext "0.0 MB"
+        val mb = bytes.toDouble() / (1024.0 * 1024.0)
+        String.format("%.1f MB", mb)
+    }
+
     fun getFormattedCacheSize(): String {
         val bytes = getCacheSizeBytes()
         if (bytes <= 0) return "0.0 MB"
@@ -97,17 +106,45 @@ class SettingsManager private constructor(private val context: Context) {
         return String.format("%.1f MB", mb)
     }
 
+    suspend fun clearCacheAsync(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val cacheDirs = listOf(
+                File(context.cacheDir, "lyrics_cache_v3"),
+                File(context.cacheDir, "lyrics_cache_v2"),
+                File(context.cacheDir, "lyrics_cache"),
+                File(context.cacheDir, "image_cache"),
+                File(context.cacheDir, "http_cache")
+            )
+            cacheDirs.forEach { dir ->
+                if (dir.exists()) {
+                    dir.listFiles()?.forEach { file ->
+                        if (file.name != "journal" && !file.name.endsWith(".lock")) {
+                            file.deleteRecursively()
+                        }
+                    }
+                }
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     fun clearCache(): Boolean {
         return try {
             val cacheDirs = listOf(
                 File(context.cacheDir, "lyrics_cache_v3"),
                 File(context.cacheDir, "lyrics_cache_v2"),
-                File(context.cacheDir, "lyrics_cache")
+                File(context.cacheDir, "lyrics_cache"),
+                File(context.cacheDir, "image_cache"),
+                File(context.cacheDir, "http_cache")
             )
             cacheDirs.forEach { dir ->
                 if (dir.exists()) {
                     dir.listFiles()?.forEach { file ->
-                        file.deleteRecursively()
+                        if (file.name != "journal" && !file.name.endsWith(".lock")) {
+                            file.deleteRecursively()
+                        }
                     }
                 }
             }

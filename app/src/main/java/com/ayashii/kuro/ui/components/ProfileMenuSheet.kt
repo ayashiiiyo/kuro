@@ -267,9 +267,9 @@ fun ProfileMenuSheet(
 
     // Listening Stats Dialog
     if (showStatsDialog) {
-        val totalPlays = viewModel.tasteManager.getTotalPlays()
-        val uniqueArtists = viewModel.tasteManager.getUniqueArtistsCount()
-        val topArtists = viewModel.tasteManager.getTopArtists(5)
+        val totalPlays = remember(showStatsDialog) { viewModel.tasteManager.getTotalPlays() }
+        val uniqueArtists = remember(showStatsDialog) { viewModel.tasteManager.getUniqueArtistsCount() }
+        val topArtists = remember(showStatsDialog) { viewModel.tasteManager.getTopArtists(5) }
 
         AlertDialog(
             onDismissRequest = { showStatsDialog = false },

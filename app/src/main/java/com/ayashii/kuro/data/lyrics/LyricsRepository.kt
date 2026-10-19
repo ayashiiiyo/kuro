@@ -17,12 +17,11 @@ import java.util.concurrent.TimeUnit
 
 class LyricsRepository(private val context: Context) {
 
-    private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(10, TimeUnit.SECONDS)
-        .build()
+    private val httpClient = com.ayashii.kuro.data.remote.HttpClientProvider.client
 
     private val memCache = LruCache<String, LyricsData>(100)
+    private val negativeCache = LruCache<String, Long>(200)
+    private val NEGATIVE_CACHE_TTL = 7 * 24 * 60 * 60 * 1000L // 7 days
     private val diskCacheDir = File(context.cacheDir, "lyrics_cache_v3").apply { mkdirs() }
 
     suspend fun getLyrics(
@@ -32,12 +31,20 @@ class LyricsRepository(private val context: Context) {
         durationSeconds: Long = 0L,
         autoTranslate: Boolean = true
     ): LyricsData? = withContext(Dispatchers.IO) {
-        // 1. Check in-memory cache
+        // 1. Check in-memory negative cache (track previously confirmed to have no lyrics)
+        synchronized(negativeCache) {
+            val emptyAt = negativeCache.get(trackId)
+            if (emptyAt != null && System.currentTimeMillis() - emptyAt < NEGATIVE_CACHE_TTL) {
+                return@withContext null
+            }
+        }
+
+        // 2. Check in-memory cache
         synchronized(memCache) {
             memCache.get(trackId)?.let { return@withContext it }
         }
 
-        // 2. Check disk cache
+        // 3. Check disk cache
         val diskFile = File(diskCacheDir, "$trackId.json")
         if (diskFile.exists()) {
             try {
@@ -51,35 +58,58 @@ class LyricsRepository(private val context: Context) {
             }
         }
 
-        // 3. Clean up title and artist for maximum matching accuracy
+        val emptyMarker = File(diskCacheDir, "$trackId.empty")
+        if (emptyMarker.exists() && System.currentTimeMillis() - emptyMarker.lastModified() < NEGATIVE_CACHE_TTL) {
+            synchronized(negativeCache) { negativeCache.put(trackId, emptyMarker.lastModified()) }
+            return@withContext null
+        }
+
+        // 4. Clean up title and artist for maximum matching accuracy
         val cleanTitle = cleanSearchTerm(title)
         val cleanArtist = cleanSearchTerm(artist)
 
-        // 4. Fetch from LRCLIB
+        // 5. Fetch from LRCLIB
         var lyrics = fetchFromLrcLib(trackId, title, artist, cleanTitle, cleanArtist, durationSeconds)
 
-        // 5. If LRCLIB had no lyrics, fallback to YouTube Music Official Lyrics
+        // 6. If LRCLIB had no lyrics, fallback to YouTube Music Official Lyrics
         if (lyrics == null) {
             lyrics = fetchFromYouTubeMusic(trackId, title, artist, durationSeconds)
         }
 
-        // 6. If lyrics found and translation requested:
+        // 7. If lyrics found and translation requested:
         if (lyrics != null && autoTranslate && lyrics.lines.isNotEmpty()) {
             val translatedLines = translateLinesToIndonesian(lyrics.lines)
             lyrics = lyrics.copy(lines = translatedLines)
         }
 
-        // 6. Save to cache
+        // 8. Save to cache
         if (lyrics != null) {
             synchronized(memCache) { memCache.put(trackId, lyrics) }
             try {
+                pruneDiskCacheIfNeeded()
                 diskFile.writeText(serializeLyricsJson(lyrics))
+                if (emptyMarker.exists()) emptyMarker.delete()
             } catch (e: Exception) {
                 Log.d("LyricsRepository", "Disk cache save error: ${e.message}")
             }
+        } else {
+            // Negative cache: prevent repeated wasted requests for tracks without lyrics
+            synchronized(negativeCache) { negativeCache.put(trackId, System.currentTimeMillis()) }
+            try {
+                emptyMarker.createNewFile()
+            } catch (_: Exception) {}
         }
 
         lyrics
+    }
+
+    private fun pruneDiskCacheIfNeeded() {
+        try {
+            val files = diskCacheDir.listFiles() ?: return
+            if (files.size > 500) {
+                files.sortedBy { it.lastModified() }.take(files.size - 400).forEach { it.delete() }
+            }
+        } catch (_: Exception) {}
     }
 
     private fun cleanSearchTerm(term: String): String {

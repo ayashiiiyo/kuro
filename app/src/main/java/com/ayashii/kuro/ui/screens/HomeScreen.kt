@@ -77,6 +77,7 @@ fun HomeScreen(
     val currentTrack by viewModel.currentTrack.collectAsState()
     val currentAccount by viewModel.authState.collectAsState()
     val favorites by viewModel.favorites.collectAsState()
+    val favoriteIds by remember(favorites) { androidx.compose.runtime.derivedStateOf { favorites.mapTo(HashSet()) { it.id } } }
 
     var showProfileMenu by remember { mutableStateOf(false) }
     var showLoginWebView by remember { mutableStateOf(false) }
@@ -166,7 +167,7 @@ fun HomeScreen(
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     items(searchResults, key = { it.id }, contentType = { "track" }) { track ->
-                        val isFav = favorites.any { it.id == track.id }
+                        val isFav = track.id in favoriteIds
                         TrackItem(
                             track = track.copy(isFavorite = isFav),
                             isPlaying = currentTrack?.id == track.id,
@@ -246,7 +247,7 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(trendingTracks, key = { it.id }, contentType = { "track" }) { track ->
-                    val isFav = favorites.any { it.id == track.id }
+                    val isFav = track.id in favoriteIds
                     TrackItem(
                         track = track.copy(isFavorite = isFav),
                         isPlaying = currentTrack?.id == track.id,

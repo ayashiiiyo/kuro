@@ -28,10 +28,7 @@ data class UserAccount(
 class AuthManager private constructor(private val context: Context) {
 
     private val prefs: SharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-    private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .build()
+    private val httpClient = com.ayashii.kuro.data.remote.HttpClientProvider.client
 
     private val _authState = MutableStateFlow<UserAccount?>(loadStoredAccount())
     val authState: StateFlow<UserAccount?> = _authState.asStateFlow()

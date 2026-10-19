@@ -20,10 +20,7 @@ val FredokaFontFamily = FontFamily(
     Font(R.font.fredoka_bold, FontWeight.Bold)
 )
 
-val UbuntuMonoFontFamily = FontFamily(
-    Font(R.font.ubuntu_mono_regular, FontWeight.Normal),
-    Font(R.font.ubuntu_mono_bold, FontWeight.Bold)
-)
+val UbuntuMonoFontFamily = FontFamily.Monospace
 
 val Typography = Typography(
     headlineLarge = TextStyle(
@@ -52,6 +49,12 @@ val Typography = Typography(
         fontSize = 15.sp,
         color = Color.Unspecified
     ),
+    titleSmall = TextStyle(
+        fontFamily = OutfitFontFamily,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 13.sp,
+        color = Color.Unspecified
+    ),
     bodyLarge = TextStyle(
         fontFamily = OutfitFontFamily,
         fontWeight = FontWeight.Normal,
@@ -61,6 +64,24 @@ val Typography = Typography(
     bodyMedium = TextStyle(
         fontFamily = OutfitFontFamily,
         fontWeight = FontWeight.Normal,
+        fontSize = 13.sp,
+        color = Color.Unspecified
+    ),
+    bodySmall = TextStyle(
+        fontFamily = OutfitFontFamily,
+        fontWeight = FontWeight.Normal,
+        fontSize = 12.sp,
+        color = Color.Unspecified
+    ),
+    labelLarge = TextStyle(
+        fontFamily = OutfitFontFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 14.sp,
+        color = Color.Unspecified
+    ),
+    labelMedium = TextStyle(
+        fontFamily = OutfitFontFamily,
+        fontWeight = FontWeight.Medium,
         fontSize = 13.sp,
         color = Color.Unspecified
     ),

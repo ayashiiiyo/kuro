@@ -35,7 +35,7 @@ class KuroApp : Application(), ImageLoaderFactory {
             .networkCachePolicy(CachePolicy.ENABLED)
             .diskCachePolicy(CachePolicy.ENABLED)
             .memoryCachePolicy(CachePolicy.ENABLED)
-            .crossfade(true)
+            .crossfade(false)
             .respectCacheHeaders(false)
             .build()
     }

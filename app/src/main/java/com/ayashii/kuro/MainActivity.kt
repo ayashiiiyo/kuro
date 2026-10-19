@@ -152,19 +152,11 @@ fun MainAppScreen(viewModel: MusicViewModel) {
 
                 // Floating MiniPlayer above bottom nav bar
                 if (currentTrack != null && !isExpanded) {
-                    val currentPosMs by viewModel.playbackPosition.collectAsState()
-                    val durMs by viewModel.duration.collectAsState()
-                    val effDur = if (durMs > 0) durMs else (currentTrack!!.durationSeconds * 1000L).coerceAtLeast(1L)
-                    val progressFloat = (currentPosMs.toFloat() / effDur.toFloat()).coerceIn(0f, 1f)
-
-                    MiniPlayer(
+                    MiniPlayerContainer(
+                        viewModel = viewModel,
                         track = currentTrack!!,
                         isPlaying = isPlaying,
                         isLoading = isLoadingTrack,
-                        progress = progressFloat,
-                        onPlayPauseClick = { viewModel.togglePlayPause() },
-                        onSkipNextClick = { viewModel.skipNext() },
-                        onClick = { viewModel.expandPlayer(true) },
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .padding(bottom = 8.dp)
@@ -198,4 +190,29 @@ fun MainAppScreen(viewModel: MusicViewModel) {
             }
         }
     }
+}
+
+@Composable
+fun MiniPlayerContainer(
+    viewModel: MusicViewModel,
+    track: Track,
+    isPlaying: Boolean,
+    isLoading: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val currentPosMs by viewModel.playbackPosition.collectAsState()
+    val durMs by viewModel.duration.collectAsState()
+    val effDur = if (durMs > 0) durMs else (track.durationSeconds * 1000L).coerceAtLeast(1L)
+    val progressFloat = (currentPosMs.toFloat() / effDur.toFloat()).coerceIn(0f, 1f)
+
+    MiniPlayer(
+        track = track,
+        isPlaying = isPlaying,
+        isLoading = isLoading,
+        progress = progressFloat,
+        onPlayPauseClick = { viewModel.togglePlayPause() },
+        onSkipNextClick = { viewModel.skipNext() },
+        onClick = { viewModel.expandPlayer(true) },
+        modifier = modifier
+    )
 }

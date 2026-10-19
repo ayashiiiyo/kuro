@@ -26,17 +26,19 @@ import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Translate
-import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,27 +52,28 @@ import androidx.compose.ui.window.DialogProperties
 import com.ayashii.kuro.data.settings.AudioQuality
 import com.ayashii.kuro.data.settings.SettingsManager
 import com.ayashii.kuro.data.settings.ThemeMode
-import com.ayashii.kuro.ui.theme.DarkBorder
-import com.ayashii.kuro.ui.theme.DarkCard
-import com.ayashii.kuro.ui.theme.DarkSurface
-import com.ayashii.kuro.ui.theme.MutedText
-import com.ayashii.kuro.ui.theme.PureBlack
-import com.ayashii.kuro.ui.theme.PureWhite
-import com.ayashii.kuro.ui.theme.SubtleGray
+import com.ayashii.kuro.ui.theme.KuroAppTheme
 import com.ayashii.kuro.ui.theme.Typography
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val colors = KuroAppTheme.colors
+    val scope = rememberCoroutineScope()
     val settingsManager = remember { SettingsManager.getInstance() }
     val currentTheme by settingsManager.themeMode.collectAsState()
     val currentQuality by settingsManager.audioQuality.collectAsState()
     val autoTranslate by settingsManager.autoTranslate.collectAsState()
 
-    var cacheSize by remember { mutableStateOf(settingsManager.getFormattedCacheSize()) }
+    var cacheSize by remember { mutableStateOf("Menghitung...") }
     val scrollState = rememberScrollState()
+
+    LaunchedEffect(Unit) {
+        cacheSize = settingsManager.getFormattedCacheSizeAsync()
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -80,8 +83,8 @@ fun SettingsDialog(
             modifier = Modifier
                 .fillMaxWidth(0.92f)
                 .clip(RoundedCornerShape(24.dp))
-                .background(DarkSurface)
-                .border(1.dp, DarkBorder, RoundedCornerShape(24.dp))
+                .background(colors.surface)
+                .border(1.dp, colors.border, RoundedCornerShape(24.dp))
                 .padding(20.dp)
         ) {
             Column(
@@ -99,7 +102,7 @@ fun SettingsDialog(
                         text = "Pengaturan",
                         style = Typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
-                        color = PureWhite
+                        color = colors.textPrimary
                     )
 
                     IconButton(
@@ -107,12 +110,12 @@ fun SettingsDialog(
                         modifier = Modifier
                             .size(36.dp)
                             .clip(CircleShape)
-                            .background(DarkCard)
+                            .background(colors.card)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Tutup",
-                            tint = PureWhite,
+                            tint = colors.textPrimary,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -125,7 +128,7 @@ fun SettingsDialog(
                     Icon(
                         imageVector = Icons.Outlined.GraphicEq,
                         contentDescription = null,
-                        tint = PureWhite,
+                        tint = colors.textPrimary,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -133,7 +136,7 @@ fun SettingsDialog(
                         text = "Kualitas Audio Streaming",
                         style = Typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = PureWhite
+                        color = colors.textPrimary
                     )
                 }
 
@@ -146,8 +149,8 @@ fun SettingsDialog(
                             .fillMaxWidth()
                             .padding(vertical = 4.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(if (isSelected) DarkCard else DarkSurface)
-                            .border(1.dp, if (isSelected) PureWhite else DarkBorder, RoundedCornerShape(12.dp))
+                            .background(if (isSelected) colors.card else colors.surface)
+                            .border(1.dp, if (isSelected) colors.accent else colors.border, RoundedCornerShape(12.dp))
                             .clickable { settingsManager.setAudioQuality(quality) }
                             .padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -158,13 +161,13 @@ fun SettingsDialog(
                                 text = quality.title,
                                 style = Typography.bodyMedium,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                color = PureWhite
+                                color = colors.textPrimary
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = quality.description,
                                 style = Typography.bodySmall,
-                                color = MutedText
+                                color = colors.textMuted
                             )
                         }
 
@@ -173,13 +176,13 @@ fun SettingsDialog(
                                 modifier = Modifier
                                     .size(24.dp)
                                     .clip(CircleShape)
-                                    .background(PureWhite),
+                                    .background(colors.accent),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Check,
                                     contentDescription = "Dipilih",
-                                    tint = PureBlack,
+                                    tint = colors.background,
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
@@ -188,7 +191,7 @@ fun SettingsDialog(
                 }
 
                 Spacer(modifier = Modifier.height(20.dp))
-                Divider(color = DarkBorder, thickness = 1.dp)
+                HorizontalDivider(color = colors.border, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // 2. Theme Selection
@@ -196,7 +199,7 @@ fun SettingsDialog(
                     Icon(
                         imageVector = Icons.Outlined.Palette,
                         contentDescription = null,
-                        tint = PureWhite,
+                        tint = colors.textPrimary,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -204,7 +207,7 @@ fun SettingsDialog(
                         text = "Tema Tampilan",
                         style = Typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = PureWhite
+                        color = colors.textPrimary
                     )
                 }
 
@@ -223,8 +226,8 @@ fun SettingsDialog(
                             .fillMaxWidth()
                             .padding(vertical = 4.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(if (isSelected) DarkCard else DarkSurface)
-                            .border(1.dp, if (isSelected) PureWhite else DarkBorder, RoundedCornerShape(12.dp))
+                            .background(if (isSelected) colors.card else colors.surface)
+                            .border(1.dp, if (isSelected) colors.accent else colors.border, RoundedCornerShape(12.dp))
                             .clickable { settingsManager.setThemeMode(mode) }
                             .padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -235,13 +238,13 @@ fun SettingsDialog(
                                 text = title,
                                 style = Typography.bodyMedium,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                color = PureWhite
+                                color = colors.textPrimary
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = desc,
                                 style = Typography.bodySmall,
-                                color = MutedText
+                                color = colors.textMuted
                             )
                         }
 
@@ -250,13 +253,13 @@ fun SettingsDialog(
                                 modifier = Modifier
                                     .size(24.dp)
                                     .clip(CircleShape)
-                                    .background(PureWhite),
+                                    .background(colors.accent),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Check,
                                     contentDescription = "Dipilih",
-                                    tint = PureBlack,
+                                    tint = colors.background,
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
@@ -265,7 +268,7 @@ fun SettingsDialog(
                 }
 
                 Spacer(modifier = Modifier.height(20.dp))
-                Divider(color = DarkBorder, thickness = 1.dp)
+                HorizontalDivider(color = colors.border, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // 3. Lyrics Translation Toggle
@@ -278,7 +281,7 @@ fun SettingsDialog(
                         Icon(
                             imageVector = Icons.Outlined.Translate,
                             contentDescription = null,
-                            tint = PureWhite,
+                            tint = colors.textPrimary,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
@@ -287,12 +290,12 @@ fun SettingsDialog(
                                 text = "Terjemahan Indonesia Lirik",
                                 style = Typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
-                                color = PureWhite
+                                color = colors.textPrimary
                             )
                             Text(
                                 text = "Tampilkan arti lirik bahasa Indonesia",
                                 style = Typography.bodySmall,
-                                color = MutedText
+                                color = colors.textMuted
                             )
                         }
                     }
@@ -301,16 +304,16 @@ fun SettingsDialog(
                         checked = autoTranslate,
                         onCheckedChange = { settingsManager.setAutoTranslate(it) },
                         colors = SwitchDefaults.colors(
-                            checkedThumbColor = PureBlack,
-                            checkedTrackColor = PureWhite,
-                            uncheckedThumbColor = SubtleGray,
-                            uncheckedTrackColor = DarkCard
+                            checkedThumbColor = colors.background,
+                            checkedTrackColor = colors.accent,
+                            uncheckedThumbColor = colors.textSecondary,
+                            uncheckedTrackColor = colors.card
                         )
                     )
                 }
 
                 Spacer(modifier = Modifier.height(20.dp))
-                Divider(color = DarkBorder, thickness = 1.dp)
+                HorizontalDivider(color = colors.border, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // 4. Storage & Cache
@@ -323,7 +326,7 @@ fun SettingsDialog(
                         Icon(
                             imageVector = Icons.Outlined.DeleteOutline,
                             contentDescription = null,
-                            tint = PureWhite,
+                            tint = colors.textPrimary,
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
@@ -332,12 +335,12 @@ fun SettingsDialog(
                                 text = "Penyimpanan & Cache",
                                 style = Typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
-                                color = PureWhite
+                                color = colors.textPrimary
                             )
                             Text(
                                 text = "Ukuran Cache: $cacheSize",
                                 style = Typography.bodySmall,
-                                color = MutedText
+                                color = colors.textMuted
                             )
                         }
                     }
@@ -345,13 +348,15 @@ fun SettingsDialog(
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(12.dp))
-                            .background(DarkCard)
-                            .border(1.dp, DarkBorder, RoundedCornerShape(12.dp))
+                            .background(colors.card)
+                            .border(1.dp, colors.border, RoundedCornerShape(12.dp))
                             .clickable {
-                                val success = settingsManager.clearCache()
-                                if (success) {
-                                    cacheSize = settingsManager.getFormattedCacheSize()
-                                    Toast.makeText(context, "Cache berhasil dibersihkan!", Toast.LENGTH_SHORT).show()
+                                scope.launch {
+                                    val success = settingsManager.clearCacheAsync()
+                                    if (success) {
+                                        cacheSize = settingsManager.getFormattedCacheSizeAsync()
+                                        Toast.makeText(context, "Cache berhasil dibersihkan!", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                             }
                             .padding(horizontal = 12.dp, vertical = 7.dp)
@@ -361,7 +366,7 @@ fun SettingsDialog(
                             style = Typography.labelSmall,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = PureWhite
+                            color = colors.textPrimary
                         )
                     }
                 }
@@ -377,15 +382,15 @@ fun SettingsDialog(
                         Icon(
                             imageVector = Icons.Outlined.Info,
                             contentDescription = null,
-                            tint = SubtleGray,
+                            tint = colors.textSecondary,
                             modifier = Modifier.size(14.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "Kuro v2.8.0 • Media3 & Jetpack Compose",
+                            text = "Kuro v3.3.0 • Media3 & Jetpack Compose",
                             style = Typography.labelSmall,
                             fontSize = 11.sp,
-                            color = SubtleGray
+                            color = colors.textSecondary
                         )
                     }
                     Spacer(modifier = Modifier.height(2.dp))
@@ -393,7 +398,7 @@ fun SettingsDialog(
                         text = "Open source, zero ads & ultra lightweight",
                         style = Typography.labelSmall,
                         fontSize = 10.sp,
-                        color = SubtleGray.copy(alpha = 0.7f)
+                        color = colors.textMuted
                     )
                 }
 

@@ -12,29 +12,26 @@
 # Keep attributes for reflection and serialization
 -keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
 
-# Media3 / ExoPlayer / Session
--keep class androidx.media3.** { *; }
+# Media3 & Android Support (Consumer rules are packaged with Media3 AARs)
 -dontwarn androidx.media3.**
--keep class android.support.v4.media.** { *; }
 -dontwarn android.support.v4.media.**
 
 # NewPipeExtractor & Dependencies
--keep class org.schabi.newpipe.extractor.** { *; }
 -dontwarn org.schabi.newpipe.extractor.**
--keep class com.grack.nanojson.** { *; }
+-keep class org.schabi.newpipe.extractor.** { <init>(...); }
 -dontwarn com.grack.nanojson.**
--keep class org.jsoup.** { *; }
 -dontwarn org.jsoup.**
--keep class org.mozilla.javascript.** { *; }
 -dontwarn org.mozilla.javascript.**
--keep class com.google.protobuf.** { *; }
+-keep class org.mozilla.javascript.** { *; }
 -dontwarn com.google.protobuf.**
 
-# OkHttp & Okio
--keep class okhttp3.** { *; }
+# OkHttp & Okio (Consumer rules are packaged with OkHttp)
 -dontwarn okhttp3.**
--keep class okio.** { *; }
 -dontwarn okio.**
 
-# Kuro App
--keep class com.ayashii.kuro.** { *; }
+# Kuro App Models & Auth Bridge
+-keep class com.ayashii.kuro.data.model.** { *; }
+-keep class com.ayashii.kuro.data.auth.UserAccount { *; }
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}

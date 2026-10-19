@@ -77,6 +77,7 @@ fun SearchScreen(
     val isLoadingTrack by viewModel.isLoadingTrack.collectAsState()
     val currentTrack by viewModel.currentTrack.collectAsState()
     val favorites by viewModel.favorites.collectAsState()
+    val favoriteIds by remember(favorites) { androidx.compose.runtime.derivedStateOf { favorites.mapTo(HashSet()) { it.id } } }
     val focusManager = LocalFocusManager.current
 
     val colors = com.ayashii.kuro.ui.theme.KuroAppTheme.colors
@@ -293,7 +294,7 @@ fun SearchScreen(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(searchResults, key = { it.id }, contentType = { "track" }) { track ->
-                        val isFav = favorites.any { it.id == track.id }
+                        val isFav = track.id in favoriteIds
                         TrackItem(
                             track = track.copy(isFavorite = isFav),
                             isPlaying = currentTrack?.id == track.id,

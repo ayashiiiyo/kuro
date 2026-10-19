@@ -113,4 +113,15 @@ class AudioOutputManager(private val context: Context) {
             } catch (_: Exception) {}
         }
     }
+
+    companion object {
+        @Volatile
+        private var INSTANCE: AudioOutputManager? = null
+
+        fun getInstance(context: Context): AudioOutputManager {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: AudioOutputManager(context.applicationContext).also { INSTANCE = it }
+            }
+        }
+    }
 }

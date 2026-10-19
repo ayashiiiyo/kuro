@@ -135,7 +135,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     val themeMode = settingsManager.themeMode
     val audioQuality = settingsManager.audioQuality
 
-    val audioOutputManager = com.ayashii.kuro.data.audio.AudioOutputManager(getApplication())
+    val audioOutputManager = com.ayashii.kuro.data.audio.AudioOutputManager.getInstance(getApplication())
     val audioDeviceState = audioOutputManager.deviceState
     fun openAudioOutputSettings() = audioOutputManager.openAudioSettings()
 
@@ -347,7 +347,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                 }
-                delay(150)
+                delay(250)
             }
         }
     }
@@ -379,6 +379,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
             // Pre-warm audio URLs for top 2 tracks in background with chosen quality
             launch(Dispatchers.IO) {
+                delay(2000)
                 tracks.take(2).forEach {
                     repository.getAudioStreamUrl(it.url, settingsManager.audioQuality.value)
                 }
@@ -414,6 +415,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
             // Pre-warm audio URLs for top 2 search results in background
             launch(Dispatchers.IO) {
+                delay(1500)
                 results.take(2).forEach {
                     repository.getAudioStreamUrl(it.url, settingsManager.audioQuality.value)
                 }

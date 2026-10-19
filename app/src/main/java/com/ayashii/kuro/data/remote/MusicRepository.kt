@@ -6,6 +6,8 @@ import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.data.model.HomeSection
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -25,15 +27,14 @@ class MusicRepository {
     private val streamUrlCache = LruCache<String, Pair<String, Long>>(50)
     private val CACHE_EXPIRY_MS = 3 * 60 * 60 * 1000L
 
-    init {
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                service.suggestionExtractor.suggestionList("trending")
-            } catch (e: Exception) {
-                Log.d("MusicRepository", "Prewarm notice: ${e.message}")
-            }
-        }
-    }
+    private var homeCache: Pair<List<HomeSection>, Long>? = null
+    private val HOME_CACHE_TTL = 10 * 60 * 1000L // 10 minutes
+
+    private val searchCache = LruCache<String, Pair<List<Track>, Long>>(30)
+    private val SEARCH_CACHE_TTL = 5 * 60 * 1000L // 5 minutes
+
+    private val radioCache = LruCache<String, Pair<List<Track>, Long>>(20)
+    private val RADIO_CACHE_TTL = 30 * 60 * 1000L // 30 minutes
 
     private fun cleanTrackTitle(raw: String): String {
         return raw
@@ -79,7 +80,7 @@ class MusicRepository {
                     .head()
                     .header("User-Agent", "Mozilla/5.0")
                     .build()
-                val client = okhttp3.OkHttpClient()
+                val client = HttpClientProvider.client
                 val resp = client.newCall(req).execute()
                 if (resp.isSuccessful) {
                     return@withContext maxres
@@ -106,9 +107,20 @@ class MusicRepository {
 
     suspend fun searchTracks(query: String): List<Track> = withContext(Dispatchers.IO) {
         if (query.isBlank()) return@withContext emptyList()
+        val q = query.trim().lowercase()
+        val now = System.currentTimeMillis()
+        synchronized(searchCache) {
+            searchCache.get(q)?.let { (cached, time) ->
+                if (now - time < SEARCH_CACHE_TTL) {
+                    return@withContext cached
+                }
+            }
+        }
+
         // 1. Prioritize YouTube Music Song Search (Pure Music Tracks!)
         val ytmTracks = searchYouTubeMusic(query)
         if (ytmTracks.isNotEmpty()) {
+            synchronized(searchCache) { searchCache.put(q, Pair(ytmTracks, now)) }
             return@withContext ytmTracks
         }
 
@@ -121,7 +133,7 @@ class MusicRepository {
             )
             searchExtractor.fetchPage()
             val page = searchExtractor.initialPage
-            page.items
+            val list = page.items
                 .filterIsInstance<StreamInfoItem>()
                 .map { item ->
                     val rawThumb = item.thumbnails.maxByOrNull { it.width * it.height }?.url
@@ -137,6 +149,10 @@ class MusicRepository {
                         durationSeconds = item.duration
                     )
                 }
+            if (list.isNotEmpty()) {
+                synchronized(searchCache) { searchCache.put(q, Pair(list, now)) }
+            }
+            list
         } catch (e: Exception) {
             Log.e("MusicRepository", "Search failed: ${e.message}", e)
             emptyList()
@@ -163,7 +179,7 @@ class MusicRepository {
                 put("params", "EgWKAQIIAWoKEAkQBRAKEAMQBA==")
             }
 
-            val client = okhttp3.OkHttpClient()
+            val client = HttpClientProvider.client
             val reqBody = payload.toString().toRequestBody("application/json".toMediaType())
             val reqBuilder = okhttp3.Request.Builder()
                 .url("$origin/youtubei/v1/search")
@@ -272,8 +288,17 @@ class MusicRepository {
     }
 
     suspend fun getHomeShelves(): List<HomeSection> = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        synchronized(this) {
+            homeCache?.let { (cached, time) ->
+                if (now - time < HOME_CACHE_TTL) {
+                    return@withContext cached
+                }
+            }
+        }
         val ytmShelves = fetchYouTubeMusicShelves()
         if (ytmShelves.isNotEmpty()) {
+            synchronized(this) { homeCache = Pair(ytmShelves, now) }
             return@withContext ytmShelves
         }
 
@@ -295,6 +320,14 @@ class MusicRepository {
 
     suspend fun getRadioTracks(videoId: String): List<Track> = withContext(Dispatchers.IO) {
         if (videoId.isBlank()) return@withContext emptyList()
+        val now = System.currentTimeMillis()
+        synchronized(radioCache) {
+            radioCache.get(videoId)?.let { (cached, time) ->
+                if (now - time < RADIO_CACHE_TTL) {
+                    return@withContext cached
+                }
+            }
+        }
         try {
             val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
             val origin = "https://music.youtube.com"
@@ -314,7 +347,7 @@ class MusicRepository {
                 put("playlistId", "RDAMVM$videoId")
             }
 
-            val client = okhttp3.OkHttpClient()
+            val client = HttpClientProvider.client
             val reqBody = payload.toString().toRequestBody("application/json".toMediaType())
             val reqBuilder = okhttp3.Request.Builder()
                 .url("$origin/youtubei/v1/next")
@@ -385,6 +418,9 @@ class MusicRepository {
                     )
                 )
             }
+            if (radioList.isNotEmpty()) {
+                synchronized(radioCache) { radioCache.put(videoId, Pair(radioList, now)) }
+            }
             radioList
         } catch (e: Exception) {
             Log.e("MusicRepository", "getRadioTracks error: ${e.message}")
@@ -392,14 +428,14 @@ class MusicRepository {
         }
     }
 
-    private fun fetchYouTubeMusicShelves(): List<HomeSection> {
+    private suspend fun fetchYouTubeMusicShelves(): List<HomeSection> = withContext(Dispatchers.IO) {
         val result = mutableListOf<HomeSection>()
         try {
             val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
             val origin = "https://music.youtube.com"
             val cookie = auth.getCookie() ?: ""
             val sapisidHash = auth.getSapisidHash(origin)
-            val client = okhttp3.OkHttpClient()
+            val client = HttpClientProvider.client
 
             fun fetchBrowse(browseId: String): org.json.JSONObject? {
                 val payload = org.json.JSONObject().apply {
@@ -438,21 +474,23 @@ class MusicRepository {
                 return null
             }
 
-            // 1. Fetch FEmusic_home
-            val homeJson = fetchBrowse("FEmusic_home")
-            if (homeJson != null) {
-                result.addAll(parseYtmSections(homeJson, "Pilihan Cepat"))
-            }
+            coroutineScope {
+                val homeDeferred = async { fetchBrowse("FEmusic_home") }
+                val exploreDeferred = async { fetchBrowse("FEmusic_explore") }
+                val homeJson = homeDeferred.await()
+                val exploreJson = exploreDeferred.await()
 
-            // 2. Fetch FEmusic_explore (Trending & New Releases)
-            val exploreJson = fetchBrowse("FEmusic_explore")
-            if (exploreJson != null) {
-                result.addAll(parseYtmSections(exploreJson, "Lagu Trending"))
+                if (homeJson != null) {
+                    result.addAll(parseYtmSections(homeJson, "Pilihan Cepat"))
+                }
+                if (exploreJson != null) {
+                    result.addAll(parseYtmSections(exploreJson, "Lagu Trending"))
+                }
             }
         } catch (e: Exception) {
             Log.e("MusicRepository", "fetchYouTubeMusicShelves error: ${e.message}")
         }
-        return result
+        result
     }
 
     private fun parseYtmSections(root: org.json.JSONObject, defaultTitle: String): List<HomeSection> {
@@ -706,7 +744,7 @@ class MusicRepository {
                 put("browseId", "FEmusic_liked_videos")
             }
 
-            val client = okhttp3.OkHttpClient()
+            val client = HttpClientProvider.client
             val reqBody = payload.toString().toRequestBody("application/json".toMediaType())
             val reqBuilder = okhttp3.Request.Builder()
                 .url("$origin/youtubei/v1/browse")
