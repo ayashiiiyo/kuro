@@ -21,7 +21,8 @@ data class KuroColors(
     val textSecondary: Color,
     val textMuted: Color,
     val iconPrimary: Color,
-    val isDark: Boolean
+    val isDark: Boolean,
+    val accent: Color = textPrimary
 )
 
 val DarkKuroColors = KuroColors(
@@ -33,7 +34,8 @@ val DarkKuroColors = KuroColors(
     textSecondary = SubtleGray,
     textMuted = MutedText,
     iconPrimary = PureWhite,
-    isDark = true
+    isDark = true,
+    accent = PureWhite
 )
 
 val LightKuroColors = KuroColors(
@@ -45,7 +47,8 @@ val LightKuroColors = KuroColors(
     textSecondary = Color(0xFF71717A),
     textMuted = Color(0xFFA1A1AA),
     iconPrimary = Color(0xFF09090B),
-    isDark = false
+    isDark = false,
+    accent = Color(0xFF09090B)
 )
 
 val LocalKuroColors = staticCompositionLocalOf { DarkKuroColors }
