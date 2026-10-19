@@ -13,15 +13,15 @@ data class LyricsData(
     val lines: List<LyricLine>,
     val isSynced: Boolean = true
 ) {
-    fun getCurrentLineIndex(positionMs: Long, offsetMs: Long = 1200L): Int {
+    fun getCurrentLineIndex(positionMs: Long): Int {
         if (!isSynced || lines.isEmpty()) return -1
-        val effectivePos = (positionMs + offsetMs).coerceAtLeast(0L)
 
         // Strict Intro Guard: If song is still playing opening instrumentals, no lyric is active!
-        if (lines.isNotEmpty() && effectivePos < lines[0].timeMs) {
+        if (lines.isNotEmpty() && positionMs < lines[0].timeMs) {
             return -1
         }
 
+        val effectivePos = positionMs.coerceAtLeast(0L)
         var left = 0
         var right = lines.size - 1
         var result = -1

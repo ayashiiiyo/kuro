@@ -21,3 +21,10 @@ data class Track(
             return String.format("%02d:%02d", minutes, seconds)
         }
 }
+
+@Immutable
+data class HomeSection(
+    val title: String,
+    val subtitle: String = "",
+    val tracks: List<Track>
+)

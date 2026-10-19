@@ -55,6 +55,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val _isPlayerExpanded = MutableStateFlow(false)
     val isPlayerExpanded = _isPlayerExpanded.asStateFlow()
 
+    private val _homeSections = MutableStateFlow<List<com.ayashii.kuro.data.model.HomeSection>>(emptyList())
+    val homeSections = _homeSections.asStateFlow()
+
     private val _trendingTracks = MutableStateFlow<List<Track>>(emptyList())
     val trendingTracks = _trendingTracks.asStateFlow()
 
@@ -278,7 +281,13 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     fun loadTrending() {
         viewModelScope.launch {
             _isLoadingTrending.value = true
-            val tracks = repository.getTrendingTracks()
+            val shelves = repository.getHomeShelves()
+            _homeSections.value = shelves
+            val tracks = if (shelves.isNotEmpty()) {
+                shelves.flatMap { it.tracks }.distinctBy { it.id }
+            } else {
+                repository.getTrendingTracks()
+            }
             _trendingTracks.value = tracks
             _isLoadingTrending.value = false
 
@@ -345,7 +354,21 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     playlistQueue.add(track)
                     currentIndex = 0
                 }
+            }
+
+            // Automix Radio: prevent repeating the same 1-3 songs by fetching YouTube Music radio tracks!
+            launch(Dispatchers.IO) {
+                try {
+                    val radioTracks = repository.getRadioTracks(track.id)
+                    if (radioTracks.isNotEmpty()) {
+                        val existingIds = playlistQueue.map { it.id }.toSet()
+                        val freshTracks = radioTracks.filter { it.id !in existingIds }
+                        playlistQueue.addAll(freshTracks)
+                    }
+                } catch (e: Exception) {
+                    Log.d("KuroVM", "Automix radio fetch: ${e.message}")
                 }
+            }
 
                 // Fetch Synced Lyrics + Translations in background
                 lyricsJob?.cancel()

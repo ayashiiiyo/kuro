@@ -60,13 +60,12 @@ fun SyncedLyricsView(
 ) {
     val currentPositionMs by playbackPositionFlow.collectAsState()
     var showTranslation by remember { mutableStateOf(true) }
-    var syncOffsetMs by remember { mutableStateOf(1200L) }
     val listState = rememberLazyListState()
 
-    // Derived active index dynamically reacts to currentPositionMs with lead offset & intro guard!
-    val activeIndex by remember(lyricsData, syncOffsetMs) {
+    // Derived active index dynamically reacts to currentPositionMs with strict intro guard!
+    val activeIndex by remember(lyricsData) {
         derivedStateOf {
-            lyricsData?.getCurrentLineIndex(currentPositionMs, syncOffsetMs) ?: -1
+            lyricsData?.getCurrentLineIndex(currentPositionMs) ?: -1
         }
     }
 
@@ -87,7 +86,7 @@ fun SyncedLyricsView(
             .padding(16.dp)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Lyrics Top Bar
+            // Lyrics Top Bar (Clean & Elegant!)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -101,63 +100,30 @@ fun SyncedLyricsView(
                     color = SubtleGray
                 )
 
+                // Translation Toggle Button
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (showTranslation) PureWhite else PureBlack)
+                        .border(1.dp, if (showTranslation) PureWhite else DarkBorder, RoundedCornerShape(12.dp))
+                        .clickable { showTranslation = !showTranslation }
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Sync Lead Offset Adjustment Pill (Only for Synced Lyrics!)
-                    if (lyricsData?.isSynced == true) {
-                        Row(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(PureBlack)
-                                .border(1.dp, DarkBorder, RoundedCornerShape(12.dp))
-                                .clickable {
-                                    syncOffsetMs = when (syncOffsetMs) {
-                                        1200L -> 1800L
-                                        1800L -> 0L
-                                        0L -> 600L
-                                        else -> 1200L
-                                    }
-                                }
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = if (syncOffsetMs > 0) "⚡ +${syncOffsetMs / 1000f}s" else "⚡ 0s",
-                                style = Typography.labelSmall,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = PureWhite
-                            )
-                        }
-                    }
-
-                    // Translation Toggle Button
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (showTranslation) PureWhite else PureBlack)
-                            .border(1.dp, if (showTranslation) PureWhite else DarkBorder, RoundedCornerShape(12.dp))
-                            .clickable { showTranslation = !showTranslation }
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Translate,
-                            contentDescription = "Translate",
-                            tint = if (showTranslation) PureBlack else PureWhite,
-                            modifier = Modifier.size(12.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = if (showTranslation) "ID: ON" else "ID: OFF",
-                            style = Typography.labelSmall,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (showTranslation) PureBlack else PureWhite
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Outlined.Translate,
+                        contentDescription = "Translate",
+                        tint = if (showTranslation) PureBlack else PureWhite,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (showTranslation) "ID: ON" else "ID: OFF",
+                        style = Typography.labelSmall,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (showTranslation) PureBlack else PureWhite
+                    )
                 }
             }
 
