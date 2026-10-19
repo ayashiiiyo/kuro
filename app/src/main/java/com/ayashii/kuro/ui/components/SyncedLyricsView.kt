@@ -57,12 +57,13 @@ fun SyncedLyricsView(
     modifier: Modifier = Modifier
 ) {
     var showTranslation by remember { mutableStateOf(true) }
+    var syncOffsetMs by remember { mutableStateOf(1200L) }
     val listState = rememberLazyListState()
 
-    // Derived active index dynamically reacts to currentPositionMs!
-    val activeIndex by remember(lyricsData, currentPositionMs) {
+    // Derived active index dynamically reacts to currentPositionMs with lead offset!
+    val activeIndex by remember(lyricsData, currentPositionMs, syncOffsetMs) {
         derivedStateOf {
-            lyricsData?.getCurrentLineIndex(currentPositionMs) ?: -1
+            lyricsData?.getCurrentLineIndex(currentPositionMs, syncOffsetMs) ?: -1
         }
     }
 
@@ -97,30 +98,61 @@ fun SyncedLyricsView(
                     color = SubtleGray
                 )
 
-                // Translation Toggle Button
                 Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (showTranslation) PureWhite else PureBlack)
-                        .border(1.dp, if (showTranslation) PureWhite else DarkBorder, RoundedCornerShape(12.dp))
-                        .clickable { showTranslation = !showTranslation }
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Translate,
-                        contentDescription = "Translate",
-                        tint = if (showTranslation) PureBlack else PureWhite,
-                        modifier = Modifier.size(12.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = if (showTranslation) "ID: ON" else "ID: OFF",
-                        style = Typography.labelSmall,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (showTranslation) PureBlack else PureWhite
-                    )
+                    // Sync Lead Offset Adjustment Pill
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(PureBlack)
+                            .border(1.dp, DarkBorder, RoundedCornerShape(12.dp))
+                            .clickable {
+                                syncOffsetMs = when (syncOffsetMs) {
+                                    1200L -> 1800L
+                                    1800L -> 0L
+                                    0L -> 600L
+                                    else -> 1200L
+                                }
+                            }
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (syncOffsetMs > 0) "⚡ +${syncOffsetMs / 1000f}s" else "⚡ 0s",
+                            style = Typography.labelSmall,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = PureWhite
+                        )
+                    }
+
+                    // Translation Toggle Button
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (showTranslation) PureWhite else PureBlack)
+                            .border(1.dp, if (showTranslation) PureWhite else DarkBorder, RoundedCornerShape(12.dp))
+                            .clickable { showTranslation = !showTranslation }
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Translate,
+                            contentDescription = "Translate",
+                            tint = if (showTranslation) PureBlack else PureWhite,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (showTranslation) "ID: ON" else "ID: OFF",
+                            style = Typography.labelSmall,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (showTranslation) PureBlack else PureWhite
+                        )
+                    }
                 }
             }
 
@@ -178,8 +210,10 @@ fun SyncedLyricsView(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
-                                .clickable(enabled = lyricsData.isSynced && line.timeMs >= 0) {
-                                    onSeekTo(line.timeMs)
+                                .clickable {
+                                    if (line.timeMs >= 0) {
+                                        onSeekTo(line.timeMs)
+                                    }
                                 }
                                 .padding(vertical = 4.dp)
                         ) {

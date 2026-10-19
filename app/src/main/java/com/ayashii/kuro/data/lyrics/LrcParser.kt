@@ -2,7 +2,7 @@ package com.ayashii.kuro.data.lyrics
 
 object LrcParser {
 
-    private val LRC_REGEX = Regex("""\[(\d{1,2}):(\d{2})(?:[.:](\d{2,3}))?\](.*)""")
+    private val TIME_TAG_REGEX = Regex("""\[\s*(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\s*\]""")
 
     fun parse(lrcContent: String): List<LyricLine> {
         val result = mutableListOf<LyricLine>()
@@ -10,20 +10,24 @@ object LrcParser {
         lrcContent.lineSequence().forEach { line ->
             val trimmed = line.trim()
             if (trimmed.isNotBlank()) {
-                val match = LRC_REGEX.find(trimmed)
-                if (match != null) {
-                    val min = match.groupValues[1].toLongOrNull() ?: 0L
-                    val sec = match.groupValues[2].toLongOrNull() ?: 0L
-                    val msStr = match.groupValues[3]
-                    val ms = when (msStr.length) {
-                        2 -> msStr.toLong() * 10
-                        3 -> msStr.toLong()
-                        else -> 0L
-                    }
-                    val timeMs = min * 60_000L + sec * 1_000L + ms
-                    val text = match.groupValues[4].trim()
+                val matches = TIME_TAG_REGEX.findAll(trimmed).toList()
+                if (matches.isNotEmpty()) {
+                    val lastMatch = matches.last()
+                    val text = trimmed.substring(lastMatch.range.last + 1).trim()
                     if (text.isNotBlank()) {
-                        result.add(LyricLine(timeMs = timeMs, text = text))
+                        for (match in matches) {
+                            val min = match.groupValues[1].toLongOrNull() ?: 0L
+                            val sec = match.groupValues[2].toLongOrNull() ?: 0L
+                            val msStr = match.groupValues[3]
+                            val ms = when (msStr.length) {
+                                1 -> msStr.toLong() * 100
+                                2 -> msStr.toLong() * 10
+                                3 -> msStr.toLong()
+                                else -> 0L
+                            }
+                            val timeMs = min * 60_000L + sec * 1_000L + ms
+                            result.add(LyricLine(timeMs = timeMs, text = text))
+                        }
                     }
                 }
             }

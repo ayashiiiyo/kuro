@@ -223,18 +223,28 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }, MoreExecutors.directExecutor())
     }
 
+    private var isSeeking = false
+    private var lastSeekTimestamp = 0L
+
     private fun startProgressTracking() {
         progressJob?.cancel()
         progressJob = viewModelScope.launch {
             while (true) {
-                mediaController?.let { controller ->
-                    _playbackPosition.value = controller.currentPosition.coerceAtLeast(0)
-                    val realDuration = controller.duration
-                    if (realDuration > 0) {
-                        _duration.value = realDuration
+                val now = System.currentTimeMillis()
+                if (isSeeking && (now - lastSeekTimestamp < 1200L)) {
+                    // Grace period: allow ExoPlayer to complete async seek over network without bouncing back
+                } else {
+                    isSeeking = false
+                    mediaController?.let { controller ->
+                        val pos = controller.currentPosition.coerceAtLeast(0)
+                        _playbackPosition.value = pos
+                        val realDuration = controller.duration
+                        if (realDuration > 0) {
+                            _duration.value = realDuration
+                        }
                     }
                 }
-                delay(300)
+                delay(150)
             }
         }
     }
@@ -386,8 +396,15 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun seekTo(positionMs: Long) {
         val target = positionMs.coerceAtLeast(0L)
-        mediaController?.seekTo(target)
         _playbackPosition.value = target
+        lastSeekTimestamp = System.currentTimeMillis()
+        isSeeking = true
+        mediaController?.let { controller ->
+            controller.seekTo(target)
+            if (!controller.isPlaying) {
+                controller.play()
+            }
+        }
     }
 
     fun getPositionMs(): Long = _playbackPosition.value
