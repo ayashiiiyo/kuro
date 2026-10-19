@@ -234,12 +234,7 @@ class MusicRepository {
     }
 
     suspend fun getTrendingTracks(): List<Track> = withContext(Dispatchers.IO) {
-        val shelves = getHomeShelves()
-        if (shelves.isNotEmpty()) {
-            shelves.flatMap { it.tracks }.distinctBy { it.id }
-        } else {
-            searchTracks("Top Global Hits 2026")
-        }
+        searchTracks("Top Global Hits 2026")
     }
 
     suspend fun getRadioTracks(videoId: String): List<Track> = withContext(Dispatchers.IO) {
@@ -290,8 +285,20 @@ class MusicRepository {
                 ?.optJSONObject("watchNextTabbedResultsRenderer")
                 ?.optJSONArray("tabs") ?: return@withContext emptyList()
 
-            val queueTab = tabs.optJSONObject(0)?.optJSONObject("tabRenderer")
-                ?.optJSONObject("content")?.optJSONObject("musicQueueRenderer")
+            var queueTab: org.json.JSONObject? = null
+            for (ti in 0 until tabs.length()) {
+                val q = tabs.optJSONObject(ti)?.optJSONObject("tabRenderer")
+                    ?.optJSONObject("content")?.optJSONObject("musicQueueRenderer")
+                if (q != null) {
+                    queueTab = q
+                    break
+                }
+            }
+            if (queueTab == null) {
+                queueTab = tabs.optJSONObject(0)?.optJSONObject("tabRenderer")
+                    ?.optJSONObject("content")?.optJSONObject("musicQueueRenderer")
+            }
+
             val items = queueTab?.optJSONObject("content")
                 ?.optJSONObject("playlistPanelRenderer")?.optJSONArray("contents") ?: return@withContext emptyList()
 

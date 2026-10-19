@@ -77,12 +77,14 @@ fun SyncedLyricsView(
         }
     }
 
+    val colors = com.ayashii.kuro.ui.theme.KuroAppTheme.colors
+
     Box(
         modifier = modifier
             .fillMaxSize()
             .clip(RoundedCornerShape(20.dp))
-            .background(DarkCard)
-            .border(1.dp, DarkBorder, RoundedCornerShape(20.dp))
+            .background(colors.card)
+            .border(1.dp, colors.border, RoundedCornerShape(20.dp))
             .padding(16.dp)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -97,15 +99,15 @@ fun SyncedLyricsView(
                     style = Typography.labelSmall,
                     fontSize = 10.sp,
                     letterSpacing = 1.sp,
-                    color = SubtleGray
+                    color = colors.textSecondary
                 )
 
                 // Translation Toggle Button
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(12.dp))
-                        .background(if (showTranslation) PureWhite else PureBlack)
-                        .border(1.dp, if (showTranslation) PureWhite else DarkBorder, RoundedCornerShape(12.dp))
+                        .background(if (showTranslation) colors.textPrimary else colors.background)
+                        .border(1.dp, if (showTranslation) colors.textPrimary else colors.border, RoundedCornerShape(12.dp))
                         .clickable { showTranslation = !showTranslation }
                         .padding(horizontal = 10.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -113,7 +115,7 @@ fun SyncedLyricsView(
                     Icon(
                         imageVector = Icons.Outlined.Translate,
                         contentDescription = "Translate",
-                        tint = if (showTranslation) PureBlack else PureWhite,
+                        tint = if (showTranslation) colors.background else colors.textPrimary,
                         modifier = Modifier.size(12.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
@@ -122,7 +124,7 @@ fun SyncedLyricsView(
                         style = Typography.labelSmall,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
-                        color = if (showTranslation) PureBlack else PureWhite
+                        color = if (showTranslation) colors.background else colors.textPrimary
                     )
                 }
             }
@@ -136,7 +138,7 @@ fun SyncedLyricsView(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator(
-                            color = PureWhite,
+                            color = colors.textPrimary,
                             modifier = Modifier.size(32.dp),
                             strokeWidth = 2.dp
                         )
@@ -144,7 +146,7 @@ fun SyncedLyricsView(
                         Text(
                             text = "Loading lyrics...",
                             style = Typography.bodyMedium,
-                            color = MutedText
+                            color = colors.textMuted
                         )
                     }
                 }
@@ -156,7 +158,7 @@ fun SyncedLyricsView(
                     Text(
                         text = "No synchronized lyrics available",
                         style = Typography.bodyMedium,
-                        color = MutedText
+                        color = colors.textMuted
                     )
                 }
             } else {
@@ -172,7 +174,7 @@ fun SyncedLyricsView(
                     ) { index, line ->
                         val isActive = index == activeIndex
                         val textColor by animateColorAsState(
-                            targetValue = if (isActive) PureWhite else SubtleGray.copy(alpha = 0.45f),
+                            targetValue = if (isActive) colors.textPrimary else colors.textSecondary.copy(alpha = 0.45f),
                             animationSpec = tween(durationMillis = 200),
                             label = "textColor"
                         )
@@ -204,7 +206,7 @@ fun SyncedLyricsView(
                                     style = Typography.bodyMedium,
                                     fontSize = if (isActive) 14.sp else 12.sp,
                                     fontWeight = if (isActive) FontWeight.Medium else FontWeight.Normal,
-                                    color = if (isActive) PureWhite.copy(alpha = 0.85f) else SubtleGray.copy(alpha = 0.35f),
+                                    color = if (isActive) colors.textPrimary.copy(alpha = 0.85f) else colors.textSecondary.copy(alpha = 0.35f),
                                     lineHeight = if (isActive) 20.sp else 16.sp
                                 )
                             }

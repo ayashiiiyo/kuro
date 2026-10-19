@@ -152,11 +152,16 @@ fun MainAppScreen(viewModel: MusicViewModel) {
 
                 // Floating MiniPlayer above bottom nav bar
                 if (currentTrack != null && !isExpanded) {
+                    val currentPosMs by viewModel.playbackPosition.collectAsState()
+                    val durMs by viewModel.duration.collectAsState()
+                    val effDur = if (durMs > 0) durMs else (currentTrack!!.durationSeconds * 1000L).coerceAtLeast(1L)
+                    val progressFloat = (currentPosMs.toFloat() / effDur.toFloat()).coerceIn(0f, 1f)
+
                     MiniPlayer(
                         track = currentTrack!!,
                         isPlaying = isPlaying,
                         isLoading = isLoadingTrack,
-                        progressProvider = { viewModel.getProgress() },
+                        progress = progressFloat,
                         onPlayPauseClick = { viewModel.togglePlayPause() },
                         onSkipNextClick = { viewModel.skipNext() },
                         onClick = { viewModel.expandPlayer(true) },

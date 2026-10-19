@@ -58,6 +58,14 @@ fun LoginWebViewDialog(
     var pageProgress by remember { mutableFloatStateOf(0f) }
     var isLoading by remember { mutableStateOf(true) }
 
+    androidx.compose.runtime.DisposableEffect(Unit) {
+        onDispose {
+            webViewInstance?.stopLoading()
+            webViewInstance?.destroy()
+            webViewInstance = null
+        }
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(

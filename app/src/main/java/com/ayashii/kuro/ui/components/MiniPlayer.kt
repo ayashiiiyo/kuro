@@ -45,28 +45,30 @@ fun MiniPlayer(
     track: Track,
     isPlaying: Boolean,
     isLoading: Boolean = false,
-    progressProvider: () -> Float,
+    progress: Float,
     onPlayPauseClick: () -> Unit,
     onSkipNextClick: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val colors = com.ayashii.kuro.ui.theme.KuroAppTheme.colors
+
     Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp)
             .clip(RoundedCornerShape(14.dp))
-            .background(DarkCard)
-            .border(1.dp, DarkBorder, RoundedCornerShape(14.dp))
+            .background(colors.card)
+            .border(1.dp, colors.border, RoundedCornerShape(14.dp))
             .clickable { onClick() }
     ) {
         LinearProgressIndicator(
-            progress = progressProvider,
+            progress = { progress },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(2.dp),
-            color = PureWhite,
-            trackColor = DarkBorder
+            color = colors.textPrimary,
+            trackColor = colors.border
         )
 
         Row(
@@ -98,7 +100,7 @@ fun MiniPlayer(
                     text = track.title,
                     style = Typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    color = PureWhite,
+                    color = colors.textPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -107,7 +109,7 @@ fun MiniPlayer(
                     text = track.artist,
                     style = Typography.bodyMedium,
                     fontWeight = FontWeight.Normal,
-                    color = MutedText,
+                    color = colors.textMuted,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -119,7 +121,7 @@ fun MiniPlayer(
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator(
-                        color = PureWhite,
+                        color = colors.textPrimary,
                         strokeWidth = 2.dp,
                         modifier = Modifier.size(24.dp)
                     )
@@ -129,7 +131,7 @@ fun MiniPlayer(
                     Icon(
                         painter = if (isPlaying) painterResource(R.drawable.ic_kuro_pause) else painterResource(R.drawable.ic_kuro_play),
                         contentDescription = if (isPlaying) "Pause" else "Play",
-                        tint = PureWhite,
+                        tint = colors.textPrimary,
                         modifier = Modifier.size(26.dp)
                     )
                 }
@@ -139,7 +141,7 @@ fun MiniPlayer(
                 Icon(
                     painter = painterResource(R.drawable.ic_kuro_fast_forward),
                     contentDescription = "Next",
-                    tint = PureWhite,
+                    tint = colors.textPrimary,
                     modifier = Modifier.size(24.dp)
                 )
             }

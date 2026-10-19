@@ -57,10 +57,12 @@ fun LibraryScreen(
     val currentAccount by viewModel.authState.collectAsState()
     var showSettingsDialog by remember { mutableStateOf(false) }
 
+    val colors = com.ayashii.kuro.ui.theme.KuroAppTheme.colors
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(PureBlack)
+            .background(colors.background)
             .padding(top = 16.dp)
     ) {
         Row(
@@ -74,13 +76,13 @@ fun LibraryScreen(
                 Text(
                     text = "Library",
                     style = Typography.headlineLarge,
-                    color = PureWhite
+                    color = colors.textPrimary
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = "${favorites.size} Liked Songs",
                     style = Typography.bodyMedium,
-                    color = MutedText
+                    color = colors.textMuted
                 )
             }
 
@@ -92,8 +94,8 @@ fun LibraryScreen(
                     Row(
                         modifier = Modifier
                             .clip(RoundedCornerShape(16.dp))
-                            .background(DarkCard)
-                            .border(1.dp, DarkBorder, RoundedCornerShape(16.dp))
+                            .background(colors.card)
+                            .border(1.dp, colors.border, RoundedCornerShape(16.dp))
                             .clickable { viewModel.syncLikedSongs() }
                             .padding(horizontal = 12.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -101,14 +103,14 @@ fun LibraryScreen(
                         Icon(
                             imageVector = Icons.Default.Sync,
                             contentDescription = "Sync Liked Songs",
-                            tint = PureWhite,
+                            tint = colors.textPrimary,
                             modifier = Modifier.size(14.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "Sync YT",
                             style = Typography.labelSmall,
-                            color = PureWhite,
+                            color = colors.textPrimary,
                             fontSize = 11.sp
                         )
                     }
@@ -119,13 +121,13 @@ fun LibraryScreen(
                     modifier = Modifier
                         .size(36.dp)
                         .clip(CircleShape)
-                        .background(DarkCard)
-                        .border(1.dp, DarkBorder, CircleShape)
+                        .background(colors.card)
+                        .border(1.dp, colors.border, CircleShape)
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Settings,
                         contentDescription = "Pengaturan",
-                        tint = PureWhite,
+                        tint = colors.textPrimary,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -143,20 +145,20 @@ fun LibraryScreen(
                     Icon(
                         imageVector = Icons.Outlined.LibraryMusic,
                         contentDescription = null,
-                        tint = SubtleGray,
+                        tint = colors.textSecondary,
                         modifier = Modifier.size(56.dp)
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         text = "Your library is empty",
                         style = Typography.titleMedium,
-                        color = PureWhite
+                        color = colors.textPrimary
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = "Tap the heart icon on any song to save it here",
                         style = Typography.bodyMedium,
-                        color = MutedText
+                        color = colors.textMuted
                     )
                 }
             }

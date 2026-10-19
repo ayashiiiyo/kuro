@@ -359,7 +359,7 @@ class LyricsRepository(private val context: Context) {
     private fun translateLinesToIndonesian(lines: List<LyricLine>): List<LyricLine> {
         if (lines.isEmpty()) return lines
         try {
-            val textToTranslate = lines.joinToString("\n") { it.text }
+            val textToTranslate = lines.joinToString("\n~~~\n") { it.text }
             val formBody = ("client=gtx&sl=auto&tl=id&dt=t&q=" + encode(textToTranslate))
                 .toRequestBody("application/x-www-form-urlencoded".toMediaType())
 
@@ -381,10 +381,17 @@ class LyricsRepository(private val context: Context) {
                             sb.append(seg.optString(0))
                         }
                     }
-                    val translatedLines = sb.toString().lines()
+                    val fullTranslated = sb.toString()
+                    val translatedBlocks = if (fullTranslated.contains("~~~")) {
+                        fullTranslated.split("~~~").map { it.trim() }
+                    } else {
+                        fullTranslated.lines().map { it.trim() }
+                    }
+
                     return lines.mapIndexed { idx, line ->
-                        val trans = translatedLines.getOrNull(idx)?.trim()
-                        line.copy(translation = if (!trans.isNullOrBlank() && trans != line.text) trans else null)
+                        val trans = translatedBlocks.getOrNull(idx)?.trim()
+                        val validTrans = if (!trans.isNullOrBlank() && !trans.equals(line.text.trim(), ignoreCase = true) && !trans.equals("~~~")) trans else null
+                        line.copy(translation = validTrans)
                     }
                 }
             }

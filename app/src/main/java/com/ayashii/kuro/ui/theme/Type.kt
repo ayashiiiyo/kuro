@@ -1,6 +1,7 @@
 package com.ayashii.kuro.ui.theme
 
 import androidx.compose.material3.Typography
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -16,8 +17,7 @@ val OutfitFontFamily = FontFamily(
 )
 
 val FredokaFontFamily = FontFamily(
-    Font(R.font.fredoka_bold, FontWeight.Bold),
-    Font(R.font.fredoka_bold, FontWeight.Normal)
+    Font(R.font.fredoka_bold, FontWeight.Bold)
 )
 
 val UbuntuMonoFontFamily = FontFamily(
@@ -31,44 +31,44 @@ val Typography = Typography(
         fontWeight = FontWeight.Bold,
         fontSize = 32.sp,
         letterSpacing = (-0.5).sp,
-        color = PureWhite
+        color = Color.Unspecified
     ),
     headlineMedium = TextStyle(
         fontFamily = OutfitFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 24.sp,
         letterSpacing = (-0.3).sp,
-        color = PureWhite
+        color = Color.Unspecified
     ),
     titleLarge = TextStyle(
         fontFamily = OutfitFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 18.sp,
-        color = PureWhite
+        color = Color.Unspecified
     ),
     titleMedium = TextStyle(
         fontFamily = OutfitFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 15.sp,
-        color = PureWhite
+        color = Color.Unspecified
     ),
     bodyLarge = TextStyle(
         fontFamily = OutfitFontFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 14.sp,
-        color = PureWhite
+        color = Color.Unspecified
     ),
     bodyMedium = TextStyle(
         fontFamily = OutfitFontFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 13.sp,
-        color = MutedText
+        color = Color.Unspecified
     ),
     labelSmall = TextStyle(
         fontFamily = UbuntuMonoFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 12.sp,
         letterSpacing = 0.5.sp,
-        color = SubtleGray
+        color = Color.Unspecified
     )
 )

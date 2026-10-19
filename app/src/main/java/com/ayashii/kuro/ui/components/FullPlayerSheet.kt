@@ -78,10 +78,12 @@ fun FullPlayerSheet(
     val isLoadingLyrics by viewModel.isLoadingLyrics.collectAsState()
     val scrollState = rememberScrollState()
 
+    val colors = com.ayashii.kuro.ui.theme.KuroAppTheme.colors
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(PureBlack)
+            .background(colors.background)
             .verticalScroll(scrollState)
             .padding(horizontal = 24.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -92,7 +94,7 @@ fun FullPlayerSheet(
                 .width(40.dp)
                 .height(4.dp)
                 .clip(RoundedCornerShape(2.dp))
-                .background(SubtleGray.copy(alpha = 0.5f))
+                .background(colors.textSecondary.copy(alpha = 0.5f))
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -107,7 +109,7 @@ fun FullPlayerSheet(
                 Icon(
                     imageVector = Icons.Default.KeyboardArrowDown,
                     contentDescription = "Collapse Player",
-                    tint = PureWhite,
+                    tint = colors.textPrimary,
                     modifier = Modifier.size(32.dp)
                 )
             }
@@ -118,7 +120,7 @@ fun FullPlayerSheet(
                     style = Typography.labelSmall,
                     fontSize = 10.sp,
                     letterSpacing = 1.sp,
-                    color = SubtleGray
+                    color = colors.textSecondary
                 )
             }
 
@@ -126,7 +128,7 @@ fun FullPlayerSheet(
                 Icon(
                     imageVector = if (track.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
                     contentDescription = "Favorite",
-                    tint = if (track.isFavorite) PureWhite else MutedText,
+                    tint = if (track.isFavorite) colors.textPrimary else colors.textMuted,
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -140,7 +142,7 @@ fun FullPlayerSheet(
                 .fillMaxWidth()
                 .aspectRatio(1f)
                 .clip(RoundedCornerShape(20.dp))
-                .border(1.dp, DarkBorder, RoundedCornerShape(20.dp)),
+                .border(1.dp, colors.border, RoundedCornerShape(20.dp)),
             contentAlignment = Alignment.Center
         ) {
             AsyncImage(
@@ -153,7 +155,7 @@ fun FullPlayerSheet(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Title & Artist (Lossless badge deleted as requested!)
+        // Title & Artist
         Column(
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -161,7 +163,7 @@ fun FullPlayerSheet(
                 text = track.title,
                 style = Typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
-                color = PureWhite,
+                color = colors.textPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -170,7 +172,7 @@ fun FullPlayerSheet(
                 text = track.artist,
                 style = Typography.titleMedium,
                 fontWeight = FontWeight.Normal,
-                color = MutedText,
+                color = colors.textMuted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -199,7 +201,7 @@ fun FullPlayerSheet(
                 Icon(
                     imageVector = Icons.Default.Shuffle,
                     contentDescription = "Shuffle",
-                    tint = if (isShuffle) PureWhite else SubtleGray,
+                    tint = if (isShuffle) colors.textPrimary else colors.textSecondary,
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -211,7 +213,7 @@ fun FullPlayerSheet(
                 Icon(
                     painter = painterResource(R.drawable.ic_kuro_rewind),
                     contentDescription = "Previous Track",
-                    tint = PureWhite,
+                    tint = colors.textPrimary,
                     modifier = Modifier.size(34.dp)
                 )
             }
@@ -220,12 +222,12 @@ fun FullPlayerSheet(
                 modifier = Modifier
                     .size(74.dp)
                     .clip(CircleShape)
-                    .background(PureWhite),
+                    .background(colors.textPrimary),
                 contentAlignment = Alignment.Center
             ) {
                 if (isLoading) {
                     CircularProgressIndicator(
-                        color = PureBlack,
+                        color = colors.background,
                         strokeWidth = 3.dp,
                         modifier = Modifier.size(32.dp)
                     )
@@ -237,7 +239,7 @@ fun FullPlayerSheet(
                         Icon(
                             painter = if (isPlaying) painterResource(R.drawable.ic_kuro_pause) else painterResource(R.drawable.ic_kuro_play),
                             contentDescription = if (isPlaying) "Pause" else "Play",
-                            tint = PureBlack,
+                            tint = colors.background,
                             modifier = Modifier.size(36.dp)
                         )
                     }
@@ -251,7 +253,7 @@ fun FullPlayerSheet(
                 Icon(
                     painter = painterResource(R.drawable.ic_kuro_fast_forward),
                     contentDescription = "Next Track",
-                    tint = PureWhite,
+                    tint = colors.textPrimary,
                     modifier = Modifier.size(34.dp)
                 )
             }
@@ -261,7 +263,7 @@ fun FullPlayerSheet(
                 modifier = Modifier.size(44.dp)
             ) {
                 val icon = if (repeatMode == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat
-                val tint = if (repeatMode != Player.REPEAT_MODE_OFF) PureWhite else SubtleGray
+                val tint = if (repeatMode != Player.REPEAT_MODE_OFF) colors.textPrimary else colors.textSecondary
                 Icon(
                     imageVector = icon,
                     contentDescription = "Repeat",
@@ -310,6 +312,8 @@ fun PlayerScrubber(
     val currentFormatted = formatMs(currentPositionMs)
     val totalFormatted = formatMs(effectiveDuration)
 
+    val colors = com.ayashii.kuro.ui.theme.KuroAppTheme.colors
+
     Column(modifier = modifier.fillMaxWidth()) {
         Slider(
             value = progress,
@@ -317,9 +321,9 @@ fun PlayerScrubber(
                 viewModel.seekTo((newProgress * effectiveDuration).toLong())
             },
             colors = SliderDefaults.colors(
-                thumbColor = PureWhite,
-                activeTrackColor = PureWhite,
-                inactiveTrackColor = DarkBorder
+                thumbColor = colors.textPrimary,
+                activeTrackColor = colors.textPrimary,
+                inactiveTrackColor = colors.border
             ),
             modifier = Modifier.fillMaxWidth()
         )
@@ -328,8 +332,8 @@ fun PlayerScrubber(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(text = currentFormatted, style = Typography.bodyMedium, color = SubtleGray)
-            Text(text = totalFormatted, style = Typography.bodyMedium, color = SubtleGray)
+            Text(text = currentFormatted, style = Typography.bodyMedium, color = colors.textSecondary)
+            Text(text = totalFormatted, style = Typography.bodyMedium, color = colors.textSecondary)
         }
     }
 }

@@ -78,6 +78,8 @@ fun SearchScreen(
     val favorites by viewModel.favorites.collectAsState()
     val focusManager = LocalFocusManager.current
 
+    val colors = com.ayashii.kuro.ui.theme.KuroAppTheme.colors
+
     val browseCategories = listOf(
         "Top Global Hits",
         "Lo-Fi Chill Beats",
@@ -92,14 +94,14 @@ fun SearchScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(PureBlack)
+            .background(colors.background)
             .padding(top = 16.dp)
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
             Text(
                 text = "Search",
                 style = Typography.headlineLarge,
-                color = PureWhite
+                color = colors.textPrimary
             )
 
             Spacer(modifier = Modifier.height(14.dp))
@@ -113,7 +115,7 @@ fun SearchScreen(
                 placeholder = {
                     Text(
                         text = "Songs, artists, genres…",
-                        color = MutedText,
+                        color = colors.textMuted,
                         style = Typography.bodyLarge
                     )
                 },
@@ -121,7 +123,7 @@ fun SearchScreen(
                     Icon(
                         imageVector = Icons.Default.Search,
                         contentDescription = "Search Icon",
-                        tint = MutedText
+                        tint = colors.textMuted
                     )
                 },
                 trailingIcon = {
@@ -133,7 +135,7 @@ fun SearchScreen(
                             Icon(
                                 imageVector = Icons.Default.Clear,
                                 contentDescription = "Clear",
-                                tint = MutedText
+                                tint = colors.textMuted
                             )
                         }
                     }
@@ -145,18 +147,18 @@ fun SearchScreen(
                     viewModel.search(searchQuery)
                 }),
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = DarkCard,
-                    unfocusedContainerColor = DarkCard,
+                    focusedContainerColor = colors.card,
+                    unfocusedContainerColor = colors.card,
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
-                    focusedTextColor = PureWhite,
-                    unfocusedTextColor = PureWhite,
-                    cursorColor = PureWhite
+                    focusedTextColor = colors.textPrimary,
+                    unfocusedTextColor = colors.textPrimary,
+                    cursorColor = colors.textPrimary
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .border(1.dp, DarkBorder, RoundedCornerShape(14.dp))
+                    .border(1.dp, colors.border, RoundedCornerShape(14.dp))
             )
         }
 
@@ -173,8 +175,8 @@ fun SearchScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
                     .clip(RoundedCornerShape(14.dp))
-                    .background(DarkCard)
-                    .border(1.dp, DarkBorder, RoundedCornerShape(14.dp))
+                    .background(colors.card)
+                    .border(1.dp, colors.border, RoundedCornerShape(14.dp))
             ) {
                 items(suggestions) { suggestion ->
                     Row(
@@ -196,22 +198,23 @@ fun SearchScreen(
                             Icon(
                                 imageVector = Icons.Default.Search,
                                 contentDescription = null,
-                                tint = SubtleGray,
+                                tint = colors.textMuted,
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
                                 text = suggestion,
                                 style = Typography.bodyLarge,
-                                color = PureWhite,
+                                color = colors.textPrimary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
+
                         Icon(
                             imageVector = Icons.Default.NorthWest,
-                            contentDescription = "Select Suggestion",
-                            tint = SubtleGray,
+                            contentDescription = "Select suggestion",
+                            tint = colors.textSecondary,
                             modifier = Modifier.size(16.dp)
                         )
                     }
@@ -225,7 +228,7 @@ fun SearchScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = PureWhite)
+                    CircularProgressIndicator(color = colors.textPrimary)
                 }
             } else if (searchResults.isEmpty() && searchQuery.isBlank()) {
                 // Browse Categories Grid (Apple Music / Spotify Style)
@@ -238,7 +241,7 @@ fun SearchScreen(
                         text = "Browse Categories",
                         style = Typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = PureWhite,
+                        color = colors.textPrimary,
                         modifier = Modifier.padding(vertical = 12.dp)
                     )
 
@@ -254,8 +257,8 @@ fun SearchScreen(
                                     .fillMaxWidth()
                                     .aspectRatio(1.8f)
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(DarkCard)
-                                    .border(1.dp, DarkBorder, RoundedCornerShape(12.dp))
+                                    .background(colors.card)
+                                    .border(1.dp, colors.border, RoundedCornerShape(12.dp))
                                     .clickable {
                                         searchQuery = category
                                         focusManager.clearFocus()
@@ -269,18 +272,20 @@ fun SearchScreen(
                                     style = Typography.titleMedium,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = PureWhite
+                                    color = colors.textPrimary
                                 )
                             }
                         }
                     }
                 }
             } else if (searchResults.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(text = "No tracks found", color = MutedText, style = Typography.bodyLarge)
+                if (searchQuery.isNotBlank()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(text = "No tracks found", color = colors.textMuted, style = Typography.bodyLarge)
+                    }
                 }
             } else {
                 LazyColumn(

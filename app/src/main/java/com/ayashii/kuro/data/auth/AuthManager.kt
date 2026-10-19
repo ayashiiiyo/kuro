@@ -88,7 +88,7 @@ class AuthManager private constructor(private val context: Context) {
     fun getSapisidHash(origin: String = "https://music.youtube.com"): String? {
         val cookie = getCookie() ?: return null
         val map = parseCookies(cookie)
-        val sapisid = map["SAPISID"] ?: map["__Secure-3PAPISID"] ?: map["__Secure-1PAPISID"] ?: return null
+        val sapisid = map["SAPISID"] ?: map["__Secure-3PAPISID"] ?: return null
         val time = System.currentTimeMillis() / 1000
         val sha1 = sha1Hex("$time $sapisid $origin")
         return "SAPISIDHASH ${time}_$sha1"

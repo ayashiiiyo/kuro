@@ -102,14 +102,13 @@ class SettingsManager private constructor(private val context: Context) {
             val cacheDirs = listOf(
                 File(context.cacheDir, "lyrics_cache_v3"),
                 File(context.cacheDir, "lyrics_cache_v2"),
-                File(context.cacheDir, "lyrics_cache"),
-                File(context.cacheDir, "http_cache"),
-                File(context.cacheDir, "image_cache")
+                File(context.cacheDir, "lyrics_cache")
             )
             cacheDirs.forEach { dir ->
                 if (dir.exists()) {
-                    dir.deleteRecursively()
-                    dir.mkdirs()
+                    dir.listFiles()?.forEach { file ->
+                        file.deleteRecursively()
+                    }
                 }
             }
             true

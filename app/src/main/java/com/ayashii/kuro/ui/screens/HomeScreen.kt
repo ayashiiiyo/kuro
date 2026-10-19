@@ -66,7 +66,9 @@ fun HomeScreen(
 ) {
     val homeSections by viewModel.homeSections.collectAsState()
     val trendingTracks by viewModel.trendingTracks.collectAsState()
-    val isLoading by viewModel.isLoadingTrending.collectAsState()
+    val searchResults by viewModel.searchResults.collectAsState()
+    val isSearching by viewModel.isSearching.collectAsState()
+    val isLoadingTrending by viewModel.isLoadingTrending.collectAsState()
     val isLoadingTrack by viewModel.isLoadingTrack.collectAsState()
     val currentTrack by viewModel.currentTrack.collectAsState()
     val currentAccount by viewModel.authState.collectAsState()
@@ -79,10 +81,12 @@ fun HomeScreen(
     var selectedGenre by remember { mutableStateOf("Trending") }
     val genres = listOf("Trending", "Top Global", "Pop", "Lo-Fi", "Hip-Hop", "R&B", "Rock", "Acoustic", "Electronic")
 
+    val colors = com.ayashii.kuro.ui.theme.KuroAppTheme.colors
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(PureBlack)
+            .background(colors.background)
             .padding(top = 16.dp)
     ) {
         Row(
@@ -96,13 +100,13 @@ fun HomeScreen(
                 Text(
                     text = "Kuro",
                     style = Typography.headlineLarge,
-                    color = PureWhite
+                    color = colors.textPrimary
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = "Discover & Stream without limits",
                     style = Typography.bodyMedium,
-                    color = MutedText
+                    color = colors.textMuted
                 )
             }
 
@@ -116,13 +120,13 @@ fun HomeScreen(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(CircleShape)
-                        .background(DarkCard)
-                        .border(1.dp, DarkBorder, CircleShape)
+                        .background(colors.card)
+                        .border(1.dp, colors.border, CircleShape)
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Settings,
                         contentDescription = "Pengaturan",
-                        tint = PureWhite,
+                        tint = colors.textPrimary,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -147,8 +151,8 @@ fun HomeScreen(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
-                        .background(if (isSelected) PureWhite else DarkCard)
-                        .border(1.dp, if (isSelected) PureWhite else DarkBorder, RoundedCornerShape(20.dp))
+                        .background(if (isSelected) colors.textPrimary else colors.card)
+                        .border(1.dp, if (isSelected) colors.textPrimary else colors.border, RoundedCornerShape(20.dp))
                         .clickable {
                             selectedGenre = genre
                             if (genre == "Trending") {
@@ -164,7 +168,7 @@ fun HomeScreen(
                         text = genre,
                         style = Typography.labelSmall,
                         fontSize = 12.sp,
-                        color = if (isSelected) PureBlack else PureWhite
+                        color = if (isSelected) colors.background else colors.textPrimary
                     )
                 }
             }
@@ -172,20 +176,56 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        if (isLoading) {
+        if (selectedGenre != "Trending") {
+            if (isSearching) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = colors.textPrimary)
+                }
+            } else if (searchResults.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Tidak ada lagu ditemukan untuk $selectedGenre",
+                        style = Typography.bodyMedium,
+                        color = colors.textMuted
+                    )
+                }
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(searchResults, key = { it.id }, contentType = { "track" }) { track ->
+                        val isFav = favorites.any { it.id == track.id }
+                        TrackItem(
+                            track = track.copy(isFavorite = isFav),
+                            isPlaying = currentTrack?.id == track.id,
+                            isLoading = isLoadingTrack && currentTrack?.id == track.id,
+                            onClick = { viewModel.playTrackFromSearch(track) },
+                            onFavoriteClick = { viewModel.toggleFavorite(track) }
+                        )
+                    }
+                    item {
+                        Spacer(modifier = Modifier.height(100.dp))
+                    }
+                }
+            }
+        } else if (isLoadingTrending) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator(color = PureWhite)
+                CircularProgressIndicator(color = colors.textPrimary)
             }
-        } else if (homeSections.isNotEmpty() && selectedGenre == "Trending") {
+        } else if (homeSections.isNotEmpty()) {
             // YouTube Music Style Shelves (Carousel Rows!)
             LazyColumn(
                 modifier = Modifier.fillMaxSize()
             ) {
-                homeSections.forEach { section ->
-                    item(key = "header_${section.title}") {
+                homeSections.forEachIndexed { sIndex, section ->
+                    item(key = "header_${sIndex}_${section.title}") {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -196,26 +236,26 @@ fun HomeScreen(
                                 style = Typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 20.sp,
-                                color = PureWhite
+                                color = colors.textPrimary
                             )
                             if (section.subtitle.isNotBlank()) {
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = section.subtitle,
                                     style = Typography.bodySmall,
-                                    color = MutedText
+                                    color = colors.textMuted
                                 )
                             }
                         }
                     }
 
-                    item(key = "shelf_${section.title}") {
+                    item(key = "shelf_${sIndex}_${section.title}") {
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(14.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            items(section.tracks, key = { "shelf_${section.title}_${it.id}" }) { track ->
+                            itemsIndexed(section.tracks, key = { tIndex, track -> "shelf_${sIndex}_${track.id}_$tIndex" }) { _, track ->
                                 YtmMusicCard(
                                     track = track,
                                     isPlaying = currentTrack?.id == track.id,
@@ -282,12 +322,14 @@ fun AccountTopButton(
     account: UserAccount?,
     onClick: () -> Unit
 ) {
+    val colors = com.ayashii.kuro.ui.theme.KuroAppTheme.colors
+
     Box(
         modifier = Modifier
             .size(40.dp)
             .clip(CircleShape)
-            .background(DarkCard)
-            .border(1.dp, if (account != null) PureWhite else DarkBorder, CircleShape)
+            .background(colors.card)
+            .border(1.dp, if (account != null) colors.textPrimary else colors.border, CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
@@ -304,13 +346,13 @@ fun AccountTopButton(
             Text(
                 text = account.name.take(1).uppercase(),
                 style = Typography.titleMedium,
-                color = PureWhite
+                color = colors.textPrimary
             )
         } else {
             Icon(
                 imageVector = Icons.Outlined.AccountCircle,
                 contentDescription = "Login YouTube",
-                tint = SubtleGray,
+                tint = colors.textSecondary,
                 modifier = Modifier.size(24.dp)
             )
         }
@@ -324,6 +366,8 @@ fun YtmMusicCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val colors = com.ayashii.kuro.ui.theme.KuroAppTheme.colors
+
     Column(
         modifier = modifier
             .width(144.dp)
@@ -333,7 +377,7 @@ fun YtmMusicCard(
             modifier = Modifier
                 .size(144.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(DarkCard)
+                .background(colors.card)
         ) {
             AsyncImage(
                 model = track.thumbnailUrl,
@@ -384,7 +428,7 @@ fun YtmMusicCard(
             text = track.title,
             style = Typography.bodyMedium,
             fontWeight = FontWeight.Bold,
-            color = PureWhite,
+            color = colors.textPrimary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -395,7 +439,7 @@ fun YtmMusicCard(
             text = track.artist,
             style = Typography.bodySmall,
             fontWeight = FontWeight.Normal,
-            color = SubtleGray,
+            color = colors.textSecondary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
