@@ -25,7 +25,11 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.outlined.BluetoothAudio
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.Headphones
+import androidx.compose.material.icons.outlined.QueueMusic
+import androidx.compose.material.icons.outlined.VolumeUp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -76,7 +80,9 @@ fun FullPlayerSheet(
 ) {
     val currentLyrics by viewModel.currentLyrics.collectAsState()
     val isLoadingLyrics by viewModel.isLoadingLyrics.collectAsState()
+    val audioDeviceState by viewModel.audioDeviceState.collectAsState()
     val scrollState = rememberScrollState()
+    var showAddToPlaylist by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
     val colors = com.ayashii.kuro.ui.theme.KuroAppTheme.colors
 
@@ -99,7 +105,7 @@ fun FullPlayerSheet(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Top Bar: Dismiss Chevron, Title & Favorite
+        // Top Bar: Dismiss Chevron, Title & Favorite / Playlist Action
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -124,13 +130,23 @@ fun FullPlayerSheet(
                 )
             }
 
-            IconButton(onClick = onFavoriteClick) {
-                Icon(
-                    imageVector = if (track.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
-                    contentDescription = "Favorite",
-                    tint = if (track.isFavorite) colors.textPrimary else colors.textMuted,
-                    modifier = Modifier.size(24.dp)
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onFavoriteClick) {
+                    Icon(
+                        imageVector = if (track.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
+                        contentDescription = "Favorite",
+                        tint = if (track.isFavorite) colors.textPrimary else colors.textMuted,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                IconButton(onClick = { showAddToPlaylist = true }) {
+                    Icon(
+                        imageVector = Icons.Outlined.QueueMusic,
+                        contentDescription = "Add to playlist",
+                        tint = colors.textPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
         }
 
@@ -273,6 +289,38 @@ fun FullPlayerSheet(
             }
         }
 
+        Spacer(modifier = Modifier.height(18.dp))
+
+        // Spotify-Style Audio Output Device Indicator ("Listening on...")
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(20.dp))
+                .background(colors.card)
+                .border(1.dp, colors.border, RoundedCornerShape(20.dp))
+                .clickable { viewModel.openAudioOutputSettings() }
+                .padding(horizontal = 14.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            val icon = when (audioDeviceState.iconType) {
+                com.ayashii.kuro.data.audio.OutputType.WIRED -> Icons.Outlined.Headphones
+                com.ayashii.kuro.data.audio.OutputType.BLUETOOTH -> Icons.Outlined.BluetoothAudio
+                com.ayashii.kuro.data.audio.OutputType.SPEAKER -> Icons.Outlined.VolumeUp
+            }
+            Icon(
+                imageVector = icon,
+                contentDescription = "Audio Device",
+                tint = colors.textPrimary,
+                modifier = Modifier.size(16.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = audioDeviceState.title,
+                style = Typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = colors.textPrimary
+            )
+        }
+
         // Spotify-Style Lyrics Card Below Playback Controls (Only when valid lyrics exist!)
         val hasLyrics = currentLyrics != null && currentLyrics!!.lines.isNotEmpty() &&
                 currentLyrics!!.lines.none { it.text.trim().equals("null", ignoreCase = true) }
@@ -292,6 +340,14 @@ fun FullPlayerSheet(
         } else {
             Spacer(modifier = Modifier.height(36.dp))
         }
+    }
+
+    if (showAddToPlaylist) {
+        AddToPlaylistDialog(
+            track = track,
+            viewModel = viewModel,
+            onDismiss = { showAddToPlaylist = false }
+        )
     }
 }
 

@@ -55,6 +55,7 @@ fun TrackItem(
     isLoading: Boolean = false,
     onClick: () -> Unit,
     onFavoriteClick: () -> Unit,
+    onMoreClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -154,6 +155,27 @@ fun TrackItem(
                 tint = if (track.isFavorite) PureWhite else MutedText,
                 modifier = Modifier.size(22.dp)
             )
+        }
+
+        if (onMoreClick != null) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = androidx.compose.material.ripple.rememberRipple(bounded = false, radius = 18.dp),
+                        onClick = onMoreClick
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = androidx.compose.material.icons.Icons.Default.MoreVert,
+                    contentDescription = "More Options",
+                    tint = MutedText,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
     }
 }

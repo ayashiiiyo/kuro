@@ -1,5 +1,7 @@
 package com.ayashii.kuro.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -48,8 +50,9 @@ import com.ayashii.kuro.R
 import com.ayashii.kuro.data.auth.UserAccount
 import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.data.model.HomeSection
-import com.ayashii.kuro.ui.components.AccountDialog
+import com.ayashii.kuro.ui.components.AddToPlaylistDialog
 import com.ayashii.kuro.ui.components.LoginWebViewDialog
+import com.ayashii.kuro.ui.components.ProfileMenuSheet
 import com.ayashii.kuro.ui.components.TrackItem
 import com.ayashii.kuro.ui.theme.DarkBorder
 import com.ayashii.kuro.ui.theme.DarkCard
@@ -75,12 +78,13 @@ fun HomeScreen(
     val currentAccount by viewModel.authState.collectAsState()
     val favorites by viewModel.favorites.collectAsState()
 
-    var showAccountDialog by remember { mutableStateOf(false) }
+    var showProfileMenu by remember { mutableStateOf(false) }
     var showLoginWebView by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
+    var trackForPlaylist by remember { mutableStateOf<Track?>(null) }
 
-    var selectedGenre by remember { mutableStateOf("Trending") }
-    val genres = listOf("Trending", "Top Global", "Pop", "Lo-Fi", "Hip-Hop", "R&B", "Rock", "Acoustic", "Electronic")
+    var selectedGenre by remember { mutableStateOf("Semua") }
+    val genres = listOf("Semua", "Pop", "Lo-Fi", "Rock", "Acoustic", "Anime", "Hip-Hop", "R&B", "Top Global")
 
     val colors = com.ayashii.kuro.ui.theme.KuroAppTheme.colors
 
@@ -90,94 +94,57 @@ fun HomeScreen(
             .background(colors.background)
             .padding(top = 16.dp)
     ) {
+        // Spotify-Style Top Header: Avatar on the LEFT, and Filter Chips right beside it!
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .padding(horizontal = 16.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
-                Text(
-                    text = "Kuro",
-                    style = Typography.headlineLarge,
-                    color = colors.textPrimary
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "Discover & Stream without limits",
-                    style = Typography.bodyMedium,
-                    color = colors.textMuted
-                )
-            }
+            AccountTopButton(
+                account = currentAccount,
+                onClick = { showProfileMenu = true }
+            )
 
-            // Top Action Buttons: Settings & Account Avatar
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // Scrollable Spotify-Style Filter Chips (Pills)
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                IconButton(
-                    onClick = { showSettingsDialog = true },
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(colors.card)
-                        .border(1.dp, colors.border, CircleShape)
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Settings,
-                        contentDescription = "Pengaturan",
-                        tint = colors.textPrimary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                AccountTopButton(
-                    account = currentAccount,
-                    onClick = { showAccountDialog = true }
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // Genre Filter Chips
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            items(genres) { genre ->
-                val isSelected = selectedGenre == genre
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(if (isSelected) colors.textPrimary else colors.card)
-                        .border(1.dp, if (isSelected) colors.textPrimary else colors.border, RoundedCornerShape(20.dp))
-                        .clickable {
-                            selectedGenre = genre
-                            if (genre == "Trending") {
-                                viewModel.loadTrending()
-                            } else {
-                                viewModel.search("$genre music hits")
+                items(genres) { genre ->
+                    val isSelected = selectedGenre == genre
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(if (isSelected) colors.textPrimary else colors.card)
+                            .border(1.dp, if (isSelected) colors.textPrimary else colors.border, RoundedCornerShape(20.dp))
+                            .clickable {
+                                selectedGenre = genre
+                                if (genre == "Semua") {
+                                    viewModel.loadTrending()
+                                } else {
+                                    viewModel.search("$genre music hits")
+                                }
                             }
-                        }
-                        .padding(horizontal = 14.dp, vertical = 7.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = genre,
-                        style = Typography.labelSmall,
-                        fontSize = 12.sp,
-                        color = if (isSelected) colors.background else colors.textPrimary
-                    )
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = genre,
+                            style = Typography.labelMedium.copy(fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium),
+                            fontSize = 13.sp,
+                            color = if (isSelected) colors.background else colors.textPrimary
+                        )
+                    }
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        if (selectedGenre != "Trending") {
+        if (selectedGenre != "Semua") {
             if (isSearching) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -205,7 +172,8 @@ fun HomeScreen(
                             isPlaying = currentTrack?.id == track.id,
                             isLoading = isLoadingTrack && currentTrack?.id == track.id,
                             onClick = { viewModel.playTrackFromSearch(track) },
-                            onFavoriteClick = { viewModel.toggleFavorite(track) }
+                            onFavoriteClick = { viewModel.toggleFavorite(track) },
+                            onMoreClick = { trackForPlaylist = track }
                         )
                     }
                     item {
@@ -260,7 +228,8 @@ fun HomeScreen(
                                 YtmMusicCard(
                                     track = track,
                                     isPlaying = currentTrack?.id == track.id,
-                                    onClick = { viewModel.playTrack(track, section.tracks) }
+                                    onClick = { viewModel.playTrack(track, section.tracks) },
+                                    onLongClick = { trackForPlaylist = track }
                                 )
                             }
                         }
@@ -283,7 +252,8 @@ fun HomeScreen(
                         isPlaying = currentTrack?.id == track.id,
                         isLoading = isLoadingTrack && currentTrack?.id == track.id,
                         onClick = { viewModel.playTrack(track, trendingTracks) },
-                        onFavoriteClick = { viewModel.toggleFavorite(track) }
+                        onFavoriteClick = { viewModel.toggleFavorite(track) },
+                        onMoreClick = { trackForPlaylist = track }
                     )
                 }
                 item {
@@ -293,27 +263,35 @@ fun HomeScreen(
         }
     }
 
-    if (showAccountDialog) {
-        AccountDialog(
+    if (showProfileMenu) {
+        ProfileMenuSheet(
             account = currentAccount,
-            onDismiss = { showAccountDialog = false },
+            viewModel = viewModel,
             onLoginClick = { showLoginWebView = true },
             onLogoutClick = { viewModel.logout() },
-            onSyncLikedClick = { viewModel.syncLikedSongs() },
-            onSettingsClick = { showSettingsDialog = true }
+            onOpenSettingsClick = { showSettingsDialog = true },
+            onDismiss = { showProfileMenu = false }
         )
     }
 
     if (showLoginWebView) {
         LoginWebViewDialog(
             onDismiss = { showLoginWebView = false },
-            onLoginSuccess = { showAccountDialog = true }
+            onLoginSuccess = { showProfileMenu = true }
         )
     }
 
     if (showSettingsDialog) {
         com.ayashii.kuro.ui.components.SettingsDialog(
             onDismiss = { showSettingsDialog = false }
+        )
+    }
+
+    if (trackForPlaylist != null) {
+        AddToPlaylistDialog(
+            track = trackForPlaylist!!,
+            viewModel = viewModel,
+            onDismiss = { trackForPlaylist = null }
         )
     }
 }
@@ -360,11 +338,13 @@ fun AccountTopButton(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun YtmMusicCard(
     track: Track,
     isPlaying: Boolean,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val colors = com.ayashii.kuro.ui.theme.KuroAppTheme.colors
@@ -372,7 +352,10 @@ fun YtmMusicCard(
     Column(
         modifier = modifier
             .width(144.dp)
-            .clickable(onClick = onClick)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
     ) {
         Box(
             modifier = Modifier

@@ -70,6 +70,7 @@ fun SearchScreen(
     modifier: Modifier = Modifier
 ) {
     var searchQuery by remember { mutableStateOf("") }
+    var trackForPlaylist by remember { mutableStateOf<com.ayashii.kuro.data.model.Track?>(null) }
     val searchResults by viewModel.searchResults.collectAsState()
     val suggestions by viewModel.suggestions.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
@@ -298,7 +299,8 @@ fun SearchScreen(
                             isPlaying = currentTrack?.id == track.id,
                             isLoading = isLoadingTrack && currentTrack?.id == track.id,
                             onClick = { viewModel.playTrackFromSearch(track) },
-                            onFavoriteClick = { viewModel.toggleFavorite(track) }
+                            onFavoriteClick = { viewModel.toggleFavorite(track) },
+                            onMoreClick = { trackForPlaylist = track }
                         )
                     }
                     item {
@@ -307,5 +309,13 @@ fun SearchScreen(
                 }
             }
         }
+    }
+
+    if (trackForPlaylist != null) {
+        com.ayashii.kuro.ui.components.AddToPlaylistDialog(
+            track = trackForPlaylist!!,
+            viewModel = viewModel,
+            onDismiss = { trackForPlaylist = null }
+        )
     }
 }

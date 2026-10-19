@@ -135,6 +135,30 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     val themeMode = settingsManager.themeMode
     val audioQuality = settingsManager.audioQuality
 
+    val audioOutputManager = com.ayashii.kuro.data.audio.AudioOutputManager(getApplication())
+    val audioDeviceState = audioOutputManager.deviceState
+    fun openAudioOutputSettings() = audioOutputManager.openAudioSettings()
+
+    val tasteManager = com.ayashii.kuro.data.recommendation.TasteManager.getInstance(getApplication())
+    val recentlyPlayed = tasteManager.recentlyPlayed
+    val onRepeatTracks = tasteManager.onRepeatTracks
+
+    val playlistManager = com.ayashii.kuro.data.playlist.PlaylistManager.getInstance(getApplication())
+    val playlists = playlistManager.playlists
+
+    fun createPlaylist(name: String) = playlistManager.createPlaylist(name)
+    fun deletePlaylist(id: String) = playlistManager.deletePlaylist(id)
+    fun renamePlaylist(id: String, name: String) = playlistManager.renamePlaylist(id, name)
+    fun addTrackToPlaylist(id: String, track: Track) = playlistManager.addTrackToPlaylist(id, track)
+    fun removeTrackFromPlaylist(id: String, trackId: String) = playlistManager.removeTrackFromPlaylist(id, trackId)
+
+    fun playPlaylist(playlist: com.ayashii.kuro.data.playlist.Playlist, startTrack: Track? = null, shuffle: Boolean = false) {
+        if (playlist.tracks.isEmpty()) return
+        val list = if (shuffle) playlist.tracks.shuffled() else playlist.tracks
+        val initialTrack = startTrack ?: list.first()
+        playTrack(initialTrack, list)
+    }
+
     val lyricsRepository = com.ayashii.kuro.data.lyrics.LyricsRepository(getApplication())
 
     private val _currentLyrics = MutableStateFlow<com.ayashii.kuro.data.lyrics.LyricsData?>(null)
@@ -152,6 +176,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private var searchJob: Job? = null
     private var pendingTrackToPlay: Track? = null
     private var hasRetriedFallback = false
+    private var trackStartTime = 0L
 
     private val mediaActionReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
@@ -239,6 +264,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                             }
                             Player.STATE_ENDED -> {
                                 _isLoadingTrack.value = false
+                                _currentTrack.value?.let { tasteManager.recordTrackPlayed(it) }
                                 skipNext()
                             }
                             Player.STATE_IDLE -> {
@@ -333,10 +359,18 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     fun loadTrending() {
         viewModelScope.launch {
             _isLoadingTrending.value = true
-            val shelves = repository.getHomeShelves()
-            _homeSections.value = shelves
-            val tracks = if (shelves.isNotEmpty()) {
-                shelves.flatMap { it.tracks }.distinctBy { it.id }
+            val rawShelves = repository.getHomeShelves().toMutableList()
+            val onRepeat = tasteManager.onRepeatTracks.value
+            if (onRepeat.isNotEmpty()) {
+                rawShelves.add(0, com.ayashii.kuro.data.model.HomeSection(
+                    title = "Lagi Sering Kamu Putar",
+                    subtitle = "Berdasarkan selera musikmu",
+                    tracks = onRepeat
+                ))
+            }
+            _homeSections.value = rawShelves
+            val tracks = if (rawShelves.isNotEmpty()) {
+                rawShelves.flatMap { it.tracks }.distinctBy { it.id }
             } else {
                 repository.getTrendingTracks()
             }
@@ -466,6 +500,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
                 // Resolve direct audio stream URL via NewPipeExtractor with user chosen Audio Quality!
             hasRetriedFallback = false
+            trackStartTime = System.currentTimeMillis()
             val resolvedStream = repository.getAudioStream(track.url, settingsManager.audioQuality.value)
             if (resolvedStream != null) {
                 val updatedTrack = track.copy(streamUrl = resolvedStream.url, mimeType = resolvedStream.mimeType)
@@ -546,6 +581,15 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun skipNext() {
         if (playlistQueue.isEmpty()) return
+        val current = _currentTrack.value
+        if (current != null && trackStartTime > 0L) {
+            val playedSec = (System.currentTimeMillis() - trackStartTime) / 1000L
+            if (playedSec in 1..14) {
+                tasteManager.recordTrackSkipped(current)
+            } else if (playedSec >= 25) {
+                tasteManager.recordTrackPlayed(current)
+            }
+        }
         if (_repeatMode.value == Player.REPEAT_MODE_ONE) {
             _currentTrack.value?.let { playTrack(it) }
             return
@@ -584,6 +628,13 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun skipPrevious() {
         if (playlistQueue.isEmpty()) return
+        val current = _currentTrack.value
+        if (current != null && trackStartTime > 0L) {
+            val playedSec = (System.currentTimeMillis() - trackStartTime) / 1000L
+            if (playedSec >= 25) {
+                tasteManager.recordTrackPlayed(current)
+            }
+        }
         val prevIndex = if (currentIndex - 1 >= 0) {
             currentIndex - 1
         } else {
@@ -605,6 +656,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
         _repeatMode.value = next
         mediaController?.repeatMode = if (next == Player.REPEAT_MODE_ONE) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+        if (next == Player.REPEAT_MODE_ONE) {
+            _currentTrack.value?.let { tasteManager.recordTrackRepeated(it) }
+        }
     }
 
     fun toggleFavorite(track: Track) {
@@ -614,6 +668,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             currentFavs.removeAll { it.id == track.id }
         } else {
             currentFavs.add(track.copy(isFavorite = true))
+            tasteManager.recordTrackLiked(track)
         }
         _favorites.value = currentFavs
         saveStoredFavorites(currentFavs)
