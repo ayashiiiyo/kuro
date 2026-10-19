@@ -76,7 +76,6 @@ fun FullPlayerSheet(
 ) {
     val currentLyrics by viewModel.currentLyrics.collectAsState()
     val isLoadingLyrics by viewModel.isLoadingLyrics.collectAsState()
-    val currentPositionMs by viewModel.playbackPosition.collectAsState()
     val scrollState = rememberScrollState()
 
     Column(
@@ -278,7 +277,7 @@ fun FullPlayerSheet(
         SyncedLyricsView(
             lyricsData = currentLyrics,
             isLoading = isLoadingLyrics,
-            currentPositionMs = currentPositionMs,
+            playbackPositionFlow = viewModel.playbackPosition,
             onSeekTo = { viewModel.seekTo(it) },
             modifier = Modifier
                 .fillMaxWidth()

@@ -196,9 +196,31 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                             }
                             Player.STATE_READY -> {
                                 _isLoadingTrack.value = false
+                                isSeeking = false
                                 mediaController?.let { controller ->
                                     val d = controller.duration
-                                    if (d > 0) _duration.value = d
+                                    if (d > 0) {
+                                        _duration.value = d
+                                        val currentLrc = _currentLyrics.value
+                                        val currentTrk = _currentTrack.value
+                                        if (currentTrk != null && (currentLrc == null || !currentLrc.isSynced)) {
+                                            val realDurSec = d / 1000L
+                                            if (realDurSec > 0 && realDurSec != currentTrk.durationSeconds) {
+                                                lyricsJob?.cancel()
+                                                lyricsJob = viewModelScope.launch(Dispatchers.IO) {
+                                                    val refreshed = lyricsRepository.getLyrics(
+                                                        trackId = currentTrk.id,
+                                                        title = currentTrk.title,
+                                                        artist = currentTrk.artist,
+                                                        durationSeconds = realDurSec
+                                                    )
+                                                    if (refreshed != null && refreshed.isSynced) {
+                                                        _currentLyrics.value = refreshed
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                             Player.STATE_ENDED -> {

@@ -13,9 +13,14 @@ data class LyricsData(
     val lines: List<LyricLine>,
     val isSynced: Boolean = true
 ) {
-    fun getCurrentLineIndex(positionMs: Long, offsetMs: Long = 1200L): Int {
+    companion object {
+        // 250ms built-in compensation for AudioTrack DAC buffer and visual psychoacoustic lead time
+        const val AUTO_SYNC_COMPENSATION_MS = 250L
+    }
+
+    fun getCurrentLineIndex(positionMs: Long): Int {
         if (lines.isEmpty()) return -1
-        val effectivePos = (positionMs + offsetMs).coerceAtLeast(0L)
+        val effectivePos = (positionMs + AUTO_SYNC_COMPENSATION_MS).coerceAtLeast(0L)
         var left = 0
         var right = lines.size - 1
         var result = -1
