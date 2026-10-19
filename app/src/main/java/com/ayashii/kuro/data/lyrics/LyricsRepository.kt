@@ -319,15 +319,29 @@ class LyricsRepository(private val context: Context) {
         return null
     }
 
+    suspend fun translateLyrics(lyrics: LyricsData): LyricsData = withContext(Dispatchers.IO) {
+        if (lyrics.lines.isEmpty()) return@withContext lyrics
+        val translatedLines = translateLinesToIndonesian(lyrics.lines)
+        val result = lyrics.copy(lines = translatedLines)
+        synchronized(memCache) { memCache.put(lyrics.trackId, result) }
+        try {
+            val diskFile = File(diskCacheDir, "${lyrics.trackId}.json")
+            diskFile.writeText(serializeLyricsJson(result))
+        } catch (_: Exception) {}
+        result
+    }
+
     private fun translateLinesToIndonesian(lines: List<LyricLine>): List<LyricLine> {
         if (lines.isEmpty()) return lines
         try {
             val textToTranslate = lines.joinToString("\n") { it.text }
-            val url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=id&dt=t&q=" + encode(textToTranslate)
+            val formBody = ("client=gtx&sl=auto&tl=id&dt=t&q=" + encode(textToTranslate))
+                .toRequestBody("application/x-www-form-urlencoded".toMediaType())
 
             val req = Request.Builder()
-                .url(url)
-                .header("User-Agent", "Mozilla/5.0")
+                .url("https://translate.googleapis.com/translate_a/single")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                .post(formBody)
                 .build()
 
             val resp = httpClient.newCall(req).execute()

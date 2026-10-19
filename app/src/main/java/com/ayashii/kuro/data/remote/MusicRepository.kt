@@ -553,7 +553,12 @@ class MusicRepository {
                 )
                 .firstOrNull() ?: audioStreams.firstOrNull()
 
-            val resolved = bestAudio?.content
+            val resolved = bestAudio?.content ?: run {
+                // Fallback to muxed video/audio stream if separate audio stream is unavailable
+                streamInfo.videoStreams
+                    .filter { it.content != null && it.content.startsWith("http") }
+                    .firstOrNull()?.content
+            }
             if (resolved != null) {
                 synchronized(streamUrlCache) {
                     streamUrlCache.put(url, Pair(resolved, now))

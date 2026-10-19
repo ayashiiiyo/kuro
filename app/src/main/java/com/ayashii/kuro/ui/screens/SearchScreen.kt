@@ -75,6 +75,7 @@ fun SearchScreen(
     val isSearching by viewModel.isSearching.collectAsState()
     val isLoadingTrack by viewModel.isLoadingTrack.collectAsState()
     val currentTrack by viewModel.currentTrack.collectAsState()
+    val favorites by viewModel.favorites.collectAsState()
     val focusManager = LocalFocusManager.current
 
     val browseCategories = listOf(
@@ -286,8 +287,9 @@ fun SearchScreen(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(searchResults, key = { it.id }, contentType = { "track" }) { track ->
+                        val isFav = favorites.any { it.id == track.id }
                         TrackItem(
-                            track = track,
+                            track = track.copy(isFavorite = isFav),
                             isPlaying = currentTrack?.id == track.id,
                             isLoading = isLoadingTrack && currentTrack?.id == track.id,
                             onClick = { viewModel.playTrack(track, searchResults) },

@@ -68,6 +68,7 @@ fun HomeScreen(
     val isLoadingTrack by viewModel.isLoadingTrack.collectAsState()
     val currentTrack by viewModel.currentTrack.collectAsState()
     val currentAccount by viewModel.authState.collectAsState()
+    val favorites by viewModel.favorites.collectAsState()
 
     var showAccountDialog by remember { mutableStateOf(false) }
     var showLoginWebView by remember { mutableStateOf(false) }
@@ -211,8 +212,9 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(trendingTracks, key = { it.id }, contentType = { "track" }) { track ->
+                    val isFav = favorites.any { it.id == track.id }
                     TrackItem(
-                        track = track,
+                        track = track.copy(isFavorite = isFav),
                         isPlaying = currentTrack?.id == track.id,
                         isLoading = isLoadingTrack && currentTrack?.id == track.id,
                         onClick = { viewModel.playTrack(track, trendingTracks) },

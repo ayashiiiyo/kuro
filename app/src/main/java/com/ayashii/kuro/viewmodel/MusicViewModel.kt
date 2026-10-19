@@ -139,7 +139,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val _isLoadingLyrics = MutableStateFlow(false)
     val isLoadingLyrics = _isLoadingLyrics.asStateFlow()
 
-    private val playlistQueue = mutableListOf<Track>()
+    private val playlistQueue = java.util.Collections.synchronizedList(mutableListOf<Track>())
     private var currentIndex = -1
     private var progressJob: Job? = null
     private var suggestJob: Job? = null
@@ -370,19 +370,33 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-                // Fetch Synced Lyrics + Translations in background
+                // Fetch Synced Lyrics + Translations in background (Non-blocking Fast Initial Emit!)
                 lyricsJob?.cancel()
                 lyricsJob = viewModelScope.launch(Dispatchers.IO) {
-                _isLoadingLyrics.value = true
-                _currentLyrics.value = null
-                val data = lyricsRepository.getLyrics(
-                    trackId = track.id,
-                    title = track.title,
-                    artist = track.artist,
-                    durationSeconds = track.durationSeconds
-                )
-                _currentLyrics.value = data
-                _isLoadingLyrics.value = false
+                    _isLoadingLyrics.value = true
+                    _currentLyrics.value = null
+                    try {
+                        val data = lyricsRepository.getLyrics(
+                            trackId = track.id,
+                            title = track.title,
+                            artist = track.artist,
+                            durationSeconds = track.durationSeconds,
+                            autoTranslate = false
+                        )
+                        _currentLyrics.value = data
+                        _isLoadingLyrics.value = false
+
+                        // If lyrics loaded, fetch translation asynchronously without blocking UI!
+                        if (data != null && data.lines.isNotEmpty()) {
+                            val translated = lyricsRepository.translateLyrics(data)
+                            if (_currentTrack.value?.id == track.id) {
+                                _currentLyrics.value = translated
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("KuroVM", "Lyrics load error: ${e.message}")
+                        _isLoadingLyrics.value = false
+                    }
                 }
 
                 // Resolve direct audio stream URL via NewPipeExtractor
@@ -420,6 +434,10 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 _isLoadingTrack.value = false
                 Log.e("KuroMusicViewModel", "Failed to resolve stream URL for ${track.title}")
+                // Auto skip to next available song if this track cannot be resolved!
+                if (playlistQueue.isNotEmpty() && currentIndex + 1 < playlistQueue.size) {
+                    skipNext()
+                }
             }
         }
     }
