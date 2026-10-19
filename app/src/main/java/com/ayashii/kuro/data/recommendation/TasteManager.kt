@@ -205,6 +205,49 @@ class TasteManager private constructor(context: Context) {
         return artistCounts.toList().sortedByDescending { it.second }.take(limit)
     }
 
+    fun getUniqueArtistsCount(): Int {
+        val trackDataRaw = prefs.getString(KEY_TRACK_DATA, "{}") ?: "{}"
+        val tJson = JSONObject(trackDataRaw)
+        val artists = mutableSetOf<String>()
+        val keys = tJson.keys()
+        while (keys.hasNext()) {
+            val id = keys.next()
+            val trackObj = tJson.optJSONObject(id)
+            val artist = trackObj?.optString("artist")?.trim()
+            if (!artist.isNullOrBlank()) {
+                artists.add(artist)
+            }
+        }
+        return artists.size
+    }
+
+    fun getTopTracks(limit: Int = 5): List<Pair<Track, Int>> {
+        val trackDataRaw = prefs.getString(KEY_TRACK_DATA, "{}") ?: "{}"
+        val playsRaw = prefs.getString(KEY_PLAYS, "{}") ?: "{}"
+        val tJson = JSONObject(trackDataRaw)
+        val pJson = JSONObject(playsRaw)
+
+        val list = mutableListOf<Pair<Track, Int>>()
+        val keys = tJson.keys()
+        while (keys.hasNext()) {
+            val id = keys.next()
+            val trackObj = tJson.optJSONObject(id)
+            val count = pJson.optInt(id, 0)
+            if (trackObj != null && count > 0) {
+                val track = Track(
+                    id = trackObj.optString("id"),
+                    url = trackObj.optString("url"),
+                    title = trackObj.optString("title"),
+                    artist = trackObj.optString("artist"),
+                    thumbnailUrl = trackObj.optString("thumbnailUrl"),
+                    durationSeconds = trackObj.optLong("durationSeconds", 0L)
+                )
+                list.add(Pair(track, count))
+            }
+        }
+        return list.sortedByDescending { it.second }.take(limit)
+    }
+
     companion object {
         private const val PREF_NAME = "kuro_taste_profile"
         private const val KEY_SCORES = "scores"

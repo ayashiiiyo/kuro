@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -42,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -266,48 +268,33 @@ fun ProfileMenuSheet(
     // Listening Stats Dialog
     if (showStatsDialog) {
         val totalPlays = viewModel.tasteManager.getTotalPlays()
+        val uniqueArtists = viewModel.tasteManager.getUniqueArtistsCount()
         val topArtists = viewModel.tasteManager.getTopArtists(5)
 
         AlertDialog(
             onDismissRequest = { showStatsDialog = false },
             title = {
-                Text(
-                    text = "📊 Statistik Selera Musik",
-                    style = Typography.titleLarge,
-                    color = colors.textPrimary
-                )
-            },
-            text = {
-                Column(modifier = Modifier.fillMaxWidth()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Outlined.BarChart,
+                        contentDescription = null,
+                        tint = colors.textPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "Total lagu didengarkan: $totalPlays kali",
-                        style = Typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                        text = "Statistik Mendengarkan",
+                        style = Typography.titleLarge,
                         color = colors.textPrimary
                     )
-                    Spacer(modifier = Modifier.height(14.dp))
-                    Text(
-                        text = "Artis Paling Sering Kamu Dengar:",
-                        style = Typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                        color = colors.textMuted
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    if (topArtists.isEmpty()) {
-                        Text(
-                            text = "Belum cukup data. Putar lagu favoritmu sekarang!",
-                            style = Typography.bodyMedium,
-                            color = colors.textMuted
-                        )
-                    } else {
-                        topArtists.forEachIndexed { idx, (artist, count) ->
-                            Text(
-                                text = "#${idx + 1} $artist (${count}x)",
-                                style = Typography.bodyMedium,
-                                color = colors.textPrimary,
-                                modifier = Modifier.padding(vertical = 2.dp)
-                            )
-                        }
-                    }
                 }
+            },
+            text = {
+                ListeningStatsDiagram(
+                    totalPlays = totalPlays,
+                    uniqueArtists = uniqueArtists,
+                    topArtists = topArtists
+                )
             },
             confirmButton = {
                 TextButton(onClick = { showStatsDialog = false }) {
@@ -323,11 +310,20 @@ fun ProfileMenuSheet(
         AlertDialog(
             onDismissRequest = { showRecentsDialog = false },
             title = {
-                Text(
-                    text = "🕒 Terakhir Diputar",
-                    style = Typography.titleLarge,
-                    color = colors.textPrimary
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Outlined.History,
+                        contentDescription = null,
+                        tint = colors.textPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Terakhir Diputar",
+                        style = Typography.titleLarge,
+                        color = colors.textPrimary
+                    )
+                }
             },
             text = {
                 if (recentlyPlayed.isEmpty()) {
@@ -440,6 +436,229 @@ private fun DrawerMenuItem(
                 style = Typography.bodySmall,
                 color = colors.textMuted
             )
+        }
+    }
+}
+
+@Composable
+fun ListeningStatsDiagram(
+    totalPlays: Int,
+    uniqueArtists: Int,
+    topArtists: List<Pair<String, Int>>,
+    modifier: Modifier = Modifier
+) {
+    val colors = KuroAppTheme.colors
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
+    ) {
+        // Summary Metric Tiles
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Tile 1: Total Putar
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(colors.card)
+                    .border(1.dp, colors.border, RoundedCornerShape(12.dp))
+                    .padding(12.dp)
+            ) {
+                Text(
+                    text = "Total Putar",
+                    style = Typography.bodySmall,
+                    color = colors.textMuted
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "$totalPlays kali",
+                    style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = colors.textPrimary
+                )
+            }
+
+            // Tile 2: Artis Didengar
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(colors.card)
+                    .border(1.dp, colors.border, RoundedCornerShape(12.dp))
+                    .padding(12.dp)
+            ) {
+                Text(
+                    text = "Artis Didengar",
+                    style = Typography.bodySmall,
+                    color = colors.textMuted
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "$uniqueArtists artis",
+                    style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = colors.textPrimary
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(18.dp))
+
+        if (topArtists.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Belum cukup data. Putar lebih banyak lagu untuk melihat diagram!",
+                    style = Typography.bodyMedium,
+                    color = colors.textMuted,
+                    textAlign = TextAlign.Center
+                )
+            }
+        } else {
+            val maxCount = topArtists.maxOf { it.second }.coerceAtLeast(1)
+
+            // Visual Column Bar Chart
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(colors.card)
+                    .border(1.dp, colors.border, RoundedCornerShape(14.dp))
+                    .padding(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "DIAGRAM FREKUENSI ARTIS",
+                        style = Typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
+                        color = colors.textMuted
+                    )
+                    Text(
+                        text = "Top ${topArtists.size}",
+                        style = Typography.labelSmall.copy(fontSize = 10.sp),
+                        color = colors.textSecondary
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // Vertical Columns
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(130.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    topArtists.forEachIndexed { index, (_, count) ->
+                        val barHeightFraction = (count.toFloat() / maxCount.toFloat()).coerceIn(0.12f, 1f)
+
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Bottom,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(130.dp)
+                        ) {
+                            Text(
+                                text = "${count}x",
+                                style = Typography.labelSmall.copy(fontSize = 10.sp, fontWeight = FontWeight.SemiBold),
+                                color = colors.textPrimary
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            // Bar Track Container
+                            Box(
+                                modifier = Modifier
+                                    .width(22.dp)
+                                    .height(86.dp)
+                                    .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
+                                    .background(colors.border),
+                                contentAlignment = Alignment.BottomCenter
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .fillMaxHeight(barHeightFraction)
+                                        .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp))
+                                        .background(colors.accent)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "#${index + 1}",
+                                style = Typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                                color = colors.textPrimary
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Detailed Horizontal Progress Distribution
+            Text(
+                text = "Peringkat Artis Teratas",
+                style = Typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                color = colors.textPrimary,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            topArtists.forEachIndexed { index, (artist, count) ->
+                val pct = if (totalPlays > 0) (count * 100 / totalPlays) else 0
+                val progressFraction = (count.toFloat() / maxCount.toFloat()).coerceIn(0.05f, 1f)
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "#${index + 1}  $artist",
+                            style = Typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                            color = colors.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = "${count}x ($pct%)",
+                            style = Typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                            color = colors.textMuted
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(colors.border)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(progressFraction)
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(colors.accent)
+                        )
+                    }
+                }
+            }
         }
     }
 }

@@ -154,8 +154,10 @@ fun LoginWebViewDialog(
                                 setSupportZoom(true)
                                 builtInZoomControls = true
                                 displayZoomControls = false
-                                // Clean standard modern Chrome mobile user agent (prevents 'disallowed_useragent' Google error)
-                                userAgentString = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
+                                // Clean standard modern Chrome mobile user agent with real device model (prevents 'disallowed_useragent' Google error)
+                                val deviceModel = android.os.Build.MODEL.ifBlank { "Android Device" }
+                                val osVersion = android.os.Build.VERSION.RELEASE.ifBlank { "14" }
+                                userAgentString = "Mozilla/5.0 (Linux; Android $osVersion; $deviceModel) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
                             }
 
                             addJavascriptInterface(object {
