@@ -3,9 +3,6 @@ name: Build and Release Kuro APK
 on:
   push:
     branches: [ "main" ]
-    paths:
-      - "app/build.gradle.kts"
-      - ".github/workflows/build-apk.yml"
   workflow_dispatch:
 
 concurrency:
@@ -71,17 +68,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: v${{ steps.apk.outputs.version }}
+          VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
+          cat > RELEASE_NOTES.md <<EOF
+          ## Kuro v${VERSION_NAME} — Home & Playback Polish
+
+          - Updated the Home screen with personal music shelves and featured picks.
+          - Added smoother track transitions, play/pause feedback, and player open/close motion.
+          - Reduced artwork and animation overhead.
+          - Published signed release and debug APKs.
+          EOF
           gh release create "$RELEASE_TAG" \
             "${{ steps.apk.outputs.release_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
             --title "Kuro $RELEASE_TAG (Home & Playback Polish)" \
-            --notes "## Kuro $RELEASE_TAG — Home & Playback Polish
-
-- Updated the Home screen with personal music shelves and featured picks.
-- Added smoother track transitions, play/pause feedback, and player open/close motion.
-- Reduced artwork and animation overhead.
-- Published signed release and debug APKs." \
+            --notes-file RELEASE_NOTES.md \
             --latest
 
       - name: Upload APK build artifact
