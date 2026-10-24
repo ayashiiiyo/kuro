@@ -3,8 +3,6 @@ name: Build and Release Kuro APK
 on:
   push:
     branches: [ "main" ]
-    tags:
-      - "v*"
     paths:
       - "app/build.gradle.kts"
       - ".github/workflows/build-apk.yml"
