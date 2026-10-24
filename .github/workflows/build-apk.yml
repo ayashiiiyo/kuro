@@ -1,10 +1,6 @@
-name: Build Kuro APK
+name: Build and Release Kuro APK
 
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
   workflow_dispatch:
 
 concurrency:
@@ -13,8 +9,17 @@ concurrency:
 
 jobs:
   build:
-    name: Build Kuro Debug APK
+    name: Build Signed Kuro Release APK
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    env:
+      KURO_KEYSTORE_BASE64: ${{ secrets.KURO_KEYSTORE_BASE64 }}
+      KURO_STORE_PASSWORD: ${{ secrets.KURO_STORE_PASSWORD }}
+      KURO_KEY_ALIAS: ${{ secrets.KURO_KEY_ALIAS }}
+      KURO_KEY_PASSWORD: ${{ secrets.KURO_KEY_PASSWORD }}
+      KURO_KEYSTORE_FILE: ${{ github.workspace }}/app/release.keystore
 
     steps:
       - name: Checkout Repository
@@ -32,12 +37,34 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug --stacktrace
+      - name: Validate signing secrets and decode keystore
+        run: |
+          test -n "$KURO_KEYSTORE_BASE64" || { echo "Missing KURO_KEYSTORE_BASE64 secret"; exit 1; }
+          test -n "$KURO_STORE_PASSWORD" || { echo "Missing KURO_STORE_PASSWORD secret"; exit 1; }
+          test -n "$KURO_KEY_ALIAS" || { echo "Missing KURO_KEY_ALIAS secret"; exit 1; }
+          test -n "$KURO_KEY_PASSWORD" || { echo "Missing KURO_KEY_PASSWORD secret"; exit 1; }
+          printf '%s' "$KURO_KEYSTORE_BASE64" | base64 --decode > "$KURO_KEYSTORE_FILE"
+          test -s "$KURO_KEYSTORE_FILE"
 
-      - name: Upload Debug APK
+      - name: Build signed Release APK
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: kuro-${{ github.run_number }}
+        run: |
+          gh release create "$RELEASE_TAG" app/build/outputs/apk/release/*.apk \
+            --title "Kuro $RELEASE_TAG" \
+            --notes "Signed Kuro Android release built by GitHub Actions."
+
+      - name: Upload APK build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Kuro-Music-Debug-APK
-          path: app/build/outputs/apk/debug/*.apk
-          retention-days: 14
+          name: Kuro-Music-Release-APK
+          path: app/build/outputs/apk/release/*.apk
+          retention-days: 30
+
+      - name: Remove temporary signing keystore
+        if: always()
+        run: rm -f app/release.keystore
