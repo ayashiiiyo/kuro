@@ -23,7 +23,7 @@ class KuroApp : Application(), ImageLoaderFactory {
         return ImageLoader.Builder(this)
             .memoryCache {
                 MemoryCache.Builder(this)
-                    .maxSizePercent(0.25)
+                    .maxSizePercent(0.15)
                     .build()
             }
             .diskCache {

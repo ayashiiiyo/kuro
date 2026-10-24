@@ -42,6 +42,17 @@ data class Track(
             return u
         }
 
+    /** Returns a server-sized artwork URL for small UI slots to avoid downloading full artwork. */
+    fun thumbnailUrlForDisplay(maxPixels: Int): String {
+        val boundedSize = maxPixels.coerceIn(96, 1080)
+        val highRes = highResThumbnailUrl
+        return if (highRes.contains("googleusercontent.com")) {
+            highRes.replace(Regex("=w\\d+-h\\d+[^&?]*"), "=w$boundedSize-h$boundedSize-l90-rj")
+        } else {
+            highRes
+        }
+    }
+
     val formattedDuration: String
         get() {
             if (durationSeconds <= 0) return "--:--"

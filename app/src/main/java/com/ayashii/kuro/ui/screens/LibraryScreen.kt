@@ -87,7 +87,6 @@ fun LibraryScreen(
             .padding(top = 16.dp)
     ) {
         if (selectedPlaylist != null) {
-            // Playlist Detail View
             PlaylistDetailView(
                 playlist = selectedPlaylist,
                 viewModel = viewModel,
@@ -97,7 +96,6 @@ fun LibraryScreen(
                 onAddTrackClick = { trackForPlaylist = it }
             )
         } else {
-            // Main Library Header
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -148,7 +146,6 @@ fun LibraryScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Segmented Pills: [ Liked Songs ]  [ Playlists ]
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -191,7 +188,6 @@ fun LibraryScreen(
             Spacer(modifier = Modifier.height(14.dp))
 
             if (selectedTab == 0) {
-                // Tab 0: Liked Songs
                 if (favorites.isEmpty()) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
@@ -236,10 +232,8 @@ fun LibraryScreen(
                     }
                 }
             } else {
-                // Tab 1: Playlists
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                     item {
-                        // Button to create new playlist
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -441,13 +435,13 @@ fun PlaylistCollageIcon(playlist: Playlist, size: Int = 50) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(modifier = Modifier.weight(1f)) {
                     AsyncImage(
-                        model = tracks[0].highResThumbnailUrl,
+                        model = tracks[0].thumbnailUrlForDisplay(192),
                         contentDescription = null,
                         modifier = Modifier.weight(1f).fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
                     AsyncImage(
-                        model = tracks[1].highResThumbnailUrl,
+                        model = tracks[1].thumbnailUrlForDisplay(192),
                         contentDescription = null,
                         modifier = Modifier.weight(1f).fillMaxSize(),
                         contentScale = ContentScale.Crop
@@ -455,13 +449,13 @@ fun PlaylistCollageIcon(playlist: Playlist, size: Int = 50) {
                 }
                 Row(modifier = Modifier.weight(1f)) {
                     AsyncImage(
-                        model = tracks[2].highResThumbnailUrl,
+                        model = tracks[2].thumbnailUrlForDisplay(192),
                         contentDescription = null,
                         modifier = Modifier.weight(1f).fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
                     AsyncImage(
-                        model = tracks[3].highResThumbnailUrl,
+                        model = tracks[3].thumbnailUrlForDisplay(192),
                         contentDescription = null,
                         modifier = Modifier.weight(1f).fillMaxSize(),
                         contentScale = ContentScale.Crop
@@ -470,7 +464,7 @@ fun PlaylistCollageIcon(playlist: Playlist, size: Int = 50) {
             }
         } else if (tracks.isNotEmpty()) {
             AsyncImage(
-                model = tracks[0].highResThumbnailUrl,
+                model = tracks[0].thumbnailUrlForDisplay(512),
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop
@@ -498,7 +492,6 @@ fun PlaylistDetailView(
     val colors = KuroAppTheme.colors
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Back Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()

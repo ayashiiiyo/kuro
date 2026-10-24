@@ -11,6 +11,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.core.content.ContextCompat
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
@@ -151,7 +153,6 @@ fun MainAppScreen(viewModel: MusicViewModel) {
                     }
                 }
 
-                // Floating MiniPlayer above bottom nav bar
                 if (currentTrack != null && !isExpanded) {
                     MiniPlayerContainer(
                         viewModel = viewModel,
@@ -166,11 +167,16 @@ fun MainAppScreen(viewModel: MusicViewModel) {
             }
         }
 
-        // Full-Screen Player overlay
         AnimatedVisibility(
             visible = isExpanded && currentTrack != null,
-            enter = slideInVertically(initialOffsetY = { it }),
-            exit = slideOutVertically(targetOffsetY = { it })
+            enter = slideInVertically(
+                animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+                initialOffsetY = { it }
+            ),
+            exit = slideOutVertically(
+                animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                targetOffsetY = { it }
+            )
         ) {
             currentTrack?.let { track ->
                 FullPlayerSheet(

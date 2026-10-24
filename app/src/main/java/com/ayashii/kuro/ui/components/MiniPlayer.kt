@@ -1,5 +1,9 @@
 package com.ayashii.kuro.ui.components
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -81,14 +86,20 @@ fun MiniPlayer(
                 modifier = Modifier.size(44.dp),
                 contentAlignment = Alignment.Center
             ) {
-                AsyncImage(
-                    model = track.highResThumbnailUrl,
-                    contentDescription = track.title,
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(8.dp)),
-                    contentScale = ContentScale.Crop
-                )
+                AnimatedContent(
+                    targetState = track,
+                    transitionSpec = { androidx.compose.animation.fadeIn(tween(210)) togetherWith androidx.compose.animation.fadeOut(tween(170)) },
+                    label = "mini_artwork"
+                ) { animatedTrack ->
+                    AsyncImage(
+                        model = animatedTrack.thumbnailUrlForDisplay(192),
+                        contentDescription = animatedTrack.title,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(12.dp))
@@ -96,23 +107,17 @@ fun MiniPlayer(
             Column(
                 modifier = Modifier.weight(1f)
             ) {
-                Text(
-                    text = track.title,
-                    style = Typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = colors.textPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = track.artist,
-                    style = Typography.bodyMedium,
-                    fontWeight = FontWeight.Normal,
-                    color = colors.textMuted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                AnimatedContent(
+                    targetState = track,
+                    transitionSpec = { androidx.compose.animation.fadeIn(tween(210)) togetherWith androidx.compose.animation.fadeOut(tween(170)) },
+                    label = "mini_metadata"
+                ) { animatedTrack ->
+                    Column {
+                        Text(animatedTrack.title, style = Typography.titleMedium, fontWeight = FontWeight.Bold, color = colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(animatedTrack.artist, style = Typography.bodyMedium, fontWeight = FontWeight.Normal, color = colors.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
             }
 
             if (isLoading) {
@@ -127,12 +132,17 @@ fun MiniPlayer(
                     )
                 }
             } else {
+                val playScale by animateFloatAsState(
+                    targetValue = if (isPlaying) 0.94f else 1f,
+                    animationSpec = tween(durationMillis = 140),
+                    label = "mini_play_scale"
+                )
                 IconButton(onClick = onPlayPauseClick) {
                     Icon(
                         painter = if (isPlaying) painterResource(R.drawable.ic_kuro_pause) else painterResource(R.drawable.ic_kuro_play),
                         contentDescription = if (isPlaying) "Pause" else "Play",
                         tint = colors.textPrimary,
-                        modifier = Modifier.size(26.dp)
+                        modifier = Modifier.size(26.dp).graphicsLayer { scaleX = playScale; scaleY = playScale }
                     )
                 }
             }

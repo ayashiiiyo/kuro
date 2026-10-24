@@ -83,13 +83,12 @@ fun AddToPlaylistDialog(
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 32.dp)
         ) {
-            // Track Header Preview
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 AsyncImage(
-                    model = track.highResThumbnailUrl,
+                    model = track.thumbnailUrlForDisplay(192),
                     contentDescription = track.title,
                     modifier = Modifier
                         .size(48.dp)
@@ -117,7 +116,6 @@ fun AddToPlaylistDialog(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Create New Playlist Button
             Row(
                 modifier = Modifier
                     .fillMaxWidth()

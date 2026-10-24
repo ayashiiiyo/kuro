@@ -2,6 +2,10 @@ package com.ayashii.kuro.ui.components
 
 import android.content.Intent
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -57,8 +61,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -105,6 +111,7 @@ fun FullPlayerSheet(
     var isLyricsExpanded by remember { mutableStateOf(false) }
 
     val colors = KuroAppTheme.colors
+    val artworkHeight = (LocalConfiguration.current.screenHeightDp * 0.39f).coerceIn(240f, 340f).dp
 
     Column(
         modifier = modifier
@@ -112,26 +119,27 @@ fun FullPlayerSheet(
             .background(colors.background)
             .verticalScroll(scrollState)
     ) {
-        // -------------------------------------------------------------
-        // TOP SECTION: Full-Bleed Edge-to-Edge Artwork Header (Design #2)
-        // -------------------------------------------------------------
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(350.dp)
+                .height(artworkHeight)
         ) {
-            // Ultra-HD Master Artwork
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(track.highResThumbnailUrl)
-                    .crossfade(true)
-                    .build(),
-                contentDescription = track.title,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
+            AnimatedContent(
+                targetState = track,
+                transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(180)) },
+                label = "full_player_artwork"
+            ) { animatedTrack ->
+                AsyncImage(
+                    model = ImageRequest.Builder(LocalContext.current)
+                        .data(animatedTrack.thumbnailUrlForDisplay(768))
+                        .crossfade(false)
+                        .build(),
+                    contentDescription = animatedTrack.title,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            }
 
-            // Scrim Gradient Overlay: seamlessly blends into background at bottom
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -148,7 +156,6 @@ fun FullPlayerSheet(
                     )
             )
 
-            // Overlaid Top Bar (Collapse Chevron, Context Title, More Options)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -244,45 +251,42 @@ fun FullPlayerSheet(
             }
         }
 
-        // -------------------------------------------------------------
-        // MAIN CONTROLS SECTION (Padding 24.dp)
-        // -------------------------------------------------------------
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
         ) {
-            // Track Title, Artist, and Vibrant Red Favorite Heart (Design #2)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = track.title,
-                        style = Typography.headlineMedium.copy(
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = colors.textPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = track.artist,
-                        style = Typography.titleMedium.copy(
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Medium
-                        ),
-                        color = colors.textMuted,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    AnimatedContent(
+                        targetState = track,
+                        transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(180)) },
+                        label = "full_player_metadata"
+                    ) { animatedTrack ->
+                        Column {
+                            Text(
+                                text = animatedTrack.title,
+                                style = Typography.headlineMedium.copy(fontSize = 24.sp, fontWeight = FontWeight.Bold),
+                                color = colors.textPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = animatedTrack.artist,
+                                style = Typography.titleMedium.copy(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+                                color = colors.textMuted,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
                 }
 
-                // Favorite Heart: Vibrant Red (#FF3B30) when liked as in Design #2
                 IconButton(
                     onClick = onFavoriteClick,
                     modifier = Modifier.size(48.dp)
@@ -298,7 +302,6 @@ fun FullPlayerSheet(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // Scrubber Bar
             PlayerScrubber(
                 viewModel = viewModel,
                 track = track
@@ -306,7 +309,6 @@ fun FullPlayerSheet(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Primary Playback Controls: Shuffle, Rewind, Play/Pause, Fast-Forward, Repeat
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -336,7 +338,6 @@ fun FullPlayerSheet(
                     )
                 }
 
-                // Big Solid Center Play/Pause Circle (72dp)
                 Box(
                     modifier = Modifier
                         .size(72.dp)
@@ -351,6 +352,11 @@ fun FullPlayerSheet(
                             modifier = Modifier.size(32.dp)
                         )
                     } else {
+                        val playScale by androidx.compose.animation.core.animateFloatAsState(
+                            targetValue = if (isPlaying) 0.94f else 1f,
+                            animationSpec = tween(durationMillis = 140),
+                            label = "full_player_play_scale"
+                        )
                         IconButton(
                             onClick = onPlayPauseClick,
                             modifier = Modifier.size(72.dp)
@@ -359,7 +365,7 @@ fun FullPlayerSheet(
                                 painter = if (isPlaying) painterResource(R.drawable.ic_kuro_pause) else painterResource(R.drawable.ic_kuro_play),
                                 contentDescription = if (isPlaying) "Pause" else "Play",
                                 tint = colors.background,
-                                modifier = Modifier.size(34.dp)
+                                modifier = Modifier.size(34.dp).graphicsLayer { scaleX = playScale; scaleY = playScale }
                             )
                         }
                     }
@@ -394,13 +400,6 @@ fun FullPlayerSheet(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // -------------------------------------------------------------
-            // SECONDARY UTILITIES ROW (Design #2 Component Breakdown):
-            // 1. Audio Output Device Pill ("Wired Connection" / BT)
-            // 2. Lyrics Quick-Jump / Expand
-            // 3. Add to Playlist
-            // 4. Equalizer / Settings
-            // -------------------------------------------------------------
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -408,7 +407,6 @@ fun FullPlayerSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Audio Device Output Switcher
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(20.dp))
@@ -439,7 +437,6 @@ fun FullPlayerSheet(
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Quick Lyrics Toggle / Scroll
                     IconButton(
                         onClick = {
                             isLyricsExpanded = !isLyricsExpanded
@@ -463,7 +460,6 @@ fun FullPlayerSheet(
                         )
                     }
 
-                    // Add to Playlist
                     IconButton(
                         onClick = { showAddToPlaylist = true },
                         modifier = Modifier
@@ -480,7 +476,6 @@ fun FullPlayerSheet(
                         )
                     }
 
-                    // Settings & Equalizer
                     IconButton(
                         onClick = { showSettingsDialog = true },
                         modifier = Modifier
@@ -501,9 +496,6 @@ fun FullPlayerSheet(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // -------------------------------------------------------------
-            // DESIGN #2 LYRICS CARD / DRAWER (Bottom)
-            // -------------------------------------------------------------
             val hasLyrics = currentLyrics != null && currentLyrics!!.lines.isNotEmpty() &&
                     currentLyrics!!.lines.none { it.text.trim().equals("null", ignoreCase = true) }
 

@@ -1,10 +1,6 @@
 package com.ayashii.kuro.ui.components
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -29,8 +25,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,6 +46,11 @@ import coil.compose.AsyncImage
 import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.ui.theme.KuroAppTheme
 import com.ayashii.kuro.ui.theme.Typography
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import kotlin.math.abs
+import kotlin.math.sin
+import kotlin.math.PI
 
 @Composable
 fun TrackItem(
@@ -72,7 +78,7 @@ fun TrackItem(
             contentAlignment = Alignment.Center
         ) {
             AsyncImage(
-                model = track.highResThumbnailUrl,
+                model = track.thumbnailUrlForDisplay(256),
                 contentDescription = track.title,
                 modifier = Modifier
                     .size(50.dp)
@@ -183,25 +189,30 @@ fun TrackItem(
 @Composable
 fun EqualizerAnimation() {
     val colors = KuroAppTheme.colors
-    val transition = rememberInfiniteTransition(label = "eq")
-    val h1 by transition.animateFloat(
-        initialValue = 0.2f,
-        targetValue = 0.9f,
-        animationSpec = infiniteRepeatable(tween(400, easing = LinearEasing), RepeatMode.Reverse),
-        label = "h1"
-    )
-    val h2 by transition.animateFloat(
-        initialValue = 0.9f,
-        targetValue = 0.3f,
-        animationSpec = infiniteRepeatable(tween(550, easing = LinearEasing), RepeatMode.Reverse),
-        label = "h2"
-    )
-    val h3 by transition.animateFloat(
-        initialValue = 0.4f,
-        targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(tween(480, easing = LinearEasing), RepeatMode.Reverse),
-        label = "h3"
-    )
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var isForeground by remember(lifecycle) {
+        mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
+    }
+    val phase = remember { Animatable(0f) }
+
+    DisposableEffect(lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            isForeground = event.targetState.isAtLeast(Lifecycle.State.STARTED)
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+
+    LaunchedEffect(isForeground) {
+        if (isForeground) {
+            while (true) {
+                phase.animateTo(1f, animationSpec = tween(durationMillis = 900))
+                phase.snapTo(0f)
+            }
+        } else {
+            phase.snapTo(0f)
+        }
+    }
 
     Row(
         horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -213,7 +224,7 @@ fun EqualizerAnimation() {
                 .width(3.dp)
                 .height(18.dp)
                 .graphicsLayer {
-                    scaleY = h1
+                    scaleY = 0.2f + phase.value * 0.7f
                     transformOrigin = TransformOrigin(0.5f, 1f)
                 }
                 .background(colors.accent, RoundedCornerShape(1.dp))
@@ -223,7 +234,7 @@ fun EqualizerAnimation() {
                 .width(3.dp)
                 .height(18.dp)
                 .graphicsLayer {
-                    scaleY = h2
+                    scaleY = 0.9f - phase.value * 0.6f
                     transformOrigin = TransformOrigin(0.5f, 1f)
                 }
                 .background(colors.accent, RoundedCornerShape(1.dp))
@@ -233,7 +244,7 @@ fun EqualizerAnimation() {
                 .width(3.dp)
                 .height(18.dp)
                 .graphicsLayer {
-                    scaleY = h3
+                    scaleY = 0.4f + abs(sin(phase.value * PI)).toFloat() * 0.6f
                     transformOrigin = TransformOrigin(0.5f, 1f)
                 }
                 .background(colors.accent, RoundedCornerShape(1.dp))

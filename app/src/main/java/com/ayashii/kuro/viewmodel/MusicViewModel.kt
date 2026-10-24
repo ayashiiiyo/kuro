@@ -335,7 +335,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             while (true) {
                 val now = System.currentTimeMillis()
                 if (isSeeking && (now - lastSeekTimestamp < 1200L)) {
-                    // Grace period: allow ExoPlayer to complete async seek over network without bouncing back
                 } else {
                     isSeeking = false
                     mediaController?.let { controller ->
@@ -347,7 +346,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                 }
-                delay(250)
+                delay(if (_isPlaying.value) 500 else 1000)
             }
         }
     }
@@ -377,7 +376,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             _trendingTracks.value = tracks
             _isLoadingTrending.value = false
 
-            // Pre-warm audio URLs for top 2 tracks in background with chosen quality
             launch(Dispatchers.IO) {
                 delay(2000)
                 tracks.take(2).forEach {
@@ -413,7 +411,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             _searchResults.value = results
             _isSearching.value = false
 
-            // Pre-warm audio URLs for top 2 search results in background
             launch(Dispatchers.IO) {
                 delay(1500)
                 results.take(2).forEach {
@@ -452,7 +449,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-            // Automix Radio: If queue is small (<= 2 tracks, e.g. played from search), fetch 50 radio tracks!
             if (playlistQueue.size <= 2) {
                 launch(Dispatchers.IO) {
                     try {
@@ -471,7 +467,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-                // Fetch Synced Lyrics + Translations in background (Non-blocking Fast Initial Emit!)
                 lyricsJob?.cancel()
                 lyricsJob = viewModelScope.launch(Dispatchers.IO) {
                     _isLoadingLyrics.value = true
@@ -487,7 +482,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                         _currentLyrics.value = data
                         _isLoadingLyrics.value = false
 
-                        // If lyrics loaded and autoTranslate enabled, fetch translation asynchronously without blocking UI!
                         if (data != null && data.lines.isNotEmpty() && settingsManager.autoTranslate.value) {
                             val translated = lyricsRepository.translateLyrics(data)
                             if (_currentTrack.value?.id == track.id) {
@@ -500,7 +494,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
 
-                // Resolve direct audio stream URL via NewPipeExtractor with user chosen Audio Quality!
             hasRetriedFallback = false
             trackStartTime = System.currentTimeMillis()
             val resolvedStream = repository.getAudioStream(track.url, settingsManager.audioQuality.value)
@@ -538,7 +531,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     pendingTrackToPlay = updatedTrack
                 }
 
-                // Pre-fetch next track in background for instantaneous next play!
                 if (playlistQueue.isNotEmpty() && currentIndex + 1 < playlistQueue.size) {
                     val nextTrack = playlistQueue[currentIndex + 1]
                     launch(Dispatchers.IO) {
@@ -548,7 +540,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 _isLoadingTrack.value = false
                 Log.e("KuroMusicViewModel", "Failed to resolve stream URL for ${track.title}")
-                // Auto skip to next available song if this track cannot be resolved!
                 if (playlistQueue.isNotEmpty() && currentIndex + 1 < playlistQueue.size) {
                     skipNext()
                 }
@@ -615,7 +606,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             currentIndex = nextIndex
             playTrack(playlistQueue[nextIndex])
 
-            // When nearing the end of the queue, auto-replenish with more radio tracks!
             if (playlistQueue.size - nextIndex <= 3 && playlistQueue.isNotEmpty()) {
                 val seed = playlistQueue[nextIndex]
                 viewModelScope.launch(Dispatchers.IO) {
