@@ -144,6 +144,8 @@ fun TrackItem(
             modifier = Modifier.padding(end = 4.dp)
         )
 
+        val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+
         Box(
             modifier = Modifier
                 .size(40.dp)
@@ -151,15 +153,28 @@ fun TrackItem(
                 .clickable(
                     interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                     indication = androidx.compose.material.ripple.rememberRipple(bounded = false, radius = 20.dp),
-                    onClick = onFavoriteClick
+                    onClick = {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        onFavoriteClick()
+                    }
                 ),
             contentAlignment = Alignment.Center
         ) {
+            val favScale by androidx.compose.animation.core.animateFloatAsState(
+                targetValue = if (track.isFavorite) 1.15f else 1f,
+                animationSpec = tween(durationMillis = 150),
+                label = "fav_scale"
+            )
             Icon(
                 imageVector = if (track.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
                 contentDescription = "Favorite",
-                tint = if (track.isFavorite) colors.textPrimary else colors.textMuted,
-                modifier = Modifier.size(22.dp)
+                tint = if (track.isFavorite) androidx.compose.ui.graphics.Color(0xFFFF3B30) else colors.textMuted,
+                modifier = Modifier
+                    .size(22.dp)
+                    .graphicsLayer {
+                        scaleX = favScale
+                        scaleY = favScale
+                    }
             )
         }
 

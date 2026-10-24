@@ -75,6 +75,7 @@ fun LibraryScreen(
     var selectedPlaylistId by remember { mutableStateOf<String?>(null) }
     var trackForPlaylist by remember { mutableStateOf<Track?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
+    var playlistToDelete by remember { mutableStateOf<Playlist?>(null) }
     var newPlaylistName by remember { mutableStateOf("") }
 
     val colors = KuroAppTheme.colors
@@ -335,10 +336,10 @@ fun LibraryScreen(
                                         color = colors.textMuted
                                     )
                                 }
-                                IconButton(onClick = { viewModel.deletePlaylist(playlist.id) }) {
+                                IconButton(onClick = { playlistToDelete = playlist }) {
                                     Icon(
                                         imageVector = Icons.Default.DeleteOutline,
-                                        contentDescription = "Delete",
+                                        contentDescription = "Hapus Playlist",
                                         tint = colors.textMuted,
                                         modifier = Modifier.size(20.dp)
                                     )
@@ -410,6 +411,47 @@ fun LibraryScreen(
         )
     }
 
+    if (playlistToDelete != null) {
+        val targetPlaylist = playlistToDelete!!
+        AlertDialog(
+            onDismissRequest = { playlistToDelete = null },
+            title = {
+                Text(
+                    text = "Hapus Playlist?",
+                    style = Typography.titleLarge,
+                    color = colors.textPrimary
+                )
+            },
+            text = {
+                Text(
+                    text = "Playlist \"${targetPlaylist.name}\" beserta ${targetPlaylist.tracks.size} lagu di dalamnya akan dihapus secara permanen.",
+                    style = Typography.bodyMedium,
+                    color = colors.textMuted
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deletePlaylist(targetPlaylist.id)
+                        playlistToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = androidx.compose.ui.graphics.Color(0xFFFF3B30),
+                        contentColor = androidx.compose.ui.graphics.Color.White
+                    )
+                ) {
+                    Text("Hapus", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { playlistToDelete = null }) {
+                    Text("Batal", color = colors.textPrimary)
+                }
+            },
+            containerColor = colors.background
+        )
+    }
+
     if (trackForPlaylist != null) {
         AddToPlaylistDialog(
             track = trackForPlaylist!!,
@@ -432,8 +474,16 @@ fun PlaylistCollageIcon(playlist: Playlist, size: Int = 50) {
         contentAlignment = Alignment.Center
     ) {
         if (tracks.size >= 4) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                Row(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(1.dp),
+                verticalArrangement = Arrangement.spacedBy(1.dp)
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(1.dp)
+                ) {
                     AsyncImage(
                         model = tracks[0].thumbnailUrlForDisplay(192),
                         contentDescription = null,
@@ -447,7 +497,10 @@ fun PlaylistCollageIcon(playlist: Playlist, size: Int = 50) {
                         contentScale = ContentScale.Crop
                     )
                 }
-                Row(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(1.dp)
+                ) {
                     AsyncImage(
                         model = tracks[2].thumbnailUrlForDisplay(192),
                         contentDescription = null,

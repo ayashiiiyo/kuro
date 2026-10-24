@@ -161,7 +161,7 @@ fun MainAppScreen(viewModel: MusicViewModel) {
                         isLoading = isLoadingTrack,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .padding(bottom = 8.dp)
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
                     )
                 }
             }

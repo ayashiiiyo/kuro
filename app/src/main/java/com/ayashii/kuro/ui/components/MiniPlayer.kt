@@ -62,7 +62,6 @@ fun MiniPlayer(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(colors.card)
             .border(1.dp, colors.border, RoundedCornerShape(14.dp))
