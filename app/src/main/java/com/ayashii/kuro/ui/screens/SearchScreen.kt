@@ -3,8 +3,6 @@ package com.ayashii.kuro.ui.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,6 +23,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -32,6 +31,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.NorthWest
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -55,14 +57,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ayashii.kuro.ui.components.TrackItem
-import com.ayashii.kuro.ui.theme.DarkBorder
-import com.ayashii.kuro.ui.theme.DarkCard
-import com.ayashii.kuro.ui.theme.MutedText
-import com.ayashii.kuro.ui.theme.PureBlack
-import com.ayashii.kuro.ui.theme.PureWhite
-import com.ayashii.kuro.ui.theme.SubtleGray
 import com.ayashii.kuro.ui.theme.Typography
 import com.ayashii.kuro.viewmodel.MusicViewModel
+
+data class SearchCategory(
+    val title: String,
+    val subtitle: String,
+    val accentTag: String
+)
 
 @Composable
 fun SearchScreen(
@@ -82,16 +84,18 @@ fun SearchScreen(
 
     val colors = com.ayashii.kuro.ui.theme.KuroAppTheme.colors
 
-    val browseCategories = listOf(
-        "Top Global Hits",
-        "Lo-Fi Chill Beats",
-        "Anime & J-Pop",
-        "Hip-Hop Classics",
-        "Acoustic & Folk",
-        "Deep Focus & Study",
-        "Rock & Alternative",
-        "Electronic & Dance"
-    )
+    val categories = remember {
+        listOf(
+            SearchCategory("Top Global Hits", "Populer sekarang", "TREND"),
+            SearchCategory("Lo-Fi Chill", "Santai & relaksasi", "CHILL"),
+            SearchCategory("Anime & J-Pop", "Original soundtrack", "ANIME"),
+            SearchCategory("Deep Focus", "Belajar & coding", "FOCUS"),
+            SearchCategory("Hip-Hop & R&B", "Bass & ritme kuat", "BEATS"),
+            SearchCategory("Acoustic & Folk", "Petikan gitar jernih", "CALM"),
+            SearchCategory("Rock & Alt", "Energi distorsi", "ROCK"),
+            SearchCategory("Electronic & EDM", "Club & festival vibe", "DANCE")
+        )
+    }
 
     Column(
         modifier = modifier
@@ -99,9 +103,9 @@ fun SearchScreen(
             .background(colors.background)
             .padding(top = 16.dp)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 20.dp)) {
             Text(
-                text = "Search",
+                text = "Cari",
                 style = Typography.headlineLarge,
                 color = colors.textPrimary
             )
@@ -116,7 +120,7 @@ fun SearchScreen(
                 },
                 placeholder = {
                     Text(
-                        text = "Songs, artists, genres…",
+                        text = "Lagu, artis, atau genre…",
                         color = colors.textMuted,
                         style = Typography.bodyLarge
                     )
@@ -125,19 +129,22 @@ fun SearchScreen(
                     Icon(
                         imageVector = Icons.Default.Search,
                         contentDescription = "Search Icon",
-                        tint = colors.textMuted
+                        tint = if (searchQuery.isNotEmpty()) colors.textPrimary else colors.textMuted,
+                        modifier = Modifier.size(20.dp)
                     )
                 },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = {
                             searchQuery = ""
+                            focusManager.clearFocus()
                             viewModel.search("")
                         }) {
                             Icon(
                                 imageVector = Icons.Default.Clear,
                                 contentDescription = "Clear",
-                                tint = colors.textMuted
+                                tint = colors.textMuted,
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
@@ -146,7 +153,9 @@ fun SearchScreen(
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = {
                     focusManager.clearFocus()
-                    viewModel.search(searchQuery)
+                    if (searchQuery.isNotBlank()) {
+                        viewModel.search(searchQuery)
+                    }
                 }),
                 colors = TextFieldDefaults.colors(
                     focusedContainerColor = colors.card,
@@ -159,37 +168,38 @@ fun SearchScreen(
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .border(1.dp, colors.border, RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape(16.dp))
+                    .border(1.dp, colors.border, RoundedCornerShape(16.dp))
             )
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-        // Autocomplete suggestions popup / list
-        AnimatedVisibility(
-            visible = suggestions.isNotEmpty(),
-            enter = fadeIn() + slideInVertically(),
-            exit = fadeOut() + slideOutVertically()
-        ) {
+        if (suggestions.isNotEmpty()) {
             LazyColumn(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(colors.card)
-                    .border(1.dp, colors.border, RoundedCornerShape(14.dp))
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp)
             ) {
+                item {
+                    Text(
+                        text = "Saran Pencarian",
+                        style = Typography.labelMedium,
+                        color = colors.textMuted,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
                 items(suggestions) { suggestion ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
                             .clickable {
                                 searchQuery = suggestion
                                 focusManager.clearFocus()
                                 viewModel.search(suggestion)
                             }
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                            .padding(vertical = 12.dp, horizontal = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -201,9 +211,9 @@ fun SearchScreen(
                                 imageVector = Icons.Default.Search,
                                 contentDescription = null,
                                 tint = colors.textMuted,
-                                modifier = Modifier.size(18.dp)
+                                modifier = Modifier.size(16.dp)
                             )
-                            Spacer(modifier = Modifier.width(12.dp))
+                            Spacer(modifier = Modifier.width(14.dp))
                             Text(
                                 text = suggestion,
                                 style = Typography.bodyLarge,
@@ -215,98 +225,182 @@ fun SearchScreen(
 
                         Icon(
                             imageVector = Icons.Default.NorthWest,
-                            contentDescription = "Select suggestion",
-                            tint = colors.textSecondary,
-                            modifier = Modifier.size(16.dp)
+                            contentDescription = "Pilih",
+                            tint = colors.textMuted.copy(alpha = 0.6f),
+                            modifier = Modifier.size(15.dp)
                         )
                     }
                 }
             }
-        }
-
-        if (suggestions.isEmpty()) {
-            if (isSearching) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = colors.textPrimary)
-                }
-            } else if (searchResults.isEmpty() && searchQuery.isBlank()) {
-                // Browse Categories Grid (Apple Music / Spotify Style)
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 16.dp)
+        } else if (isSearching) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(
+                    color = colors.textPrimary,
+                    strokeWidth = 3.dp,
+                    modifier = Modifier.size(36.dp)
+                )
+            }
+        } else if (searchResults.isEmpty() && searchQuery.isBlank()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "Browse Categories",
-                        style = Typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = colors.textPrimary,
-                        modifier = Modifier.padding(vertical = 12.dp)
+                        text = "Jelajahi Kategori",
+                        style = Typography.titleLarge,
+                        color = colors.textPrimary
                     )
+                    Icon(
+                        imageVector = Icons.Outlined.Explore,
+                        contentDescription = null,
+                        tint = colors.textMuted,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
 
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        items(browseCategories) { category ->
+                Spacer(modifier = Modifier.height(14.dp))
+
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(2),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(categories) { category ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(96.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(
+                                    Brush.linearGradient(
+                                        colors = listOf(
+                                            colors.card,
+                                            colors.card.copy(alpha = 0.75f)
+                                        )
+                                    )
+                                )
+                                .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+                                .clickable {
+                                    searchQuery = category.title
+                                    focusManager.clearFocus()
+                                    viewModel.search(category.title)
+                                }
+                                .padding(14.dp)
+                        ) {
                             Box(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .aspectRatio(1.8f)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(colors.card)
-                                    .border(1.dp, colors.border, RoundedCornerShape(12.dp))
-                                    .clickable {
-                                        searchQuery = category
-                                        focusManager.clearFocus()
-                                        viewModel.search(category)
-                                    }
-                                    .padding(14.dp),
-                                contentAlignment = Alignment.BottomStart
+                                    .align(Alignment.TopEnd)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(colors.border)
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    text = category,
-                                    style = Typography.titleMedium,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = colors.textPrimary
+                                    text = category.accentTag,
+                                    style = Typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
+                                    color = colors.textMuted
+                                )
+                            }
+
+                            Column(modifier = Modifier.align(Alignment.BottomStart)) {
+                                Text(
+                                    text = category.title,
+                                    style = Typography.titleMedium.copy(fontSize = 14.sp, fontWeight = FontWeight.Bold),
+                                    color = colors.textPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = category.subtitle,
+                                    style = Typography.bodySmall.copy(fontSize = 11.sp),
+                                    color = colors.textMuted,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
                     }
+                    item {
+                        Spacer(modifier = Modifier.height(80.dp))
+                    }
                 }
-            } else if (searchResults.isEmpty()) {
-                if (searchQuery.isNotBlank()) {
+            }
+        } else if (searchResults.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
                     Box(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(colors.card)
+                            .border(1.dp, colors.border, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(text = "No tracks found", color = colors.textMuted, style = Typography.bodyLarge)
-                    }
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(searchResults, key = { it.id }, contentType = { "track" }) { track ->
-                        val isFav = track.id in favoriteIds
-                        TrackItem(
-                            track = track.copy(isFavorite = isFav),
-                            isPlaying = currentTrack?.id == track.id,
-                            isLoading = isLoadingTrack && currentTrack?.id == track.id,
-                            onClick = { viewModel.playTrackFromSearch(track) },
-                            onFavoriteClick = { viewModel.toggleFavorite(track) },
-                            onMoreClick = { trackForPlaylist = track }
+                        Icon(
+                            imageVector = Icons.Outlined.SearchOff,
+                            contentDescription = null,
+                            tint = colors.textMuted,
+                            modifier = Modifier.size(28.dp)
                         )
                     }
-                    item {
-                        Spacer(modifier = Modifier.height(100.dp))
-                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Lagu tidak ditemukan",
+                        style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = colors.textPrimary
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Coba gunakan kata kunci artis, judul lagu lain, atau periksa ejaanmu.",
+                        style = Typography.bodyMedium,
+                        color = colors.textMuted,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                item {
+                    Text(
+                        text = "Hasil Pencarian",
+                        style = Typography.labelMedium,
+                        color = colors.textMuted,
+                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 2.dp, bottom = 8.dp)
+                    )
+                }
+                items(searchResults, key = { it.id }, contentType = { "track" }) { track ->
+                    val isFav = track.id in favoriteIds
+                    TrackItem(
+                        track = track.copy(isFavorite = isFav),
+                        isPlaying = currentTrack?.id == track.id,
+                        isLoading = isLoadingTrack && currentTrack?.id == track.id,
+                        onClick = { viewModel.playTrackFromSearch(track) },
+                        onFavoriteClick = { viewModel.toggleFavorite(track) },
+                        onMoreClick = { trackForPlaylist = track }
+                    )
+                }
+                item {
+                    Spacer(modifier = Modifier.height(100.dp))
                 }
             }
         }
