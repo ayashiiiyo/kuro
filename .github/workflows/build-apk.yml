@@ -46,32 +46,46 @@ jobs:
           printf '%s' "$KURO_KEYSTORE_BASE64" | base64 --decode > "$KURO_KEYSTORE_FILE"
           test -s "$KURO_KEYSTORE_FILE"
 
-      - name: Build signed Release APK
-        run: ./gradlew assembleRelease --stacktrace
+      - name: Build Release and Debug APKs
+        run: ./gradlew assembleRelease assembleDebug --stacktrace
 
-      - name: Name APK with app version
+      - name: Name APKs with app version
         id: apk
         run: |
           VERSION_NAME=$(sed -nE 's/^[[:space:]]*versionName[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' app/build.gradle.kts | head -n 1)
           test -n "$VERSION_NAME" || { echo "Could not read app versionName"; exit 1; }
-          APK_PATH="app/build/outputs/apk/release/kuro-v${VERSION_NAME}-release.apk"
-          cp app/build/outputs/apk/release/app-release.apk "$APK_PATH"
-          echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
+          RELEASE_APK="app/build/outputs/apk/release/kuro-v${VERSION_NAME}-release.apk"
+          DEBUG_APK="app/build/outputs/apk/debug/kuro-v${VERSION_NAME}-debug.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$RELEASE_APK"
+          cp app/build/outputs/apk/debug/app-debug.apk "$DEBUG_APK"
+          echo "version=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "release_path=$RELEASE_APK" >> "$GITHUB_OUTPUT"
+          echo "debug_path=$DEBUG_APK" >> "$GITHUB_OUTPUT"
 
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: kuro-${{ github.run_number }}
+          RELEASE_TAG: v${{ steps.apk.outputs.version }}
         run: |
-          gh release create "$RELEASE_TAG" "${{ steps.apk.outputs.path }}" \
-            --title "Kuro $RELEASE_TAG" \
-            --notes "Signed Kuro Android release built by GitHub Actions."
+          gh release create "$RELEASE_TAG" \
+            "${{ steps.apk.outputs.release_path }}" \
+            "${{ steps.apk.outputs.debug_path }}" \
+            --title "Kuro $RELEASE_TAG (Home & Playback Polish)" \
+            --notes "## Kuro $RELEASE_TAG — Home & Playback Polish
+
+- Updated the Home screen with personal music shelves and featured picks.
+- Added smoother track transitions, play/pause feedback, and player open/close motion.
+- Reduced artwork and animation overhead.
+- Published signed release and debug APKs." \
+            --latest
 
       - name: Upload APK build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Kuro-Music-Release-APK
-          path: ${{ steps.apk.outputs.path }}
+          name: Kuro-${{ steps.apk.outputs.version }}-APKs
+          path: |
+            ${{ steps.apk.outputs.release_path }}
+            ${{ steps.apk.outputs.debug_path }}
           retention-days: 30
 
       - name: Remove temporary signing keystore
