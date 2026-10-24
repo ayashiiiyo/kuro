@@ -49,12 +49,21 @@ jobs:
       - name: Build signed Release APK
         run: ./gradlew assembleRelease --stacktrace
 
+      - name: Name APK with app version
+        id: apk
+        run: |
+          VERSION_NAME=$(sed -nE 's/^[[:space:]]*versionName[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' app/build.gradle.kts | head -n 1)
+          test -n "$VERSION_NAME" || { echo "Could not read app versionName"; exit 1; }
+          APK_PATH="app/build/outputs/apk/release/kuro-v${VERSION_NAME}-release.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK_PATH"
+          echo "path=$APK_PATH" >> "$GITHUB_OUTPUT"
+
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: kuro-${{ github.run_number }}
         run: |
-          gh release create "$RELEASE_TAG" app/build/outputs/apk/release/*.apk \
+          gh release create "$RELEASE_TAG" "${{ steps.apk.outputs.path }}" \
             --title "Kuro $RELEASE_TAG" \
             --notes "Signed Kuro Android release built by GitHub Actions."
 
@@ -62,7 +71,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Kuro-Music-Release-APK
-          path: app/build/outputs/apk/release/*.apk
+          path: ${{ steps.apk.outputs.path }}
           retention-days: 30
 
       - name: Remove temporary signing keystore
