@@ -11,7 +11,7 @@ android {
         applicationId = "com.ayashii.kuro"
         minSdk = 26
         targetSdk = 34
-        versionCode = 24
+        versionCode = 25
         versionName = "3.4.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
