@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.ayashii.kuro.R
 import com.ayashii.kuro.data.auth.UserAccount
+import androidx.compose.material.icons.outlined.History
 import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.data.model.HomeSection
 import com.ayashii.kuro.ui.components.AddToPlaylistDialog
@@ -83,6 +84,7 @@ fun HomeScreen(
     var showProfileMenu by remember { mutableStateOf(false) }
     var showLoginWebView by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
+    var showRecentsDialog by remember { mutableStateOf(false) }
     var trackForPlaylist by remember { mutableStateOf<Track?>(null) }
 
     var selectedGenre by remember { mutableStateOf("Semua") }
@@ -228,7 +230,15 @@ fun HomeScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text("Putar kembali", style = Typography.titleLarge, color = colors.textPrimary)
-                            Text("Lihat semua  ›", style = Typography.bodySmall, color = colors.textMuted)
+                            Text(
+                                text = "Lihat semua  ›",
+                                style = Typography.bodySmall,
+                                color = colors.textMuted,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { showRecentsDialog = true }
+                                    .padding(horizontal = 6.dp, vertical = 4.dp)
+                            )
                         }
                     }
                     item(key = "quick_picks_grid") {
@@ -425,6 +435,91 @@ fun HomeScreen(
     if (showSettingsDialog) {
         com.ayashii.kuro.ui.components.SettingsDialog(
             onDismiss = { showSettingsDialog = false }
+        )
+    }
+
+    if (showRecentsDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showRecentsDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = androidx.compose.material.icons.Icons.Outlined.History,
+                        contentDescription = null,
+                        tint = colors.textPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "Terakhir Diputar",
+                        style = Typography.titleLarge,
+                        color = colors.textPrimary
+                    )
+                }
+            },
+            text = {
+                if (recentlyPlayed.isEmpty()) {
+                    Text(
+                        text = "Belum ada riwayat lagu yang diputar.",
+                        style = Typography.bodyMedium,
+                        color = colors.textMuted
+                    )
+                } else {
+                    androidx.compose.foundation.lazy.LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(320.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(recentlyPlayed, key = { it.id }) { track ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(colors.card)
+                                    .clickable {
+                                        viewModel.playTrack(track)
+                                        showRecentsDialog = false
+                                    }
+                                    .padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                AsyncImage(
+                                    model = track.thumbnailUrlForDisplay(192),
+                                    contentDescription = track.title,
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(RoundedCornerShape(6.dp)),
+                                    contentScale = ContentScale.Crop
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = track.title,
+                                        style = Typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = colors.textPrimary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = track.artist,
+                                        style = Typography.bodySmall,
+                                        color = colors.textMuted,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { showRecentsDialog = false }) {
+                    Text("Tutup", color = colors.textPrimary)
+                }
+            },
+            containerColor = colors.background
         )
     }
 

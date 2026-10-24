@@ -21,7 +21,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -107,7 +109,6 @@ fun FullPlayerSheet(
 
     var showAddToPlaylist by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
-    var showOptionsMenu by remember { mutableStateOf(false) }
     var isLyricsExpanded by remember { mutableStateOf(false) }
 
     val colors = KuroAppTheme.colors
@@ -117,6 +118,24 @@ fun FullPlayerSheet(
         modifier = modifier
             .fillMaxSize()
             .background(colors.background)
+            .pointerInput(Unit) {
+                var totalDragY = 0f
+                detectVerticalDragGestures(
+                    onDragStart = { totalDragY = 0f },
+                    onDragEnd = {
+                        if (totalDragY > 140f && scrollState.value == 0) {
+                            onDismiss()
+                        }
+                    },
+                    onDragCancel = { totalDragY = 0f },
+                    onVerticalDrag = { change, dragAmount ->
+                        if (scrollState.value == 0 && dragAmount > 0) {
+                            totalDragY += dragAmount
+                            change.consume()
+                        }
+                    }
+                )
+            }
             .verticalScroll(scrollState)
     ) {
         Box(
@@ -189,65 +208,28 @@ fun FullPlayerSheet(
                     color = Color.White.copy(alpha = 0.9f)
                 )
 
-                Box {
                     IconButton(
-                        onClick = { showOptionsMenu = true },
+                        onClick = {
+                            try {
+                                val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                    putExtra(Intent.EXTRA_TEXT, "Dengarkan ${track.title} oleh ${track.artist}: ${track.url}")
+                                    type = "text/plain"
+                                }
+                                context.startActivity(Intent.createChooser(sendIntent, "Bagikan via"))
+                            } catch (_: Exception) {}
+                        },
                         modifier = Modifier
                             .size(38.dp)
                             .clip(CircleShape)
                             .background(Color.Black.copy(alpha = 0.4f))
                     ) {
                         Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = "Options",
+                            imageVector = Icons.Outlined.Share,
+                            contentDescription = "Share Track",
                             tint = Color.White,
                             modifier = Modifier.size(20.dp)
                         )
                     }
-
-                    DropdownMenu(
-                        expanded = showOptionsMenu,
-                        onDismissRequest = { showOptionsMenu = false },
-                        modifier = Modifier.background(colors.card)
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Tambahkan ke Playlist", color = colors.textPrimary) },
-                            leadingIcon = {
-                                Icon(Icons.Outlined.QueueMusic, contentDescription = null, tint = colors.textPrimary)
-                            },
-                            onClick = {
-                                showOptionsMenu = false
-                                showAddToPlaylist = true
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Pengaturan & Audio", color = colors.textPrimary) },
-                            leadingIcon = {
-                                Icon(Icons.Outlined.Tune, contentDescription = null, tint = colors.textPrimary)
-                            },
-                            onClick = {
-                                showOptionsMenu = false
-                                showSettingsDialog = true
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Bagikan Lagu", color = colors.textPrimary) },
-                            leadingIcon = {
-                                Icon(Icons.Outlined.Share, contentDescription = null, tint = colors.textPrimary)
-                            },
-                            onClick = {
-                                showOptionsMenu = false
-                                try {
-                                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                                        putExtra(Intent.EXTRA_TEXT, "Dengarkan ${track.title} oleh ${track.artist}: ${track.url}")
-                                        type = "text/plain"
-                                    }
-                                    context.startActivity(Intent.createChooser(sendIntent, "Bagikan via"))
-                                } catch (_: Exception) {}
-                            }
-                        )
-                    }
-                }
             }
         }
 
