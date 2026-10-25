@@ -3,8 +3,17 @@
 # 🖤 Kuro (黒)
 ### *Pure Sound. Zero Noise. Mastered for Android.*
 
-An ultra-lightweight, ad-free music streaming player built with **Jetpack Compose** & **AndroidX Media3**.  
+An ultra-lightweight, ad-free music streaming player built with **Jetpack Compose** & **AndroidX Media3**.
 Designed with an uncompromising monochrome aesthetic, studio-quality 1080p artwork, and zero telemetry.
+
+<br/>
+
+> ### 🙏 Acknowledgements & Credits
+> Kuro berdiri di atas dedikasi dan karya luar biasa dari komunitas open source:
+> - **[NewPipeExtractor](https://github.com/TeamNewPipe/NewPipeExtractor)** oleh **Team NewPipe** ([Christian Schabesberger / @theScrabi](https://github.com/theScrabi) & tim kontributor) — Mesin utama ekstraksi stream audio dan metadata tanpa API resmi dan bebas pelacak.
+> - **[InnerTube](https://github.com/TeamNewPipe/NewPipe)** / InnerTube API Reverse Engineering — Arsitektur data YouTube & YouTube Music internal yang dirintis serta didokumentasikan oleh pengembang ekosistem open-source NewPipe dan komunitas sekitarnya.
+> 
+> *Aplikasi ini dibangun dengan rasa hormat setinggi-tingginya kepada para pengembang yang terus memperjuangkan kebebasan dan privasi media di platform Android.*
 
 <br/>
 
@@ -16,7 +25,7 @@ Designed with an uncompromising monochrome aesthetic, studio-quality 1080p artwo
 
 <br/>
 
-[📥 **Download Latest APK (v3.4.0)**](https://github.com/ayashiiiyo/kuro/releases/latest) • [✨ **Features**](#-fitur-utama) • [🏗️ **Architecture**](#-arsitektur--performa) • [🚀 **Building**](#-kompilasi-dari-source)
+[📥 **Download Latest APK (v3.4.4)**](https://github.com/ayashiiiyo/kuro/releases/latest) • [✨ **Features**](#-fitur-utama) • [🏗️ **Architecture**](#-arsitektur--performa) • [🚀 **Building**](#-kompilasi-dari-source)
 
 ---
 
@@ -40,10 +49,12 @@ Sebagian besar aplikasi pemutar musik modern dipenuhi iklan, rekomendasi algorit
 
 ## ✨ Fitur Utama
 
-### 🎨 1. Desain Pemutar Penuh Modern & Elegan
-- **Full-Bleed Edge-to-Edge Artwork:** Album cover membentang penuh 350dp di bagian atas layar dengan gradien vertikal lembut yang melebur ke latar belakang hitam pekat.
+### 🎨 1. Desain Pemutar Penuh & Homescreen Widget Modern
+- **Full-Bleed Edge-to-Edge Artwork:** Album cover membentang anggun di bagian atas layar dengan gradien halus yang melebur ke latar belakang hitam pekat.
+- **Menu Opsi Rapi (···):** Aksi sekunder seperti Simpan ke Putar Nanti, Tambah ke Playlist, Bagikan, dan Pengaturan Audio tersusun bersih di menu titik tiga.
+- **Homescreen Widgets (4x1 & 2x2):** Kontrol musik langsung dari layar utama dengan cover art, progress bar, play/pause, next/prev, dan tombol love.
 - **Vibrant Red Favorite Heart:** Indikator love merah menyala (`#FF3B30`) yang kontras dan memikat.
-- **Baris Utilitas Cepat:** Pintasan satu-ketukan untuk beralih output audio, membuka lirik, menambah ke playlist, dan membuka equalizer.
+- **Baris Utilitas Cepat:** Pintasan satu-ketukan untuk beralih output audio dan kartu lirik responsif.
 
 ### 🎤 2. Karaoke Synced Lyrics & Terjemahan Dwibahasa
 - **Lirik Tersinkronisasi Presisi:** Auto-scroll halus mengikuti vokal dengan intro guard instrumen cerdas.
