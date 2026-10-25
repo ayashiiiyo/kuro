@@ -15,13 +15,14 @@ class KuroApp : Application(), ImageLoaderFactory {
         super.onCreate()
         AuthManager.init(this)
         val settings = com.ayashii.kuro.data.settings.SettingsManager.init(this)
-        // Apply saved user language or keep system default
-        val savedLang = settings.language.value
-        if (savedLang.code.isNotEmpty()) {
-            androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(
-                androidx.core.os.LocaleListCompat.forLanguageTags(savedLang.code)
-            )
-        }
+        try {
+            val savedLang = settings.language.value
+            if (savedLang.code.isNotEmpty()) {
+                androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(
+                    androidx.core.os.LocaleListCompat.forLanguageTags(savedLang.code)
+                )
+            }
+        } catch (_: Exception) {}
         val downloader = KuroDownloader.init(this)
         NewPipe.init(downloader)
     }

@@ -74,12 +74,14 @@ class SettingsManager private constructor(private val context: Context) {
     fun setLanguage(lang: AppLanguage) {
         _language.value = lang
         prefs.edit().putString(KEY_LANGUAGE, lang.code).apply()
-        val appLocales = if (lang.code.isEmpty()) {
-            LocaleListCompat.getEmptyLocaleList()
-        } else {
-            LocaleListCompat.forLanguageTags(lang.code)
-        }
-        AppCompatDelegate.setApplicationLocales(appLocales)
+        try {
+            val appLocales = if (lang.code.isEmpty()) {
+                LocaleListCompat.getEmptyLocaleList()
+            } else {
+                LocaleListCompat.forLanguageTags(lang.code)
+            }
+            AppCompatDelegate.setApplicationLocales(appLocales)
+        } catch (_: Exception) {}
     }
 
     fun setAudioQuality(quality: AudioQuality) {
