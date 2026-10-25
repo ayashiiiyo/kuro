@@ -419,13 +419,13 @@ fun SettingsDialog(
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(
-                                text = "Penyimpanan & Cache",
+                                text = stringResource(R.string.settings_cache),
                                 style = Typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = colors.textPrimary
                             )
                             Text(
-                                text = "Ukuran Cache: $cacheSize",
+                                text = stringResource(R.string.settings_cache_size, cacheSize),
                                 style = Typography.bodySmall,
                                 color = colors.textMuted
                             )
@@ -442,14 +442,14 @@ fun SettingsDialog(
                                     val success = settingsManager.clearCacheAsync()
                                     if (success) {
                                         cacheSize = settingsManager.getFormattedCacheSizeAsync()
-                                        Toast.makeText(context, "Cache berhasil dibersihkan!", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, context.getString(R.string.settings_cache_cleared), Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             }
                             .padding(horizontal = 12.dp, vertical = 7.dp)
                     ) {
                         Text(
-                            text = "Bersihkan",
+                            text = stringResource(R.string.settings_cache_clear),
                             style = Typography.labelSmall,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -468,13 +468,13 @@ fun SettingsDialog(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Pembaruan Aplikasi",
+                            text = stringResource(R.string.settings_update),
                             style = Typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = colors.textPrimary
                         )
                         Text(
-                            text = updateStatusMessage ?: "Versi terpasang: v${com.ayashii.kuro.BuildConfig.VERSION_NAME}",
+                            text = updateStatusMessage ?: "v${com.ayashii.kuro.BuildConfig.VERSION_NAME}",
                             style = Typography.bodySmall,
                             color = if (updateStatusMessage != null) colors.accent else colors.textMuted
                         )
@@ -488,21 +488,21 @@ fun SettingsDialog(
                             .clickable(enabled = !isCheckingUpdate) {
                                 scope.launch {
                                     isCheckingUpdate = true
-                                    updateStatusMessage = "Memeriksa GitHub..."
+                                    updateStatusMessage = context.getString(R.string.settings_update_checking)
                                     val update = UpdateManager.getInstance(context).checkForUpdate(force = true)
                                     isCheckingUpdate = false
                                     if (update != null) {
                                         foundUpdateInfo = update
-                                        updateStatusMessage = "Versi baru ditemukan: v${update.versionName}"
+                                        updateStatusMessage = context.getString(R.string.settings_update_found, update.versionName)
                                     } else {
-                                        updateStatusMessage = "Kuro sudah versi terbaru!"
+                                        updateStatusMessage = context.getString(R.string.settings_update_latest)
                                     }
                                 }
                             }
                             .padding(horizontal = 12.dp, vertical = 7.dp)
                     ) {
                         Text(
-                            text = if (isCheckingUpdate) "Mengecek..." else "Cek Update",
+                            text = if (isCheckingUpdate) "…" else stringResource(R.string.settings_update_check),
                             style = Typography.labelSmall,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -535,7 +535,7 @@ fun SettingsDialog(
                     }
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "Open source, zero ads & ultra lightweight",
+                        text = stringResource(R.string.settings_about_desc),
                         style = Typography.labelSmall,
                         fontSize = 10.sp,
                         color = colors.textMuted

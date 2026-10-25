@@ -30,6 +30,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -185,7 +186,7 @@ fun HomeScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Tidak ada lagu ditemukan untuk $selectedGenre",
+                        text = stringResource(R.string.home_no_songs_genre, selectedGenre),
                         style = Typography.bodyMedium,
                         color = colors.textMuted
                     )
@@ -230,9 +231,9 @@ fun HomeScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("Putar kembali", style = Typography.titleLarge, color = colors.textPrimary)
+                            Text(stringResource(R.string.home_play_again), style = Typography.titleLarge, color = colors.textPrimary)
                             Text(
-                                text = "Lihat semua  ›",
+                                text = stringResource(R.string.home_view_all),
                                 style = Typography.bodySmall,
                                 color = colors.textMuted,
                                 modifier = Modifier
@@ -288,7 +289,7 @@ fun HomeScreen(
                 if (featuredTrack != null) {
                     item(key = "featured_title") {
                         Text(
-                            text = "Pilihan untukmu",
+                            text = stringResource(R.string.home_picks_for_you),
                             style = Typography.titleLarge,
                             color = colors.textPrimary,
                             modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 10.dp)
@@ -320,7 +321,7 @@ fun HomeScreen(
                                     .padding(15.dp)
                                     .fillMaxWidth(0.72f)
                             ) {
-                                Text("MIX PERSONAL", style = Typography.labelSmall.copy(fontSize = 9.sp, letterSpacing = 1.2.sp), color = colors.textSecondary)
+                                Text(stringResource(R.string.home_mix_personal), style = Typography.labelSmall.copy(fontSize = 9.sp, letterSpacing = 1.2.sp), color = colors.textSecondary)
                                 Text(featuredTrack.title, style = Typography.titleLarge, color = PureWhite, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text(featuredTrack.artist, style = Typography.bodySmall, color = colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
@@ -452,7 +453,7 @@ fun HomeScreen(
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "Terakhir Diputar",
+                        text = stringResource(R.string.home_recently_played),
                         style = Typography.titleLarge,
                         color = colors.textPrimary
                     )
@@ -461,7 +462,7 @@ fun HomeScreen(
             text = {
                 if (recentlyPlayed.isEmpty()) {
                     Text(
-                        text = "Belum ada riwayat lagu yang diputar.",
+                        text = stringResource(R.string.home_no_history),
                         style = Typography.bodyMedium,
                         color = colors.textMuted
                     )

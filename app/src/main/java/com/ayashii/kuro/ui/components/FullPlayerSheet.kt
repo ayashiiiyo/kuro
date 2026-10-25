@@ -198,7 +198,7 @@ fun FullPlayerSheet(
                 }
 
                 Text(
-                    text = "SEDANG DIPUTAR",
+                    text = stringResource(R.string.player_now_playing),
                     style = Typography.labelSmall.copy(
                         fontSize = 11.sp,
                         letterSpacing = 1.4.sp,
@@ -233,7 +233,7 @@ fun FullPlayerSheet(
                             playlists.firstOrNull { it.name == "Putar Nanti" }?.tracks?.any { it.id == track.id } == true
                         }
                         DropdownMenuItem(
-                            text = { Text(if (isWatchLater) "Hapus dari Putar Nanti" else "Simpan ke Putar Nanti", color = colors.textPrimary) },
+                            text = { Text(if (isWatchLater) stringResource(R.string.player_remove_watch_later) else stringResource(R.string.player_save_watch_later), color = colors.textPrimary) },
                             leadingIcon = {
                                 Icon(
                                     painter = painterResource(if (isWatchLater) R.drawable.ic_kuro_bookmark_filled else R.drawable.ic_kuro_bookmark_border),
@@ -248,7 +248,7 @@ fun FullPlayerSheet(
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text("Tambah ke playlist", color = colors.textPrimary) },
+                            text = { Text(stringResource(R.string.player_add_to_playlist), color = colors.textPrimary) },
                             leadingIcon = { Icon(Icons.Outlined.QueueMusic, contentDescription = null, tint = colors.textPrimary) },
                             onClick = {
                                 showOptionsMenu = false
@@ -256,21 +256,22 @@ fun FullPlayerSheet(
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text("Bagikan lagu", color = colors.textPrimary) },
+                            text = { Text(stringResource(R.string.player_share_song), color = colors.textPrimary) },
                             leadingIcon = { Icon(Icons.Outlined.Share, contentDescription = null, tint = colors.textPrimary) },
                             onClick = {
                                 showOptionsMenu = false
                                 try {
+                                    val shareTemplate = context.getString(R.string.player_share_text, track.title, track.artist, track.url)
                                     val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                                        putExtra(Intent.EXTRA_TEXT, "Dengarkan ${track.title} oleh ${track.artist}: ${track.url}")
+                                        putExtra(Intent.EXTRA_TEXT, shareTemplate)
                                         type = "text/plain"
                                     }
-                                    context.startActivity(Intent.createChooser(sendIntent, "Bagikan via"))
+                                    context.startActivity(Intent.createChooser(sendIntent, context.getString(R.string.player_share_via)))
                                 } catch (_: Exception) {}
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text("Pengaturan audio", color = colors.textPrimary) },
+                            text = { Text(stringResource(R.string.player_audio_settings), color = colors.textPrimary) },
                             leadingIcon = { Icon(Icons.Outlined.Tune, contentDescription = null, tint = colors.textPrimary) },
                             onClick = {
                                 showOptionsMenu = false

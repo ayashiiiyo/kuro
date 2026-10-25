@@ -37,6 +37,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.ui.res.stringResource
+import com.ayashii.kuro.R
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -105,7 +107,7 @@ fun SearchScreen(
     ) {
         Column(modifier = Modifier.padding(horizontal = 20.dp)) {
             Text(
-                text = "Cari",
+                text = stringResource(R.string.search_title),
                 style = Typography.headlineLarge,
                 color = colors.textPrimary
             )
@@ -120,7 +122,7 @@ fun SearchScreen(
                 },
                 placeholder = {
                     Text(
-                        text = "Lagu, artis, atau genre…",
+                        text = stringResource(R.string.search_hint),
                         color = colors.textMuted,
                         style = Typography.bodyLarge
                     )
@@ -183,7 +185,7 @@ fun SearchScreen(
             ) {
                 item {
                     Text(
-                        text = "Saran Pencarian",
+                        text = stringResource(R.string.search_suggestions),
                         style = Typography.labelMedium,
                         color = colors.textMuted,
                         modifier = Modifier.padding(bottom = 8.dp)
@@ -255,7 +257,7 @@ fun SearchScreen(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "Jelajahi Kategori",
+                        text = stringResource(R.string.search_explore_categories),
                         style = Typography.titleLarge,
                         color = colors.textPrimary
                     )
@@ -363,13 +365,13 @@ fun SearchScreen(
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "Lagu tidak ditemukan",
+                        text = stringResource(R.string.search_not_found),
                         style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = colors.textPrimary
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Coba gunakan kata kunci artis, judul lagu lain, atau periksa ejaanmu.",
+                        text = stringResource(R.string.search_not_found_sub),
                         style = Typography.bodyMedium,
                         color = colors.textMuted,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -382,7 +384,7 @@ fun SearchScreen(
             ) {
                 item {
                     Text(
-                        text = "Hasil Pencarian",
+                        text = stringResource(R.string.search_results),
                         style = Typography.labelMedium,
                         color = colors.textMuted,
                         modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 2.dp, bottom = 8.dp)

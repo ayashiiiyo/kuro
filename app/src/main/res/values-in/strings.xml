@@ -18,6 +18,72 @@
     <string name="greeting_night">Selamat malam</string>
     <string name="greeting_subtitle">Musik yang pas untuk sekarang.</string>
 
+    <!-- Home Screen -->
+    <string name="home_play_again">Putar kembali</string>
+    <string name="home_view_all">Lihat semua  ›</string>
+    <string name="home_picks_for_you">Pilihan untukmu</string>
+    <string name="home_mix_personal">MIX PERSONAL</string>
+    <string name="home_no_songs_genre">Tidak ada lagu ditemukan untuk %1$s</string>
+    <string name="home_recently_played">Terakhir Diputar</string>
+    <string name="home_no_history">Belum ada riwayat lagu yang diputar.</string>
+
+    <!-- Library Screen -->
+    <string name="lib_playlist_title">Playlist</string>
+    <string name="lib_tab_favorites">Lagu Favorit</string>
+    <string name="lib_tab_my_playlists">Playlist Saya (%1$d)</string>
+    <string name="lib_fav_count">%1$d Lagu Favorit</string>
+    <string name="lib_playlist_count">%1$d Playlist</string>
+    <string name="lib_fav_empty">Belum ada lagu favorit</string>
+    <string name="lib_fav_empty_sub">Lagu yang kamu beri tanda hati akan muncul di sini</string>
+    <string name="lib_create_playlist">Buat Playlist Baru</string>
+    <string name="lib_create_playlist_sub">Kumpulkan lagu sesuai suasana hatimu</string>
+    <string name="lib_no_playlists">Belum Ada Playlist</string>
+    <string name="lib_no_playlists_sub">Tekan tombol di atas untuk membuat playlist</string>
+    <string name="lib_songs_count">%1$d lagu</string>
+    <string name="lib_enter_name">Beri Nama Playlist</string>
+    <string name="lib_delete_title">Hapus Playlist?</string>
+    <string name="lib_delete_confirm">Playlist \"%1$s\" beserta %2$d lagu di dalamnya akan dihapus secara permanen.</string>
+    <string name="lib_playlist_empty">Playlist ini masih kosong. Tambahkan lagu dari pencarian atau beranda!</string>
+    <string name="lib_cancel">Batal</string>
+    <string name="lib_delete">Hapus</string>
+    <string name="lib_create">Buat</string>
+    <string name="lib_sync_yt">Sync YT</string>
+
+    <!-- Search Screen -->
+    <string name="search_title">Cari</string>
+    <string name="search_hint">Lagu, artis, atau genre…</string>
+    <string name="search_suggestions">Saran Pencarian</string>
+    <string name="search_explore_categories">Jelajahi Kategori</string>
+    <string name="search_not_found">Lagu tidak ditemukan</string>
+    <string name="search_not_found_sub">Coba gunakan kata kunci artis, judul lagu lain, atau periksa ejaanmu.</string>
+    <string name="search_results">Hasil Pencarian</string>
+
+    <!-- Player Sheet -->
+    <string name="player_now_playing">SEDANG DIPUTAR</string>
+    <string name="player_remove_watch_later">Hapus dari Putar Nanti</string>
+    <string name="player_save_watch_later">Simpan ke Putar Nanti</string>
+    <string name="player_add_to_playlist">Tambah ke playlist</string>
+    <string name="player_share_song">Bagikan lagu</string>
+    <string name="player_audio_settings">Pengaturan audio</string>
+    <string name="player_lyrics">Lirik</string>
+    <string name="player_lyrics_loading">Memuat lirik…</string>
+    <string name="player_lyrics_unavailable">Lirik tersinkron belum tersedia</string>
+    <string name="player_share_text">Dengarkan %1$s oleh %2$s: %3$s</string>
+    <string name="player_share_via">Bagikan via</string>
+
+    <!-- Profile & Statistics Menu -->
+    <string name="profile_switch_account">Ganti / Keluar Akun</string>
+    <string name="profile_connect_google">Hubungkan Akun Google</string>
+    <string name="profile_stats">Statistik Mendengarkan</string>
+    <string name="profile_total_plays">Total Putar</string>
+    <string name="profile_total_plays_val">%1$d kali</string>
+    <string name="profile_artists_heard">Artis Didengar</string>
+    <string name="profile_artists_heard_val">%1$d artis</string>
+    <string name="profile_stats_not_enough">Belum cukup data. Putar lebih banyak lagu untuk melihat diagram!</string>
+    <string name="profile_chart_title">DIAGRAM FREKUENSI ARTIS</string>
+    <string name="profile_top_artists">Top %1$d</string>
+    <string name="profile_top_ranking">Peringkat Artis Teratas</string>
+
     <!-- Settings Dialog -->
     <string name="settings_title">Pengaturan</string>
     <string name="settings_language">Bahasa Aplikasi</string>
@@ -25,14 +91,15 @@
     <string name="lang_system">Ikuti Sistem</string>
     <string name="lang_id">Bahasa Indonesia</string>
     <string name="lang_en">English</string>
-    <string name="settings_audio_quality">Kualitas Suara</string>
-    <string name="settings_theme">Tema Aplikasi</string>
+    <string name="settings_audio_quality">Kualitas Audio Streaming</string>
+    <string name="settings_theme">Tema Tampilan</string>
     <string name="settings_theme_system">Ikuti Sistem HP</string>
     <string name="settings_theme_dark">Gelap (OLED Hitam)</string>
     <string name="settings_theme_light">Terang</string>
     <string name="settings_lyrics_trans">Terjemahan Indonesia Lirik</string>
     <string name="settings_lyrics_trans_desc">Tampilkan arti lirik bahasa Indonesia</string>
     <string name="settings_cache">Penyimpanan &amp; Cache</string>
+    <string name="settings_cache_size">Ukuran Cache: %1$s</string>
     <string name="settings_cache_clear">Bersihkan</string>
     <string name="settings_cache_cleared">Cache dibersihkan</string>
     <string name="settings_update">Pembaruan Aplikasi</string>
@@ -40,4 +107,11 @@
     <string name="settings_update_checking">Memeriksa GitHub…</string>
     <string name="settings_update_latest">Kuro sudah versi terbaru!</string>
     <string name="settings_update_found">Versi baru ditemukan: v%1$s</string>
+    <string name="settings_about_desc">Open source, zero ads &amp; ultra lightweight</string>
+
+    <!-- Update Dialog -->
+    <string name="update_available">Pembaruan Tersedia</string>
+    <string name="update_whats_new">Apa yang baru:</string>
+    <string name="update_later">Nanti</string>
+    <string name="update_now">Perbarui</string>
 </resources>

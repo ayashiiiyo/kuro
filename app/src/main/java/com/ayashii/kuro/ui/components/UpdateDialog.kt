@@ -24,6 +24,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.ui.res.stringResource
+import com.ayashii.kuro.R
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -85,7 +87,7 @@ fun UpdateDialog(
 
                     Column {
                         Text(
-                            text = "Pembaruan Tersedia",
+                            text = stringResource(R.string.update_available),
                             style = Typography.titleMedium.copy(fontSize = 17.sp, fontWeight = FontWeight.Bold),
                             color = colors.textPrimary
                         )
@@ -102,7 +104,7 @@ fun UpdateDialog(
                 // Release notes section
                 if (updateInfo.releaseNotes.isNotBlank()) {
                     Text(
-                        text = "Apa yang baru:",
+                        text = stringResource(R.string.update_whats_new),
                         style = Typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold),
                         color = colors.textMuted
                     )
@@ -141,7 +143,7 @@ fun UpdateDialog(
                         border = androidx.compose.foundation.BorderStroke(1.dp, colors.border)
                     ) {
                         Text(
-                            text = "Nanti",
+                            text = stringResource(R.string.update_later),
                             color = colors.textSecondary,
                             style = Typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
                         )
@@ -166,7 +168,7 @@ fun UpdateDialog(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Perbarui",
+                            text = stringResource(R.string.update_now),
                             style = Typography.labelMedium.copy(fontWeight = FontWeight.Bold)
                         )
                     }

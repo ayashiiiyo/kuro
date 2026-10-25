@@ -35,6 +35,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.ui.res.stringResource
+import com.ayashii.kuro.R
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -106,13 +108,13 @@ fun LibraryScreen(
             ) {
                 Column {
                     Text(
-                        text = "Playlist",
+                        text = stringResource(R.string.lib_playlist_title),
                         style = Typography.headlineLarge,
                         color = colors.textPrimary
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = if (selectedTab == 0) "${favorites.size} Lagu Favorit" else "${playlists.size} Playlist",
+                        text = if (selectedTab == 0) stringResource(R.string.lib_fav_count, favorites.size) else stringResource(R.string.lib_playlist_count, playlists.size),
                         style = Typography.bodyMedium,
                         color = colors.textMuted
                     )
@@ -136,7 +138,7 @@ fun LibraryScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Sync YT",
+                            text = stringResource(R.string.lib_sync_yt),
                             style = Typography.labelSmall,
                             color = colors.textPrimary,
                             fontSize = 11.sp
@@ -163,7 +165,7 @@ fun LibraryScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Lagu Favorit",
+                        text = stringResource(R.string.lib_tab_favorites),
                         style = Typography.labelMedium.copy(fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Medium),
                         color = if (selectedTab == 0) colors.background else colors.textPrimary
                     )
@@ -179,7 +181,7 @@ fun LibraryScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Playlist Saya (${playlists.size})",
+                        text = stringResource(R.string.lib_tab_my_playlists, playlists.size),
                         style = Typography.labelMedium.copy(fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium),
                         color = if (selectedTab == 1) colors.background else colors.textPrimary
                     )
@@ -203,13 +205,13 @@ fun LibraryScreen(
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(
-                                text = "Belum ada lagu favorit",
+                                text = stringResource(R.string.lib_fav_empty),
                                 style = Typography.titleMedium,
                                 color = colors.textPrimary
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Lagu yang kamu beri tanda hati akan muncul di sini",
+                                text = stringResource(R.string.lib_fav_empty_sub),
                                 style = Typography.bodyMedium,
                                 color = colors.textMuted
                             )
@@ -263,12 +265,12 @@ fun LibraryScreen(
                             Spacer(modifier = Modifier.width(14.dp))
                             Column {
                                 Text(
-                                    text = "Buat Playlist Baru",
+                                    text = stringResource(R.string.lib_create_playlist),
                                     style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                     color = colors.textPrimary
                                 )
                                 Text(
-                                    text = "Kumpulkan lagu sesuai suasana hatimu",
+                                    text = stringResource(R.string.lib_create_playlist_sub),
                                     style = Typography.bodySmall,
                                     color = colors.textMuted
                                 )
@@ -294,13 +296,13 @@ fun LibraryScreen(
                                     )
                                     Spacer(modifier = Modifier.height(12.dp))
                                     Text(
-                                        text = "Belum Ada Playlist",
+                                        text = stringResource(R.string.lib_no_playlists),
                                         style = Typography.titleMedium,
                                         color = colors.textPrimary
                                     )
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        text = "Tekan tombol di atas untuk membuat playlist",
+                                        text = stringResource(R.string.lib_no_playlists_sub),
                                         style = Typography.bodyMedium,
                                         color = colors.textMuted
                                     )
@@ -361,7 +363,7 @@ fun LibraryScreen(
             onDismissRequest = { showCreateDialog = false },
             title = {
                 Text(
-                    text = "Beri Nama Playlist",
+                    text = stringResource(R.string.lib_enter_name),
                     style = Typography.titleLarge,
                     color = colors.textPrimary
                 )
@@ -399,12 +401,12 @@ fun LibraryScreen(
                         contentColor = colors.background
                     )
                 ) {
-                    Text("Buat")
+                    Text(stringResource(R.string.lib_create))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showCreateDialog = false }) {
-                    Text("Batal", color = colors.textMuted)
+                    Text(stringResource(R.string.lib_cancel), color = colors.textMuted)
                 }
             },
             containerColor = colors.background
@@ -417,14 +419,14 @@ fun LibraryScreen(
             onDismissRequest = { playlistToDelete = null },
             title = {
                 Text(
-                    text = "Hapus Playlist?",
+                    text = stringResource(R.string.lib_delete_title),
                     style = Typography.titleLarge,
                     color = colors.textPrimary
                 )
             },
             text = {
                 Text(
-                    text = "Playlist \"${targetPlaylist.name}\" beserta ${targetPlaylist.tracks.size} lagu di dalamnya akan dihapus secara permanen.",
+                    text = stringResource(R.string.lib_delete_confirm, targetPlaylist.name, targetPlaylist.tracks.size),
                     style = Typography.bodyMedium,
                     color = colors.textMuted
                 )
@@ -440,12 +442,12 @@ fun LibraryScreen(
                         contentColor = androidx.compose.ui.graphics.Color.White
                     )
                 ) {
-                    Text("Hapus", fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.lib_delete), fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { playlistToDelete = null }) {
-                    Text("Batal", color = colors.textPrimary)
+                    Text(stringResource(R.string.lib_cancel), color = colors.textPrimary)
                 }
             },
             containerColor = colors.background
@@ -641,7 +643,7 @@ fun PlaylistDetailView(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Playlist ini masih kosong. Tambahkan lagu dari pencarian atau beranda!",
+                            text = stringResource(R.string.lib_playlist_empty),
                             style = Typography.bodyMedium,
                             color = colors.textMuted,
                             modifier = Modifier.padding(horizontal = 32.dp)

@@ -71,20 +71,17 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<EOF
-          ## Kuro v${VERSION_NAME} — Crash Fix & Stability
+          ## Kuro v${VERSION_NAME} — Full App Localization
 
-          - Fixed crash on launch (restored ComponentActivity base to prevent AppCompat theme mismatch, and safe-wrapped locale initialization).
-          - Fixed ForegroundServiceDidNotStartInTimeException on background playback by using standard MediaSessionService service start.
-          - Universal Language Support: follows system language by default, with manual language picker in Settings.
-          - Fixed homescreen widget crash ("Problem loading widget") caused by unsupported Space view in RemoteViews.
-          - Fixed unresponsive media control buttons (Skip Next, Previous, Play/Pause) with direct receiver routing.
-          - Adjusted home greeting time ranges with accurate "Selamat sore" (15:00-18:59) and "Selamat malam" (19:00+).
+          - Complete Universal Multilingual support across the entire app:
+            - Full Indonesian & English translation for Home, Library, Playlists, Search, Lyrics, Player Options, Settings, and Update dialogs.
+            - Dynamic system locale adaptation with instant in-app manual switch.
           - Published signed release and debug APKs.
           EOF
           gh release create "$RELEASE_TAG" \
             "${{ steps.apk.outputs.release_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (Crash Fix & Stability)" \
+            --title "Kuro $RELEASE_TAG (Full App Localization)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 

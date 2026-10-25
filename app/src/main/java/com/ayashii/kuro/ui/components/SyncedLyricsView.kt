@@ -30,6 +30,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.ui.res.stringResource
+import com.ayashii.kuro.R
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -100,7 +102,7 @@ fun SyncedLyricsView(
                     modifier = Modifier.clickable(enabled = onExpandToggle != null) { onExpandToggle?.invoke() }
                 ) {
                     Text(
-                        text = "Lirik",
+                        text = stringResource(R.string.player_lyrics),
                         style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = colors.textPrimary
                     )
@@ -182,7 +184,7 @@ fun SyncedLyricsView(
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = "Memuat lirik...",
+                            text = stringResource(R.string.player_lyrics_loading),
                             style = Typography.bodyMedium,
                             color = colors.textMuted
                         )
@@ -194,7 +196,7 @@ fun SyncedLyricsView(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Lirik tersinkron belum tersedia",
+                        text = stringResource(R.string.player_lyrics_unavailable),
                         style = Typography.bodyMedium,
                         color = colors.textMuted
                     )
