@@ -2,6 +2,7 @@ package com.ayashii.kuro.viewmodel
 
 import android.app.Application
 import android.content.ComponentName
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
