@@ -70,13 +70,13 @@ jobs:
           RELEASE_TAG: v${{ steps.apk.outputs.version }}
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
-          cat > RELEASE_NOTES.md <<EOF
-          ## Kuro v${VERSION_NAME} — Widget Fix & Immediate Install Prompt
+          cat > RELEASE_NOTES.md <<'EOF'
+          ## Kuro v3.5.0 — Widget Fix & Immediate Install Prompt
 
-          - Fixed 2x2 Square Widget loading error ("Problem loading widget") caused by unsupported `<View>` in RemoteViews (replaced with supported `<TextView>`).
+          - Fixed 2x2 Square Widget loading error ("Problem loading widget") caused by unsupported View in RemoteViews (replaced with supported TextView).
           - Fixed homescreen widget click Force Close (FC) / unresponsive buttons by safeguarding BroadcastReceiver with direct PlaybackService intents and safe MediaController completion.
           - Added immediate high-priority Heads-Up Notification and automatic install prompt as soon as APK download completes via DownloadManager.
-          - Corrected DownloadManager broadcast receiver export flags (`RECEIVER_EXPORTED`) for Android 13/14 compatibility.
+          - Corrected DownloadManager broadcast receiver export flags (RECEIVER_EXPORTED) for Android 13/14 compatibility.
           - Published signed release and debug APKs.
           EOF
           gh release create "$RELEASE_TAG" \
