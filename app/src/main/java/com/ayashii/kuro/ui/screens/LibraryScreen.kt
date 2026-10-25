@@ -106,13 +106,13 @@ fun LibraryScreen(
             ) {
                 Column {
                     Text(
-                        text = "Library",
+                        text = "Playlist",
                         style = Typography.headlineLarge,
                         color = colors.textPrimary
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = if (selectedTab == 0) "${favorites.size} Liked Songs" else "${playlists.size} Playlists",
+                        text = if (selectedTab == 0) "${favorites.size} Lagu Favorit" else "${playlists.size} Playlist",
                         style = Typography.bodyMedium,
                         color = colors.textMuted
                     )
@@ -163,7 +163,7 @@ fun LibraryScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Liked Songs",
+                        text = "Lagu Favorit",
                         style = Typography.labelMedium.copy(fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Medium),
                         color = if (selectedTab == 0) colors.background else colors.textPrimary
                     )
@@ -179,7 +179,7 @@ fun LibraryScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Playlists (${playlists.size})",
+                        text = "Playlist Saya (${playlists.size})",
                         style = Typography.labelMedium.copy(fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium),
                         color = if (selectedTab == 1) colors.background else colors.textPrimary
                     )
@@ -196,20 +196,20 @@ fun LibraryScreen(
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Icon(
-                                imageVector = Icons.Outlined.LibraryMusic,
+                                imageVector = Icons.Outlined.QueueMusic,
                                 contentDescription = null,
                                 tint = colors.textSecondary,
                                 modifier = Modifier.size(56.dp)
                             )
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(
-                                text = "Your library is empty",
+                                text = "Belum ada lagu favorit",
                                 style = Typography.titleMedium,
                                 color = colors.textPrimary
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Tap the heart icon on any song to save it here",
+                                text = "Lagu yang kamu beri tanda hati akan muncul di sini",
                                 style = Typography.bodyMedium,
                                 color = colors.textMuted
                             )
