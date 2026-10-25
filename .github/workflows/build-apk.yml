@@ -71,17 +71,18 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<EOF
-          ## Kuro v${VERSION_NAME} — Full App Localization
+          ## Kuro v${VERSION_NAME} — Widget Fix & Immediate Install Prompt
 
-          - Complete Universal Multilingual support across the entire app:
-            - Full Indonesian & English translation for Home, Library, Playlists, Search, Lyrics, Player Options, Settings, and Update dialogs.
-            - Dynamic system locale adaptation with instant in-app manual switch.
+          - Fixed 2x2 Square Widget loading error ("Problem loading widget") caused by unsupported `<View>` in RemoteViews (replaced with supported `<TextView>`).
+          - Fixed homescreen widget click Force Close (FC) / unresponsive buttons by safeguarding BroadcastReceiver with direct PlaybackService intents and safe MediaController completion.
+          - Added immediate high-priority Heads-Up Notification and automatic install prompt as soon as APK download completes via DownloadManager.
+          - Corrected DownloadManager broadcast receiver export flags (`RECEIVER_EXPORTED`) for Android 13/14 compatibility.
           - Published signed release and debug APKs.
           EOF
           gh release create "$RELEASE_TAG" \
             "${{ steps.apk.outputs.release_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (Full App Localization)" \
+            --title "Kuro $RELEASE_TAG (Widget Fix & Auto Install)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 

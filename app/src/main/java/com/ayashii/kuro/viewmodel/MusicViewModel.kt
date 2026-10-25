@@ -186,6 +186,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val mediaActionReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
             when (intent?.action) {
+                PlaybackService.ACTION_PLAY_PAUSE -> togglePlayPause()
                 PlaybackService.ACTION_NEXT -> skipNext()
                 PlaybackService.ACTION_PREV -> skipPrevious()
                 com.ayashii.kuro.widget.WIDGET_FAVORITES_CHANGED -> reloadFavoritesFromPrefs()
@@ -219,6 +220,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         loadTrending()
         try {
             val filter = android.content.IntentFilter().apply {
+                addAction(PlaybackService.ACTION_PLAY_PAUSE)
                 addAction(PlaybackService.ACTION_NEXT)
                 addAction(PlaybackService.ACTION_PREV)
                 addAction(com.ayashii.kuro.widget.WIDGET_FAVORITES_CHANGED)

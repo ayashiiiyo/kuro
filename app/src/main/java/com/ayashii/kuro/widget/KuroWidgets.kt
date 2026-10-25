@@ -82,7 +82,9 @@ private object WidgetRenderer {
 
     private fun render(context: Context, manager: AppWidgetManager, id: Int, square: Boolean, track: Track?, playing: Boolean, position: Long, duration: Long) {
         val views = RemoteViews(context.packageName, if (square) R.layout.widget_kuro_square else R.layout.widget_kuro_compact)
-        val open = Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        val open = Intent(context, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
         views.setOnClickPendingIntent(R.id.widget_root, PendingIntent.getActivity(context, 1, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
         val title = track?.title?.takeIf(String::isNotBlank) ?: "Buka Kuro untuk memutar"
         val artist = track?.artist?.takeIf(String::isNotBlank) ?: "Musikmu, selalu dekat"
@@ -202,13 +204,35 @@ class KuroWidgetActionReceiver : android.content.BroadcastReceiver() {
         val command = intent.getStringExtra("widget_command") ?: intent.action
         if (command == null) return
 
-        // Direct fallback broadcast for Next/Prev so MusicViewModel receives it immediately
-        if (command == ACTION_NEXT) {
-            context.sendBroadcast(Intent(PlaybackService.ACTION_NEXT).setPackage(context.packageName))
-        } else if (command == ACTION_PREVIOUS) {
-            context.sendBroadcast(Intent(PlaybackService.ACTION_PREV).setPackage(context.packageName))
+        // 1. Send direct broadcast for ViewModel if UI is alive
+        when (command) {
+            ACTION_PLAY_PAUSE -> {
+                context.sendBroadcast(Intent(PlaybackService.ACTION_PLAY_PAUSE).setPackage(context.packageName))
+            }
+            ACTION_NEXT -> {
+                context.sendBroadcast(Intent(PlaybackService.ACTION_NEXT).setPackage(context.packageName))
+            }
+            ACTION_PREVIOUS -> {
+                context.sendBroadcast(Intent(PlaybackService.ACTION_PREV).setPackage(context.packageName))
+            }
         }
 
+        // 2. Also dispatch directly to PlaybackService via startService (non-fatal if blocked)
+        try {
+            val serviceIntent = Intent(context, PlaybackService::class.java).apply {
+                action = when (command) {
+                    ACTION_PLAY_PAUSE -> PlaybackService.ACTION_PLAY_PAUSE
+                    ACTION_NEXT -> PlaybackService.ACTION_NEXT
+                    ACTION_PREVIOUS -> PlaybackService.ACTION_PREV
+                    else -> null
+                }
+            }
+            if (serviceIntent.action != null) {
+                context.startService(serviceIntent)
+            }
+        } catch (_: Exception) {}
+
+        // 3. Connect to MediaSessionService asynchronously via MediaController for full sync & favorites
         val pendingResult = goAsync()
         val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
         val future = MediaController.Builder(context, token).buildAsync()
@@ -241,15 +265,18 @@ class KuroWidgetActionReceiver : android.content.BroadcastReceiver() {
                 }
                 persist(context, controller)
             } catch (e: Exception) {
-                android.util.Log.e("KuroWidgetReceiver", "Failed to control media: ${e.message}")
+                android.util.Log.e("KuroWidgetReceiver", "MediaController operation info: ${e.message}")
+            } finally {
+                WidgetRenderer.update(context)
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    try {
+                        MediaController.releaseFuture(future)
+                    } catch (_: Exception) {}
+                    try {
+                        pendingResult.finish()
+                    } catch (_: Exception) {}
+                }, 300L)
             }
-            WidgetRenderer.update(context)
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                try {
-                    MediaController.releaseFuture(future)
-                } catch (_: Exception) {}
-                pendingResult.finish()
-            }, 300L)
         }, MoreExecutors.directExecutor())
     }
 

@@ -30,6 +30,7 @@ class PlaybackService : MediaSessionService() {
     companion object {
         const val CHANNEL_ID = "kuro_playback_channel"
         const val NOTIFICATION_ID = 1001
+        const val ACTION_PLAY_PAUSE = "com.ayashii.kuro.ACTION_PLAY_PAUSE"
         const val ACTION_NEXT = "com.ayashii.kuro.ACTION_NEXT"
         const val ACTION_PREV = "com.ayashii.kuro.ACTION_PREV"
     }
@@ -168,6 +169,19 @@ class PlaybackService : MediaSessionService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
+        when (intent?.action) {
+            ACTION_PLAY_PAUSE -> {
+                player?.let { p ->
+                    if (p.isPlaying) p.pause() else p.play()
+                }
+            }
+            ACTION_NEXT -> {
+                sendBroadcast(Intent(ACTION_NEXT).setPackage(packageName))
+            }
+            ACTION_PREV -> {
+                sendBroadcast(Intent(ACTION_PREV).setPackage(packageName))
+            }
+        }
         return START_STICKY
     }
 
