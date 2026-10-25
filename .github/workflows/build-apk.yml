@@ -71,18 +71,20 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.5.0 — Widget Fix & Immediate Install Prompt
+          ## Kuro v3.5.1 — Widget Playback Fix & Flexible Resizing
 
-          - Fixed 2x2 Square Widget loading error ("Problem loading widget") caused by unsupported View in RemoteViews (replaced with supported TextView).
-          - Fixed homescreen widget click Force Close (FC) / unresponsive buttons by safeguarding BroadcastReceiver with direct PlaybackService intents and safe MediaController completion.
-          - Added immediate high-priority Heads-Up Notification and automatic install prompt as soon as APK download completes via DownloadManager.
-          - Corrected DownloadManager broadcast receiver export flags (RECEIVER_EXPORTED) for Android 13/14 compatibility.
+          - Fixed widget taps stopping playback: one single command path (MediaController) and play/pause now follows playWhenReady instead of isPlaying.
+          - Removed the duplicate next/previous dispatch that skipped two tracks per tap.
+          - Hardened the widget receiver: controller failures can no longer crash it or leave an ANR, and playback resumes after the service was stopped.
+          - Added full flexible widget resizing (minResizeWidth/minResizeHeight/maxResizeWidth/maxResizeHeight) for both Compact and Square widgets.
+          - Updater now verifies the DownloadManager status, stores the APK in app-private storage, handles the "install unknown apps" permission, and uses localized notifications.
+          - Fixed app language not applying on Android 12 and below, and localized the remaining widget/settings text.
           - Published signed release and debug APKs.
           EOF
           gh release create "$RELEASE_TAG" \
             "${{ steps.apk.outputs.release_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (Widget Fix & Auto Install)" \
+            --title "Kuro $RELEASE_TAG (Widget Playback Fix & Flexible Resizing)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 

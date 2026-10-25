@@ -76,7 +76,8 @@ fun SettingsDialog(
     val currentQuality by settingsManager.audioQuality.collectAsState()
     val autoTranslate by settingsManager.autoTranslate.collectAsState()
 
-    var cacheSize by remember { mutableStateOf("Menghitung...") }
+    val calculatingLabel = stringResource(R.string.common_calculating)
+    var cacheSize by remember { mutableStateOf(calculatingLabel) }
     var isCheckingUpdate by remember { mutableStateOf(false) }
     var updateStatusMessage by remember { mutableStateOf<String?>(null) }
     var foundUpdateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
@@ -125,7 +126,7 @@ fun SettingsDialog(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "Tutup",
+                            contentDescription = stringResource(R.string.action_close),
                             tint = colors.textPrimary,
                             modifier = Modifier.size(18.dp)
                         )
@@ -144,7 +145,7 @@ fun SettingsDialog(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Kualitas Audio Streaming",
+                        text = stringResource(R.string.settings_audio_quality),
                         style = Typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = colors.textPrimary
@@ -192,7 +193,7 @@ fun SettingsDialog(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Check,
-                                    contentDescription = "Dipilih",
+                                    contentDescription = stringResource(R.string.common_selected),
                                     tint = colors.background,
                                     modifier = Modifier.size(16.dp)
                                 )
@@ -215,7 +216,7 @@ fun SettingsDialog(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Tema Tampilan",
+                        text = stringResource(R.string.settings_theme),
                         style = Typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = colors.textPrimary
@@ -225,9 +226,21 @@ fun SettingsDialog(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 val themeOptions = listOf(
-                    Triple(ThemeMode.SYSTEM, "Mengikuti Sistem", "Sesuai tema mode HP kamu"),
-                    Triple(ThemeMode.DARK, "Dark Mode", "Hitam OLED hemat baterai"),
-                    Triple(ThemeMode.LIGHT, "Light Mode", "Putih monokrom bersih")
+                    Triple(
+                        ThemeMode.SYSTEM,
+                        stringResource(R.string.settings_theme_system),
+                        stringResource(R.string.settings_theme_system_desc)
+                    ),
+                    Triple(
+                        ThemeMode.DARK,
+                        stringResource(R.string.settings_theme_dark),
+                        stringResource(R.string.settings_theme_dark_desc)
+                    ),
+                    Triple(
+                        ThemeMode.LIGHT,
+                        stringResource(R.string.settings_theme_light),
+                        stringResource(R.string.settings_theme_light_desc)
+                    )
                 )
 
                 themeOptions.forEach { (mode, title, desc) ->
@@ -269,7 +282,7 @@ fun SettingsDialog(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Check,
-                                    contentDescription = "Dipilih",
+                                    contentDescription = stringResource(R.string.common_selected),
                                     tint = colors.background,
                                     modifier = Modifier.size(16.dp)
                                 )
@@ -323,6 +336,16 @@ fun SettingsDialog(
                             .background(if (isSelected) colors.card else Color.Transparent)
                             .clickable {
                                 settingsManager.setLanguage(lang)
+                                // Android 12 and below applies app locales only through
+                                // AppCompat activities; our activity reads the saved locale
+                                // in attachBaseContext, so a recreate is enough.
+                                if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.S_V2) {
+                                    var ctx: android.content.Context? = context
+                                    while (ctx is android.content.ContextWrapper && ctx !is android.app.Activity) {
+                                        ctx = ctx.baseContext
+                                    }
+                                    (ctx as? android.app.Activity)?.recreate()
+                                }
                             }
                             .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -345,7 +368,7 @@ fun SettingsDialog(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Check,
-                                    contentDescription = "Dipilih",
+                                    contentDescription = stringResource(R.string.common_selected),
                                     tint = colors.background,
                                     modifier = Modifier.size(16.dp)
                                 )
@@ -374,13 +397,13 @@ fun SettingsDialog(
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(
-                                text = "Terjemahan Indonesia Lirik",
+                                text = stringResource(R.string.settings_lyrics_trans),
                                 style = Typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 color = colors.textPrimary
                             )
                             Text(
-                                text = "Tampilkan arti lirik bahasa Indonesia",
+                                text = stringResource(R.string.settings_lyrics_trans_desc),
                                 style = Typography.bodySmall,
                                 color = colors.textMuted
                             )

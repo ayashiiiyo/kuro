@@ -62,6 +62,27 @@ import com.ayashii.kuro.viewmodel.MusicViewModel
 
 class MainActivity : ComponentActivity() {
 
+    /**
+     * AppCompat's per-app locales only reach AppCompatActivity on Android 12 and below.
+     * Since Kuro uses ComponentActivity (platform theme), apply the saved language here.
+     */
+    override fun attachBaseContext(newBase: android.content.Context) {
+        val language = try {
+            com.ayashii.kuro.data.settings.SettingsManager.init(newBase).language.value.code
+        } catch (_: Exception) {
+            ""
+        }
+        if (language.isEmpty()) {
+            super.attachBaseContext(newBase)
+            return
+        }
+        val locale = java.util.Locale(language)
+        java.util.Locale.setDefault(locale)
+        val configuration = android.content.res.Configuration(newBase.resources.configuration)
+        configuration.setLocale(locale)
+        super.attachBaseContext(newBase.createConfigurationContext(configuration))
+    }
+
     private val viewModel: MusicViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {

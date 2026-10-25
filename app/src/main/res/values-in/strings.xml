@@ -10,6 +10,19 @@
     <string name="widget_square_description">Pemutar musik Kuro mini</string>
     <string name="widget_compact_name">Kuro · Pemutar Ringkas</string>
     <string name="widget_square_name">Kuro · Pemutar Mini</string>
+    <string name="widget_placeholder_title">Buka Kuro untuk memutar</string>
+    <string name="widget_placeholder_artist">Musikmu, selalu dekat</string>
+    <string name="widget_artwork_desc">Gambar album</string>
+    <string name="widget_play_desc">Putar atau jeda</string>
+    <string name="widget_previous_desc">Lagu sebelumnya</string>
+    <string name="widget_next_desc">Lagu berikutnya</string>
+
+    <!-- Common actions -->
+    <string name="action_close">Tutup</string>
+    <string name="common_selected">Dipilih</string>
+    <string name="common_calculating">Menghitung…</string>
+    <string name="common_song_count">%1$d lagu</string>
+    <string name="playback_channel_desc">Kontrol pemutaran media</string>
 
     <!-- Greetings -->
     <string name="greeting_morning">Selamat pagi</string>
@@ -96,6 +109,9 @@
     <string name="settings_theme_system">Ikuti Sistem HP</string>
     <string name="settings_theme_dark">Gelap (OLED Hitam)</string>
     <string name="settings_theme_light">Terang</string>
+    <string name="settings_theme_system_desc">Sesuai tema mode HP kamu</string>
+    <string name="settings_theme_dark_desc">Hitam OLED hemat baterai</string>
+    <string name="settings_theme_light_desc">Putih monokrom bersih</string>
     <string name="settings_lyrics_trans">Terjemahan Indonesia Lirik</string>
     <string name="settings_lyrics_trans_desc">Tampilkan arti lirik bahasa Indonesia</string>
     <string name="settings_cache">Penyimpanan &amp; Cache</string>
@@ -114,4 +130,17 @@
     <string name="update_whats_new">Apa yang baru:</string>
     <string name="update_later">Nanti</string>
     <string name="update_now">Perbarui</string>
+
+    <!-- Update notifications -->
+    <string name="update_channel_name">Pembaruan Kuro</string>
+    <string name="update_channel_desc">Pemberitahuan tentang pembaruan aplikasi Kuro</string>
+    <string name="update_download_title">Kuro v%1$s</string>
+    <string name="update_download_desc">Mengunduh pembaruan aplikasi…</string>
+    <string name="update_ready_title">Pembaruan Siap Dipasang!</string>
+    <string name="update_ready_text">Kuro v%1$s berhasil diunduh. Ketuk untuk memasang.</string>
+    <string name="update_ready_bigtext">Kuro v%1$s telah selesai diunduh. Ketuk di sini untuk segera memasang pembaruan.</string>
+    <string name="update_install_now">Pasang Sekarang</string>
+    <string name="update_permission_title">Izinkan pemasangan aplikasi</string>
+    <string name="update_permission_text">Izinkan Kuro memasang aplikasi dari sumber tidak dikenal, lalu ketuk notifikasi pembaruan lagi.</string>
+    <string name="update_download_failed">Unduhan pembaruan gagal. Silakan coba lagi.</string>
 </resources>

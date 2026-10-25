@@ -86,8 +86,8 @@ private object WidgetRenderer {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
         views.setOnClickPendingIntent(R.id.widget_root, PendingIntent.getActivity(context, 1, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
-        val title = track?.title?.takeIf(String::isNotBlank) ?: "Buka Kuro untuk memutar"
-        val artist = track?.artist?.takeIf(String::isNotBlank) ?: "Musikmu, selalu dekat"
+        val title = track?.title?.takeIf(String::isNotBlank) ?: context.getString(R.string.widget_placeholder_title)
+        val artist = track?.artist?.takeIf(String::isNotBlank) ?: context.getString(R.string.widget_placeholder_artist)
         views.setTextViewText(R.id.widget_title, title)
         views.setTextViewText(R.id.widget_artist, artist)
         val currentCached = cachedArtworkBitmap
@@ -97,6 +97,9 @@ private object WidgetRenderer {
             views.setImageViewResource(R.id.widget_art, R.drawable.widget_art_background)
         }
         views.setTextViewText(R.id.widget_play, if (playing) "Ⅱ" else "▶")
+        views.setContentDescription(R.id.widget_play, context.getString(R.string.widget_play_desc))
+        views.setContentDescription(R.id.widget_previous, context.getString(R.string.widget_previous_desc))
+        views.setContentDescription(R.id.widget_next, context.getString(R.string.widget_next_desc))
         views.setProgressBar(R.id.widget_progress, 1000, if (duration > 0) ((position * 1000) / duration).toInt().coerceIn(0, 1000) else 0, false)
         setAction(context, views, R.id.widget_play, KuroWidgetActionReceiver.ACTION_PLAY_PAUSE, id * 10 + 1)
         setAction(context, views, R.id.widget_next, KuroWidgetActionReceiver.ACTION_NEXT, id * 10 + 2)
@@ -194,6 +197,7 @@ class KuroSquareWidgetProvider : AppWidgetProvider() {
 
 class KuroWidgetActionReceiver : android.content.BroadcastReceiver() {
     companion object {
+        private const val TAG = "KuroWidgetReceiver"
         const val ACTION_PLAY_PAUSE = "com.ayashii.kuro.widget.PLAY_PAUSE"
         const val ACTION_NEXT = "com.ayashii.kuro.widget.NEXT"
         const val ACTION_PREVIOUS = "com.ayashii.kuro.widget.PREVIOUS"
@@ -204,50 +208,49 @@ class KuroWidgetActionReceiver : android.content.BroadcastReceiver() {
         val command = intent.getStringExtra("widget_command") ?: intent.action
         if (command == null) return
 
-        // 1. Send direct broadcast for ViewModel if UI is alive
-        when (command) {
-            ACTION_PLAY_PAUSE -> {
-                context.sendBroadcast(Intent(PlaybackService.ACTION_PLAY_PAUSE).setPackage(context.packageName))
-            }
-            ACTION_NEXT -> {
-                context.sendBroadcast(Intent(PlaybackService.ACTION_NEXT).setPackage(context.packageName))
-            }
-            ACTION_PREVIOUS -> {
-                context.sendBroadcast(Intent(PlaybackService.ACTION_PREV).setPackage(context.packageName))
-            }
+        // A BroadcastReceiver context is a ReceiverRestrictedContext; using the app context
+        // avoids surprises when media3 binds/unbinds the service.
+        val appContext = context.applicationContext
+        val pendingResult = goAsync()
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        val finished = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        fun finishOnce() {
+            if (!finished.compareAndSet(false, true)) return
+            try {
+                WidgetRenderer.update(appContext)
+            } catch (_: Exception) {}
+            try {
+                pendingResult.finish()
+            } catch (_: Exception) {}
         }
 
-        // 2. Also dispatch directly to PlaybackService via startService (non-fatal if blocked)
-        try {
-            val serviceIntent = Intent(context, PlaybackService::class.java).apply {
-                action = when (command) {
-                    ACTION_PLAY_PAUSE -> PlaybackService.ACTION_PLAY_PAUSE
-                    ACTION_NEXT -> PlaybackService.ACTION_NEXT
-                    ACTION_PREVIOUS -> PlaybackService.ACTION_PREV
-                    else -> null
-                }
-            }
-            if (serviceIntent.action != null) {
-                context.startService(serviceIntent)
-            }
-        } catch (_: Exception) {}
+        // Never hold the receiver open longer than the system tolerates (~10s). A stuck
+        // MediaController connection previously left pendingResult unfinished -> ANR.
+        handler.postDelayed({ finishOnce() }, 2500L)
 
-        // 3. Connect to MediaSessionService asynchronously via MediaController for full sync & favorites
-        val pendingResult = goAsync()
-        val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
-        val future = MediaController.Builder(context, token).buildAsync()
+        val future = try {
+            val token = SessionToken(appContext, ComponentName(appContext, PlaybackService::class.java))
+            MediaController.Builder(appContext, token).buildAsync()
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "Unable to build MediaController: ${e.message}")
+            handler.removeCallbacksAndMessages(null)
+            finishOnce()
+            return
+        }
+
         future.addListener({
             try {
                 val controller = future.get()
                 when (command) {
                     ACTION_PLAY_PAUSE -> {
-                        if (controller.isPlaying) {
-                            controller.pause()
-                        } else {
-                            controller.play()
-                        }
+                        // playWhenReady is authoritative. isPlaying is false while buffering,
+                        // which made the widget pause a track that was still starting.
+                        if (controller.playWhenReady) controller.pause() else controller.play()
                     }
                     ACTION_NEXT -> {
+                        // ForwardingPlayer already broadcasts ACTION_NEXT to the ViewModel
+                        // (queue owner). Calling it here too caused a double skip.
                         if (controller.isCommandAvailable(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)) {
                             controller.seekToNextMediaItem()
                         } else if (controller.isCommandAvailable(Player.COMMAND_SEEK_TO_NEXT)) {
@@ -261,21 +264,19 @@ class KuroWidgetActionReceiver : android.content.BroadcastReceiver() {
                             controller.seekToPrevious()
                         }
                     }
-                    ACTION_FAVORITE -> toggleFavorite(context, controller)
+                    ACTION_FAVORITE -> toggleFavorite(appContext, controller)
                 }
-                persist(context, controller)
+                persist(appContext, controller)
             } catch (e: Exception) {
-                android.util.Log.e("KuroWidgetReceiver", "MediaController operation info: ${e.message}")
+                android.util.Log.e(TAG, "Widget command '$command' failed: ${e.message}")
             } finally {
-                WidgetRenderer.update(context)
-                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                handler.postDelayed({
+                    handler.removeCallbacksAndMessages(null)
                     try {
                         MediaController.releaseFuture(future)
                     } catch (_: Exception) {}
-                    try {
-                        pendingResult.finish()
-                    } catch (_: Exception) {}
-                }, 300L)
+                    finishOnce()
+                }, 350L)
             }
         }, MoreExecutors.directExecutor())
     }
@@ -347,3 +348,9 @@ private fun decodeTrack(raw: String): Track? = try {
 } catch (_: Exception) { null }
 
 fun updateKuroWidgets(context: Context) = WidgetRenderer.update(context)
+
+/** Last track persisted by the player, used to restore playback after the service is recreated. */
+fun loadPersistedTrack(context: Context): Track? =
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        .getString(KEY_TRACK, null)
+        ?.let(::decodeTrack)

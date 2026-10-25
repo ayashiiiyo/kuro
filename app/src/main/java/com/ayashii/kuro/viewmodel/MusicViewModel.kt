@@ -186,7 +186,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val mediaActionReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
             when (intent?.action) {
-                PlaybackService.ACTION_PLAY_PAUSE -> togglePlayPause()
                 PlaybackService.ACTION_NEXT -> skipNext()
                 PlaybackService.ACTION_PREV -> skipPrevious()
                 com.ayashii.kuro.widget.WIDGET_FAVORITES_CHANGED -> reloadFavoritesFromPrefs()
@@ -220,7 +219,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         loadTrending()
         try {
             val filter = android.content.IntentFilter().apply {
-                addAction(PlaybackService.ACTION_PLAY_PAUSE)
                 addAction(PlaybackService.ACTION_NEXT)
                 addAction(PlaybackService.ACTION_PREV)
                 addAction(com.ayashii.kuro.widget.WIDGET_FAVORITES_CHANGED)
@@ -243,10 +241,14 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         controllerFuture?.addListener({
             try {
                 mediaController = controllerFuture?.get()
+                val hadPendingTrack = pendingTrackToPlay != null
                 pendingTrackToPlay?.let { pending ->
                     pendingTrackToPlay = null
                     playTrack(pending)
                 }
+                // Reopening the app while the service keeps playing used to show an empty
+                // player; mirror the session state into the ViewModel instead.
+                if (!hadPendingTrack) syncCurrentTrackFromController()
                 mediaController?.addListener(object : Player.Listener {
                     override fun onIsPlayingChanged(playing: Boolean) {
                         _isPlaying.value = playing
@@ -356,6 +358,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     }
 
                     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                        syncCurrentTrackFromController()
                         syncWidgetState()
                     }
                 })
@@ -363,6 +366,41 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 e.printStackTrace()
             }
         }, MoreExecutors.directExecutor())
+    }
+
+    /**
+     * Mirrors the MediaSession's current item into [_currentTrack] without touching playback.
+     * Used on first connection and on external transitions (widget/service restore).
+     */
+    private fun syncCurrentTrackFromController() {
+        val controller = mediaController ?: return
+        val item = controller.currentMediaItem ?: return
+        val metadata = item.mediaMetadata
+        val favorite = _favorites.value.any { it.id == item.mediaId }
+        val existing = _currentTrack.value
+
+        if (existing != null && existing.id == item.mediaId) {
+            if (existing.isFavorite != favorite) {
+                _currentTrack.value = existing.copy(isFavorite = favorite)
+            }
+            return
+        }
+        if (item.mediaId.isBlank() && metadata.title.isNullOrBlank()) return
+
+        _currentTrack.value = Track(
+            id = item.mediaId,
+            url = metadata.extras?.getString(com.ayashii.kuro.widget.WIDGET_SOURCE_URL_KEY)
+                ?: item.localConfiguration?.uri?.toString().orEmpty(),
+            title = metadata.title?.toString().orEmpty(),
+            artist = metadata.artist?.toString().orEmpty(),
+            thumbnailUrl = metadata.artworkUri?.toString().orEmpty(),
+            durationSeconds = controller.duration.takeIf { it > 0 }?.div(1000L) ?: 0L,
+            isFavorite = favorite
+        )
+        _isPlaying.value = controller.isPlaying
+        if (controller.duration > 0) _duration.value = controller.duration
+        _playbackPosition.value = controller.currentPosition.coerceAtLeast(0)
+        if (controller.isPlaying) startProgressTracking()
     }
 
     private var isSeeking = false
@@ -600,7 +638,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun togglePlayPause() {
         mediaController?.let { controller ->
-            if (controller.isPlaying) {
+            // playWhenReady stays true while buffering; isPlaying would pause a
+            // track that is still starting instead of resuming it.
+            if (controller.playWhenReady) {
                 controller.pause()
             } else {
                 controller.play()

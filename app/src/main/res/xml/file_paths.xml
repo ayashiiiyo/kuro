@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
+    <!-- New downloads go to the app-specific external dir: readable through FileProvider
+         without any storage permission and unaffected by scoped storage. -->
+    <external-files-path
+        name="external_updates"
+        path="Download/" />
+    <!-- Legacy location used by older versions; kept so pending install notifications
+         created before an update still resolve. -->
     <external-path
         name="external_downloads"
         path="Download" />

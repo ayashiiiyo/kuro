@@ -10,6 +10,19 @@
     <string name="widget_square_description">Mini Kuro music player</string>
     <string name="widget_compact_name">Kuro · Compact Player</string>
     <string name="widget_square_name">Kuro · Mini Player</string>
+    <string name="widget_placeholder_title">Open Kuro to start playing</string>
+    <string name="widget_placeholder_artist">Your music, always close</string>
+    <string name="widget_artwork_desc">Album artwork</string>
+    <string name="widget_play_desc">Play or pause</string>
+    <string name="widget_previous_desc">Previous track</string>
+    <string name="widget_next_desc">Next track</string>
+
+    <!-- Common actions -->
+    <string name="action_close">Close</string>
+    <string name="common_selected">Selected</string>
+    <string name="common_calculating">Calculating…</string>
+    <string name="common_song_count">%1$d songs</string>
+    <string name="playback_channel_desc">Media playback controls</string>
 
     <!-- Greetings -->
     <string name="greeting_morning">Good morning</string>
@@ -96,6 +109,9 @@
     <string name="settings_theme_system">System Default</string>
     <string name="settings_theme_dark">Dark (OLED Black)</string>
     <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_system_desc">Follows your device theme</string>
+    <string name="settings_theme_dark_desc">OLED black saves battery</string>
+    <string name="settings_theme_light_desc">Clean monochrome white</string>
     <string name="settings_lyrics_trans">Lyrics Translation</string>
     <string name="settings_lyrics_trans_desc">Show translated lyrics meaning</string>
     <string name="settings_cache">Storage &amp; Cache</string>
@@ -114,4 +130,17 @@
     <string name="update_whats_new">What\'s new:</string>
     <string name="update_later">Later</string>
     <string name="update_now">Update</string>
+
+    <!-- Update notifications -->
+    <string name="update_channel_name">Kuro updates</string>
+    <string name="update_channel_desc">Notifications about Kuro app updates</string>
+    <string name="update_download_title">Kuro v%1$s</string>
+    <string name="update_download_desc">Downloading app update…</string>
+    <string name="update_ready_title">Update ready to install!</string>
+    <string name="update_ready_text">Kuro v%1$s downloaded. Tap to install.</string>
+    <string name="update_ready_bigtext">Kuro v%1$s has finished downloading. Tap here to install the update now.</string>
+    <string name="update_install_now">Install now</string>
+    <string name="update_permission_title">Allow app installs</string>
+    <string name="update_permission_text">Allow Kuro to install unknown apps, then tap the update notification again.</string>
+    <string name="update_download_failed">Update download failed. Please try again.</string>
 </resources>

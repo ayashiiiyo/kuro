@@ -25,7 +25,7 @@ Designed with an uncompromising monochrome aesthetic, studio-quality 1080p artwo
 
 <br/>
 
-[📥 **Download Latest APK (v3.5.0)**](https://github.com/ayashiiiyo/kuro/releases/latest) • [✨ **Features**](#-fitur-utama) • [🏗️ **Architecture**](#-arsitektur--performa) • [🚀 **Building**](#-kompilasi-dari-source)
+[📥 **Download Latest APK (v3.5.1)**](https://github.com/ayashiiiyo/kuro/releases/latest) • [✨ **Features**](#-fitur-utama) • [🏗️ **Architecture**](#-arsitektur--performa) • [🚀 **Building**](#-kompilasi-dari-source)
 
 ---
 

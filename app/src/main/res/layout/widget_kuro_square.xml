@@ -14,16 +14,16 @@
 
         <ImageView
             android:id="@+id/widget_art"
-            android:layout_width="58dp"
-            android:layout_height="58dp"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
             android:background="@drawable/widget_art_background"
-            android:contentDescription="Artwork"
+            android:contentDescription="@string/widget_artwork_desc"
             android:scaleType="centerCrop" />
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="9dp"
+            android:layout_marginStart="12dp"
             android:layout_weight="1"
             android:orientation="vertical">
 
@@ -33,9 +33,9 @@
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
                 android:maxLines="2"
-                android:text="Buka Kuro untuk memutar"
+                android:text="@string/widget_placeholder_title"
                 android:textColor="#FFFFFF"
-                android:textSize="12sp"
+                android:textSize="14sp"
                 android:textStyle="bold" />
 
             <TextView
@@ -44,9 +44,9 @@
                 android:layout_height="wrap_content"
                 android:ellipsize="end"
                 android:maxLines="1"
-                android:text="Musikmu, selalu dekat"
+                android:text="@string/widget_placeholder_artist"
                 android:textColor="#B0B0B0"
-                android:textSize="10sp" />
+                android:textSize="12sp" />
         </LinearLayout>
     </LinearLayout>
 
@@ -55,7 +55,7 @@
         style="?android:attr/progressBarStyleHorizontal"
         android:layout_width="match_parent"
         android:layout_height="3dp"
-        android:layout_marginTop="14dp"
+        android:layout_marginTop="10dp"
         android:indeterminate="false"
         android:max="1000"
         android:progress="0"
@@ -71,7 +71,7 @@
 
         <TextView
             android:id="@+id/widget_favorite"
-            android:layout_width="42dp"
+            android:layout_width="40dp"
             android:layout_height="48dp"
             android:gravity="center"
             android:text="♡"
@@ -85,18 +85,20 @@
 
         <TextView
             android:id="@+id/widget_previous"
-            android:layout_width="42dp"
+            android:layout_width="40dp"
             android:layout_height="48dp"
             android:gravity="center"
+            android:contentDescription="@string/widget_previous_desc"
             android:text="|◀"
             android:textColor="#EEEEEE"
-            android:textSize="15sp" />
+            android:textSize="16sp" />
 
         <TextView
             android:id="@+id/widget_play"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
             android:background="@drawable/widget_play_background"
+            android:contentDescription="@string/widget_play_desc"
             android:gravity="center"
             android:text="▶"
             android:textColor="#111111"
@@ -105,11 +107,12 @@
 
         <TextView
             android:id="@+id/widget_next"
-            android:layout_width="42dp"
+            android:layout_width="40dp"
             android:layout_height="48dp"
             android:gravity="center"
+            android:contentDescription="@string/widget_next_desc"
             android:text="▶|"
             android:textColor="#EEEEEE"
-            android:textSize="15sp" />
+            android:textSize="16sp" />
     </LinearLayout>
 </LinearLayout>

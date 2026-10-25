@@ -4,11 +4,14 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -21,13 +24,28 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.ayashii.kuro.MainActivity
 import com.ayashii.kuro.R
+import com.ayashii.kuro.data.remote.MusicRepository
+import com.ayashii.kuro.data.settings.SettingsManager
+import com.ayashii.kuro.widget.WIDGET_SOURCE_URL_KEY
+import com.ayashii.kuro.widget.loadPersistedTrack
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class PlaybackService : MediaSessionService() {
 
     private var player: Player? = null
     private var mediaSession: MediaSession? = null
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    @Volatile
+    private var restoringSession = false
 
     companion object {
+        private const val TAG = "KuroPlaybackService"
         const val CHANNEL_ID = "kuro_playback_channel"
         const val NOTIFICATION_ID = 1001
         const val ACTION_PLAY_PAUSE = "com.ayashii.kuro.ACTION_PLAY_PAUSE"
@@ -86,6 +104,20 @@ class PlaybackService : MediaSessionService() {
         })
 
         val forwardingPlayer = object : androidx.media3.common.ForwardingPlayer(exoPlayer) {
+            override fun play() {
+                // The service may have been stopped (paused + task removed), which releases
+                // the player. Restore the last track so the widget/notification can resume.
+                if (mediaItemCount == 0) {
+                    restoreLastSessionAndPlay()
+                    return
+                }
+                // After an error or stopSelf the item remains but the player is IDLE.
+                if (playbackState == Player.STATE_IDLE) {
+                    prepare()
+                }
+                super.play()
+            }
+
             override fun isCommandAvailable(command: Int): Boolean {
                 return when (command) {
                     Player.COMMAND_SEEK_TO_NEXT,
@@ -155,11 +187,58 @@ class PlaybackService : MediaSessionService() {
                 getString(R.string.app_name),
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Kuro Media Playback Controls"
+                description = getString(R.string.playback_channel_desc)
                 setShowBadge(false)
             }
             val notificationManager = getSystemService(NotificationManager::class.java)
             notificationManager?.createNotificationChannel(channel)
+        }
+    }
+
+    /**
+     * Resolves and plays the last persisted track when the player has no media items.
+     * Without this, resuming from the widget after the service was stopped did nothing.
+     */
+    private fun restoreLastSessionAndPlay() {
+        if (restoringSession) return
+        restoringSession = true
+        serviceScope.launch {
+            try {
+                val track = loadPersistedTrack(this@PlaybackService) ?: return@launch
+                if (track.url.isBlank()) return@launch
+                val quality = SettingsManager.getInstance().audioQuality.value
+                val resolved = withContext(Dispatchers.IO) {
+                    runCatching { MusicRepository().getAudioStream(track.url, quality) }.getOrNull()
+                } ?: return@launch
+
+                val metadata = MediaMetadata.Builder()
+                    .setTitle(track.title)
+                    .setArtist(track.artist)
+                    .setArtworkUri(Uri.parse(track.highResThumbnailUrl))
+                    .setDisplayTitle(track.title)
+                    .setExtras(android.os.Bundle().apply {
+                        putString(WIDGET_SOURCE_URL_KEY, track.url)
+                    })
+                    .build()
+
+                val builder = MediaItem.Builder()
+                    .setMediaId(track.id)
+                    .setUri(resolved.url)
+                    .setMediaMetadata(metadata)
+                if (!resolved.mimeType.isNullOrBlank()) {
+                    builder.setMimeType(resolved.mimeType)
+                }
+
+                player?.run {
+                    setMediaItem(builder.build())
+                    prepare()
+                    playWhenReady = true
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Unable to restore last session: ${e.message}")
+            } finally {
+                restoringSession = false
+            }
         }
     }
 
@@ -169,19 +248,6 @@ class PlaybackService : MediaSessionService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
-        when (intent?.action) {
-            ACTION_PLAY_PAUSE -> {
-                player?.let { p ->
-                    if (p.isPlaying) p.pause() else p.play()
-                }
-            }
-            ACTION_NEXT -> {
-                sendBroadcast(Intent(ACTION_NEXT).setPackage(packageName))
-            }
-            ACTION_PREV -> {
-                sendBroadcast(Intent(ACTION_PREV).setPackage(packageName))
-            }
-        }
         return START_STICKY
     }
 
@@ -193,6 +259,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        serviceScope.cancel()
         mediaSession?.run {
             player.release()
             release()
