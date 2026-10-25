@@ -52,6 +52,9 @@ import androidx.compose.ui.window.DialogProperties
 import com.ayashii.kuro.data.settings.AudioQuality
 import com.ayashii.kuro.data.settings.SettingsManager
 import com.ayashii.kuro.data.settings.ThemeMode
+import com.ayashii.kuro.data.update.UpdateInfo
+import com.ayashii.kuro.data.update.UpdateManager
+import com.ayashii.kuro.ui.components.UpdateDialog
 import com.ayashii.kuro.ui.theme.KuroAppTheme
 import com.ayashii.kuro.ui.theme.Typography
 import kotlinx.coroutines.launch
@@ -69,6 +72,9 @@ fun SettingsDialog(
     val autoTranslate by settingsManager.autoTranslate.collectAsState()
 
     var cacheSize by remember { mutableStateOf("Menghitung...") }
+    var isCheckingUpdate by remember { mutableStateOf(false) }
+    var updateStatusMessage by remember { mutableStateOf<String?>(null) }
+    var foundUpdateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
     val scrollState = rememberScrollState()
 
     LaunchedEffect(Unit) {
@@ -373,7 +379,60 @@ fun SettingsDialog(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // 5. About / Version Footer
+                // 5. Check for Updates
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Pembaruan Aplikasi",
+                            style = Typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.textPrimary
+                        )
+                        Text(
+                            text = updateStatusMessage ?: "Versi terpasang: v${com.ayashii.kuro.BuildConfig.VERSION_NAME}",
+                            style = Typography.bodySmall,
+                            color = if (updateStatusMessage != null) colors.accent else colors.textMuted
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(colors.card)
+                            .border(1.dp, colors.border, RoundedCornerShape(20.dp))
+                            .clickable(enabled = !isCheckingUpdate) {
+                                scope.launch {
+                                    isCheckingUpdate = true
+                                    updateStatusMessage = "Memeriksa GitHub..."
+                                    val update = UpdateManager.getInstance(context).checkForUpdate(force = true)
+                                    isCheckingUpdate = false
+                                    if (update != null) {
+                                        foundUpdateInfo = update
+                                        updateStatusMessage = "Versi baru ditemukan: v${update.versionName}"
+                                    } else {
+                                        updateStatusMessage = "Kuro sudah versi terbaru!"
+                                    }
+                                }
+                            }
+                            .padding(horizontal = 12.dp, vertical = 7.dp)
+                    ) {
+                        Text(
+                            text = if (isCheckingUpdate) "Mengecek..." else "Cek Update",
+                            style = Typography.labelSmall,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.textPrimary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // 6. About / Version Footer
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -387,7 +446,7 @@ fun SettingsDialog(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "Kuro v3.3.0 • Media3 & Jetpack Compose",
+                            text = "Kuro v${com.ayashii.kuro.BuildConfig.VERSION_NAME} • Media3 & Jetpack Compose",
                             style = Typography.labelSmall,
                             fontSize = 11.sp,
                             color = colors.textSecondary
@@ -405,5 +464,18 @@ fun SettingsDialog(
                 Spacer(modifier = Modifier.height(8.dp))
             }
         }
+    }
+
+    if (foundUpdateInfo != null) {
+        UpdateDialog(
+            updateInfo = foundUpdateInfo!!,
+            onDownloadClick = {
+                UpdateManager.getInstance(context).startDownloadAndInstall(foundUpdateInfo!!)
+                foundUpdateInfo = null
+            },
+            onDismiss = {
+                foundUpdateInfo = null
+            }
+        )
     }
 }

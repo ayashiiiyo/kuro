@@ -36,6 +36,14 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import com.ayashii.kuro.data.update.UpdateInfo
+import com.ayashii.kuro.data.update.UpdateManager
+import com.ayashii.kuro.ui.components.UpdateDialog
 import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.ui.components.FullPlayerSheet
 import com.ayashii.kuro.ui.components.MiniPlayer
@@ -85,6 +93,19 @@ fun MainAppScreen(viewModel: MusicViewModel) {
     val isExpanded by viewModel.isPlayerExpanded.collectAsState()
     val isShuffle by viewModel.isShuffle.collectAsState()
     val repeatMode by viewModel.repeatMode.collectAsState()
+
+    val context = LocalContext.current
+    var availableUpdate by remember { mutableStateOf<UpdateInfo?>(null) }
+
+    LaunchedEffect(Unit) {
+        if (!UpdateManager.hasCheckedThisSession) {
+            UpdateManager.hasCheckedThisSession = true
+            val update = UpdateManager.getInstance(context).checkForUpdate(force = false)
+            if (update != null) {
+                availableUpdate = update
+            }
+        }
+    }
 
     BackHandler(enabled = isExpanded) {
         viewModel.expandPlayer(false)
@@ -195,6 +216,19 @@ fun MainAppScreen(viewModel: MusicViewModel) {
                     onDismiss = { viewModel.expandPlayer(false) }
                 )
             }
+        }
+
+        if (availableUpdate != null) {
+            UpdateDialog(
+                updateInfo = availableUpdate!!,
+                onDownloadClick = {
+                    UpdateManager.getInstance(context).startDownloadAndInstall(availableUpdate!!)
+                    availableUpdate = null
+                },
+                onDismiss = {
+                    availableUpdate = null
+                }
+            )
         }
     }
 }
