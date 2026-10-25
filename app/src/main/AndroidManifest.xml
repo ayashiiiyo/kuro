@@ -55,6 +55,10 @@
             android:exported="false">
             <intent-filter>
                 <action android:name="com.ayashii.kuro.widget.COMMAND" />
+                <action android:name="com.ayashii.kuro.widget.PLAY_PAUSE" />
+                <action android:name="com.ayashii.kuro.widget.NEXT" />
+                <action android:name="com.ayashii.kuro.widget.PREVIOUS" />
+                <action android:name="com.ayashii.kuro.widget.FAVORITE" />
             </intent-filter>
         </receiver>
 

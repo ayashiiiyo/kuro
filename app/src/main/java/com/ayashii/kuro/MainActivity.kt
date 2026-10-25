@@ -4,7 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -41,6 +41,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import com.ayashii.kuro.data.update.UpdateInfo
 import com.ayashii.kuro.data.update.UpdateManager
 import com.ayashii.kuro.ui.components.UpdateDialog
@@ -59,7 +60,7 @@ import com.ayashii.kuro.ui.theme.PureBlack
 import com.ayashii.kuro.ui.theme.PureWhite
 import com.ayashii.kuro.viewmodel.MusicViewModel
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
 
     private val viewModel: MusicViewModel by viewModels()
 
@@ -137,10 +138,10 @@ fun MainAppScreen(viewModel: MusicViewModel) {
                             icon = {
                                 Icon(
                                     imageVector = screen.icon,
-                                    contentDescription = screen.title
+                                    contentDescription = stringResource(screen.titleRes)
                                 )
                             },
-                            label = { Text(screen.title) },
+                            label = { Text(stringResource(screen.titleRes)) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = colors.textPrimary,
                                 selectedTextColor = colors.textPrimary,

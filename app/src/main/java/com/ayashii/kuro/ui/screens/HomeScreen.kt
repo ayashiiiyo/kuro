@@ -113,15 +113,16 @@ fun HomeScreen(
                 Column {
                     Text(
                         text = when (java.time.LocalTime.now().hour) {
-                            in 5..11 -> "Selamat pagi"
-                            in 12..17 -> "Selamat siang"
-                            else -> "Selamat malam"
+                            in 5..10 -> androidx.compose.ui.res.stringResource(com.ayashii.kuro.R.string.greeting_morning)
+                            in 11..14 -> androidx.compose.ui.res.stringResource(com.ayashii.kuro.R.string.greeting_afternoon)
+                            in 15..18 -> androidx.compose.ui.res.stringResource(com.ayashii.kuro.R.string.greeting_evening)
+                            else -> androidx.compose.ui.res.stringResource(com.ayashii.kuro.R.string.greeting_night)
                         },
                         style = Typography.headlineLarge.copy(fontSize = 25.sp),
                         color = colors.textPrimary
                     )
                     Text(
-                        text = "Musik yang pas untuk sekarang.",
+                        text = androidx.compose.ui.res.stringResource(com.ayashii.kuro.R.string.greeting_subtitle),
                         style = Typography.bodyMedium,
                         color = colors.textMuted
                     )

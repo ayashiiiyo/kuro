@@ -78,7 +78,10 @@
             android:textColor="#E14B49"
             android:textSize="23sp" />
 
-        <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
 
         <TextView
             android:id="@+id/widget_previous"

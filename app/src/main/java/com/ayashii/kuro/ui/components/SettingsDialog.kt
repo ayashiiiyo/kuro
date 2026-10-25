@@ -49,6 +49,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.res.stringResource
+import com.ayashii.kuro.R
+import com.ayashii.kuro.data.settings.AppLanguage
 import com.ayashii.kuro.data.settings.AudioQuality
 import com.ayashii.kuro.data.settings.SettingsManager
 import com.ayashii.kuro.data.settings.ThemeMode
@@ -68,6 +71,7 @@ fun SettingsDialog(
     val scope = rememberCoroutineScope()
     val settingsManager = remember { SettingsManager.getInstance() }
     val currentTheme by settingsManager.themeMode.collectAsState()
+    val currentLanguage by settingsManager.language.collectAsState()
     val currentQuality by settingsManager.audioQuality.collectAsState()
     val autoTranslate by settingsManager.autoTranslate.collectAsState()
 
@@ -105,7 +109,7 @@ fun SettingsDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Pengaturan",
+                        text = stringResource(R.string.settings_title),
                         style = Typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
                         color = colors.textPrimary
@@ -253,6 +257,82 @@ fun SettingsDialog(
                                 color = colors.textMuted
                             )
                         }
+
+                        if (isSelected) {
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .background(colors.accent),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Dipilih",
+                                    tint = colors.background,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+                HorizontalDivider(color = colors.border, thickness = 1.dp)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // App Language Section
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Outlined.Translate,
+                        contentDescription = null,
+                        tint = colors.textPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            text = stringResource(R.string.settings_language),
+                            style = Typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.textPrimary
+                        )
+                        Text(
+                            text = stringResource(R.string.settings_language_desc),
+                            style = Typography.bodySmall,
+                            color = colors.textMuted
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                AppLanguage.values().forEach { lang ->
+                    val isSelected = currentLanguage == lang
+                    val label = when (lang) {
+                        AppLanguage.SYSTEM -> stringResource(R.string.lang_system)
+                        AppLanguage.INDONESIAN -> stringResource(R.string.lang_id)
+                        AppLanguage.ENGLISH -> stringResource(R.string.lang_en)
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (isSelected) colors.card else Color.Transparent)
+                            .clickable {
+                                settingsManager.setLanguage(lang)
+                            }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = label,
+                            style = Typography.bodyMedium,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) colors.textPrimary else colors.textSecondary
+                        )
 
                         if (isSelected) {
                             Box(

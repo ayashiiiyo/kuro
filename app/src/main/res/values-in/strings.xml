@@ -1,0 +1,43 @@
+<resources>
+    <string name="app_name">Kuro</string>
+    <string name="tab_home">Beranda</string>
+    <string name="tab_search">Cari</string>
+    <string name="tab_library">Koleksi</string>
+    <string name="search_placeholder">Cari lagu, artis, album…</string>
+    <string name="trending_title">Lagu Populer</string>
+    <string name="library_title">Koleksi Anda</string>
+    <string name="widget_compact_description">Pemutar musik Kuro ringkas</string>
+    <string name="widget_square_description">Pemutar musik Kuro mini</string>
+    <string name="widget_compact_name">Kuro · Pemutar Ringkas</string>
+    <string name="widget_square_name">Kuro · Pemutar Mini</string>
+
+    <!-- Greetings -->
+    <string name="greeting_morning">Selamat pagi</string>
+    <string name="greeting_afternoon">Selamat siang</string>
+    <string name="greeting_evening">Selamat sore</string>
+    <string name="greeting_night">Selamat malam</string>
+    <string name="greeting_subtitle">Musik yang pas untuk sekarang.</string>
+
+    <!-- Settings Dialog -->
+    <string name="settings_title">Pengaturan</string>
+    <string name="settings_language">Bahasa Aplikasi</string>
+    <string name="settings_language_desc">Ubah bahasa tampilan Kuro</string>
+    <string name="lang_system">Ikuti Sistem</string>
+    <string name="lang_id">Bahasa Indonesia</string>
+    <string name="lang_en">English</string>
+    <string name="settings_audio_quality">Kualitas Suara</string>
+    <string name="settings_theme">Tema Aplikasi</string>
+    <string name="settings_theme_system">Ikuti Sistem HP</string>
+    <string name="settings_theme_dark">Gelap (OLED Hitam)</string>
+    <string name="settings_theme_light">Terang</string>
+    <string name="settings_lyrics_trans">Terjemahan Indonesia Lirik</string>
+    <string name="settings_lyrics_trans_desc">Tampilkan arti lirik bahasa Indonesia</string>
+    <string name="settings_cache">Penyimpanan &amp; Cache</string>
+    <string name="settings_cache_clear">Bersihkan</string>
+    <string name="settings_cache_cleared">Cache dibersihkan</string>
+    <string name="settings_update">Pembaruan Aplikasi</string>
+    <string name="settings_update_check">Cek Update</string>
+    <string name="settings_update_checking">Memeriksa GitHub…</string>
+    <string name="settings_update_latest">Kuro sudah versi terbaru!</string>
+    <string name="settings_update_found">Versi baru ditemukan: v%1$s</string>
+</resources>

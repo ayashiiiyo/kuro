@@ -116,8 +116,19 @@ private object WidgetRenderer {
     }
 
     private fun setAction(context: Context, views: RemoteViews, viewId: Int, action: String, requestCode: Int) {
-        val intent = Intent(context, KuroWidgetActionReceiver::class.java).setAction(COMMAND_ACTION).putExtra("widget_command", action)
-        views.setOnClickPendingIntent(viewId, PendingIntent.getBroadcast(context, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+        val intent = Intent(context, KuroWidgetActionReceiver::class.java).apply {
+            this.action = COMMAND_ACTION
+            putExtra("widget_command", action)
+        }
+        views.setOnClickPendingIntent(
+            viewId,
+            PendingIntent.getBroadcast(
+                context,
+                requestCode,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        )
     }
 
     private fun loadArtwork(context: Context, manager: AppWidgetManager, compact: ComponentName, square: ComponentName, track: Track) {
@@ -152,7 +163,9 @@ private object WidgetRenderer {
     }
 
     private fun roundedBitmap(source: Bitmap): Bitmap {
-        val output = Bitmap.createBitmap(160, 160, Bitmap.Config.ARGB_8888)
+        // RGB_565 uses 2 bytes per pixel (half the memory of ARGB_8888)
+        // This significantly cuts IPC payload size when communicating with Launcher RemoteViews
+        val output = Bitmap.createBitmap(160, 160, Bitmap.Config.RGB_565)
         val canvas = Canvas(output)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
         val shader = android.graphics.BitmapShader(source, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP)
@@ -186,27 +199,55 @@ class KuroWidgetActionReceiver : android.content.BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        val command = intent.getStringExtra("widget_command") ?: intent.action
+        if (command == null) return
+
+        // Direct fallback broadcast for Next/Prev so MusicViewModel receives it immediately
+        if (command == ACTION_NEXT) {
+            context.sendBroadcast(Intent(PlaybackService.ACTION_NEXT).setPackage(context.packageName))
+        } else if (command == ACTION_PREVIOUS) {
+            context.sendBroadcast(Intent(PlaybackService.ACTION_PREV).setPackage(context.packageName))
+        }
+
         val pendingResult = goAsync()
         val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
         val future = MediaController.Builder(context, token).buildAsync()
         future.addListener({
             try {
                 val controller = future.get()
-                when (intent.getStringExtra("widget_command") ?: intent.action) {
-                    ACTION_PLAY_PAUSE -> if (controller.isPlaying) controller.pause() else controller.play()
-                    ACTION_NEXT -> { if (controller.isCommandAvailable(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)) controller.seekToNextMediaItem() else controller.seekToNext() }
-                    ACTION_PREVIOUS -> { if (controller.isCommandAvailable(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)) controller.seekToPreviousMediaItem() else controller.seekToPrevious() }
+                when (command) {
+                    ACTION_PLAY_PAUSE -> {
+                        if (controller.isPlaying) {
+                            controller.pause()
+                        } else {
+                            controller.play()
+                        }
+                    }
+                    ACTION_NEXT -> {
+                        if (controller.isCommandAvailable(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)) {
+                            controller.seekToNextMediaItem()
+                        } else if (controller.isCommandAvailable(Player.COMMAND_SEEK_TO_NEXT)) {
+                            controller.seekToNext()
+                        }
+                    }
+                    ACTION_PREVIOUS -> {
+                        if (controller.isCommandAvailable(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)) {
+                            controller.seekToPreviousMediaItem()
+                        } else if (controller.isCommandAvailable(Player.COMMAND_SEEK_TO_PREVIOUS)) {
+                            controller.seekToPrevious()
+                        }
+                    }
                     ACTION_FAVORITE -> toggleFavorite(context, controller)
                 }
                 persist(context, controller)
-            } catch (_: Exception) {
-                // Session may be gone; the redraw below restores whatever state is cached.
+            } catch (e: Exception) {
+                android.util.Log.e("KuroWidgetReceiver", "Failed to control media: ${e.message}")
             }
             WidgetRenderer.update(context)
-            // Commands travel over IPC asynchronously: keep the connection alive briefly so
-            // pause/next are not dropped, then release instead of leaking a controller.
             android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                MediaController.releaseFuture(future)
+                try {
+                    MediaController.releaseFuture(future)
+                } catch (_: Exception) {}
                 pendingResult.finish()
             }, 300L)
         }, MoreExecutors.directExecutor())

@@ -566,6 +566,12 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                         mediaItemBuilder.setMimeType(resolvedStream.mimeType)
                     }
 
+                    // Ensure service runs as a foreground service immediately when playback starts
+                    try {
+                        val serviceIntent = Intent(getApplication(), PlaybackService::class.java)
+                        androidx.core.content.ContextCompat.startForegroundService(getApplication(), serviceIntent)
+                    } catch (_: Exception) {}
+
                     controller.setMediaItem(mediaItemBuilder.build())
                     controller.prepare()
                     controller.play()
