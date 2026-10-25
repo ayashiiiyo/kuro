@@ -190,3 +190,5 @@ Dibuat dengan rasa cinta terhadap kesederhanaan & musik yang jernih.
 **Kuro (黒) — Made for pure music lovers.**
 
 </div>
+
+<!-- Test edit by Muse on 2026-10-25: verifying GitHub edit access -->
