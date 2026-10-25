@@ -1,0 +1,112 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageView
+            android:id="@+id/widget_art"
+            android:layout_width="58dp"
+            android:layout_height="58dp"
+            android:background="@drawable/widget_art_background"
+            android:contentDescription="Artwork"
+            android:scaleType="centerCrop" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="9dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/widget_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:text="Buka Kuro untuk memutar"
+                android:textColor="#FFFFFF"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/widget_artist"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="Musikmu, selalu dekat"
+                android:textColor="#B0B0B0"
+                android:textSize="10sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <ProgressBar
+        android:id="@+id/widget_progress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:layout_marginTop="14dp"
+        android:indeterminate="false"
+        android:max="1000"
+        android:progress="0"
+        android:progressBackgroundTint="#454545"
+        android:progressTint="#F5F5F5" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/widget_favorite"
+            android:layout_width="42dp"
+            android:layout_height="48dp"
+            android:gravity="center"
+            android:text="♡"
+            android:textColor="#E14B49"
+            android:textSize="23sp" />
+
+        <Space android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/widget_previous"
+            android:layout_width="42dp"
+            android:layout_height="48dp"
+            android:gravity="center"
+            android:text="|◀"
+            android:textColor="#EEEEEE"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/widget_play"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/widget_play_background"
+            android:gravity="center"
+            android:text="▶"
+            android:textColor="#111111"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_next"
+            android:layout_width="42dp"
+            android:layout_height="48dp"
+            android:gravity="center"
+            android:text="▶|"
+            android:textColor="#EEEEEE"
+            android:textSize="15sp" />
+    </LinearLayout>
+</LinearLayout>

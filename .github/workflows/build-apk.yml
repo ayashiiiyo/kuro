@@ -71,17 +71,16 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<EOF
-          ## Kuro v${VERSION_NAME} — Polished Full Player & Refined Layout
+          ## Kuro v${VERSION_NAME} — Player Widgets & Full Player Redesign
 
-          - Relocated Putar Nanti (bookmark ribbon) to lower action bar for clean, unclipped track titles.
-          - Streamlined title and artist row with dedicated, animated favorite button.
-          - Improved SVG ribbon vector proportions and contrast states.
+          - Added compact 4×1 and square 2×2 home-screen player widgets with playback controls.
+          - Redesigned the full player with cleaner playback controls, lyrics, and a secondary actions menu.
           - Published signed release and debug APKs.
           EOF
           gh release create "$RELEASE_TAG" \
             "${{ steps.apk.outputs.release_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (Polished Player Layout)" \
+            --title "Kuro $RELEASE_TAG (Player Widgets & Full Player Redesign)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 

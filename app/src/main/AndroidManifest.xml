@@ -27,6 +27,36 @@
             </intent-filter>
         </activity>
 
+        <receiver
+            android:name=".widget.KuroCompactWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/kuro_compact_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.KuroSquareWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/kuro_square_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.KuroWidgetActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.ayashii.kuro.widget.COMMAND" />
+            </intent-filter>
+        </receiver>
+
         <service
             android:name=".service.PlaybackService"
             android:exported="false"

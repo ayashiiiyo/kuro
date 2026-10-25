@@ -100,7 +100,7 @@ fun SyncedLyricsView(
                     modifier = Modifier.clickable(enabled = onExpandToggle != null) { onExpandToggle?.invoke() }
                 ) {
                     Text(
-                        text = "Lyrics",
+                        text = "Lirik",
                         style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = colors.textPrimary
                     )
@@ -112,7 +112,7 @@ fun SyncedLyricsView(
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = if (lyricsData?.isSynced == true) "KARAOKE SYNC" else "LYRICS",
+                            text = if (lyricsData?.isSynced == true) "TERSINKRON" else "LIRIK",
                             style = Typography.labelSmall.copy(fontSize = 9.sp, fontWeight = FontWeight.Bold),
                             color = colors.textSecondary
                         )
@@ -141,7 +141,7 @@ fun SyncedLyricsView(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = if (showTranslation) "文A ID: ON" else "文A ID: OFF",
+                            text = if (showTranslation) "ID: ON" else "ID: OFF",
                             style = Typography.labelSmall.copy(
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
@@ -182,7 +182,7 @@ fun SyncedLyricsView(
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = "Loading lyrics...",
+                            text = "Memuat lirik...",
                             style = Typography.bodyMedium,
                             color = colors.textMuted
                         )
@@ -194,7 +194,7 @@ fun SyncedLyricsView(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "No synchronized lyrics available",
+                        text = "Lirik tersinkron belum tersedia",
                         style = Typography.bodyMedium,
                         color = colors.textMuted
                     )

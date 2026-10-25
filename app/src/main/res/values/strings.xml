@@ -6,4 +6,8 @@
     <string name="search_placeholder">Search songs, artists, albums…</string>
     <string name="trending_title">Trending Now</string>
     <string name="library_title">Your Collection</string>
+    <string name="widget_compact_description">Pemutar musik Kuro ringkas</string>
+    <string name="widget_square_description">Pemutar musik Kuro mini</string>
+    <string name="widget_compact_name">Kuro · Pemutar Ringkas</string>
+    <string name="widget_square_name">Kuro · Pemutar Mini</string>
 </resources>

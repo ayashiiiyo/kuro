@@ -1,0 +1,12 @@
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_square_description"
+    android:label="@string/widget_square_name"
+    android:initialLayout="@layout/widget_kuro_square"
+    android:minHeight="150dp"
+    android:minWidth="150dp"
+    android:previewLayout="@layout/widget_kuro_square"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="2"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />

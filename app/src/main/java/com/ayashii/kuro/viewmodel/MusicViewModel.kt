@@ -20,6 +20,8 @@ import coil.request.SuccessResult
 import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.data.remote.MusicRepository
 import com.ayashii.kuro.service.PlaybackService
+import com.ayashii.kuro.widget.persist
+import com.ayashii.kuro.widget.updateKuroWidgets
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import java.io.ByteArrayOutputStream
@@ -222,6 +224,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 mediaController?.addListener(object : Player.Listener {
                     override fun onIsPlayingChanged(playing: Boolean) {
                         _isPlaying.value = playing
+                        mediaController?.let { persist(getApplication(), it) }
+                        updateKuroWidgets(getApplication())
                         if (playing) {
                             _isLoadingTrack.value = false
                             startProgressTracking()
@@ -231,6 +235,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     }
 
                     override fun onPlaybackStateChanged(playbackState: Int) {
+                        mediaController?.let { persist(getApplication(), it) }
+                        updateKuroWidgets(getApplication())
                         when (playbackState) {
                             Player.STATE_BUFFERING -> {
                                 _isLoadingTrack.value = true
@@ -321,6 +327,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                             skipNext()
                         }
                     }
+
+                    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                        mediaController?.let { persist(getApplication(), it) }
+                        updateKuroWidgets(getApplication())
+                    }
                 })
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -346,6 +357,12 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                         if (realDuration > 0) {
                             _duration.value = realDuration
                         }
+                    }
+                }
+                if (_isPlaying.value && now % 5_000L < 500L) {
+                    mediaController?.let { controller ->
+                        persist(getApplication(), controller)
+                        updateKuroWidgets(getApplication())
                     }
                 }
                 delay(if (_isPlaying.value) 500 else 1000)
@@ -671,6 +688,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
         _favorites.value = currentFavs
         saveStoredFavorites(currentFavs)
+        mediaController?.let { persist(getApplication(), it) }
+        updateKuroWidgets(getApplication())
 
         if (_currentTrack.value?.id == track.id) {
             _currentTrack.value = _currentTrack.value?.copy(isFavorite = !exists)

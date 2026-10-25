@@ -109,10 +109,11 @@ fun FullPlayerSheet(
 
     var showAddToPlaylist by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
+    var showOptionsMenu by remember { mutableStateOf(false) }
     var isLyricsExpanded by remember { mutableStateOf(false) }
 
     val colors = KuroAppTheme.colors
-    val artworkHeight = (LocalConfiguration.current.screenHeightDp * 0.39f).coerceIn(240f, 340f).dp
+    val artworkHeight = (LocalConfiguration.current.screenHeightDp * 0.32f).coerceIn(210f, 290f).dp
 
     Column(
         modifier = modifier
@@ -199,7 +200,7 @@ fun FullPlayerSheet(
                 }
 
                 Text(
-                    text = "NOW PLAYING",
+                    text = "SEDANG DIPUTAR",
                     style = Typography.labelSmall.copy(
                         fontSize = 11.sp,
                         letterSpacing = 1.4.sp,
@@ -208,28 +209,78 @@ fun FullPlayerSheet(
                     color = Color.White.copy(alpha = 0.9f)
                 )
 
+                Box {
                     IconButton(
-                        onClick = {
-                            try {
-                                val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                                    putExtra(Intent.EXTRA_TEXT, "Dengarkan ${track.title} oleh ${track.artist}: ${track.url}")
-                                    type = "text/plain"
-                                }
-                                context.startActivity(Intent.createChooser(sendIntent, "Bagikan via"))
-                            } catch (_: Exception) {}
-                        },
+                        onClick = { showOptionsMenu = true },
                         modifier = Modifier
                             .size(38.dp)
                             .clip(CircleShape)
                             .background(Color.Black.copy(alpha = 0.4f))
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.Share,
-                            contentDescription = "Share Track",
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "Opsi lagu",
                             tint = Color.White,
                             modifier = Modifier.size(20.dp)
                         )
                     }
+
+                    DropdownMenu(
+                        expanded = showOptionsMenu,
+                        onDismissRequest = { showOptionsMenu = false },
+                        modifier = Modifier.background(colors.card)
+                    ) {
+                        val playlists by viewModel.playlists.collectAsState()
+                        val isWatchLater = remember(playlists, track.id) {
+                            playlists.firstOrNull { it.name == "Putar Nanti" }?.tracks?.any { it.id == track.id } == true
+                        }
+                        DropdownMenuItem(
+                            text = { Text(if (isWatchLater) "Hapus dari Putar Nanti" else "Simpan ke Putar Nanti", color = colors.textPrimary) },
+                            leadingIcon = {
+                                Icon(
+                                    painter = painterResource(if (isWatchLater) R.drawable.ic_kuro_bookmark_filled else R.drawable.ic_kuro_bookmark_border),
+                                    contentDescription = null,
+                                    tint = colors.textPrimary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            },
+                            onClick = {
+                                viewModel.toggleWatchLater(track)
+                                showOptionsMenu = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Tambah ke playlist", color = colors.textPrimary) },
+                            leadingIcon = { Icon(Icons.Outlined.QueueMusic, contentDescription = null, tint = colors.textPrimary) },
+                            onClick = {
+                                showOptionsMenu = false
+                                showAddToPlaylist = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Bagikan lagu", color = colors.textPrimary) },
+                            leadingIcon = { Icon(Icons.Outlined.Share, contentDescription = null, tint = colors.textPrimary) },
+                            onClick = {
+                                showOptionsMenu = false
+                                try {
+                                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                        putExtra(Intent.EXTRA_TEXT, "Dengarkan ${track.title} oleh ${track.artist}: ${track.url}")
+                                        type = "text/plain"
+                                    }
+                                    context.startActivity(Intent.createChooser(sendIntent, "Bagikan via"))
+                                } catch (_: Exception) {}
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Pengaturan audio", color = colors.textPrimary) },
+                            leadingIcon = { Icon(Icons.Outlined.Tune, contentDescription = null, tint = colors.textPrimary) },
+                            onClick = {
+                                showOptionsMenu = false
+                                showSettingsDialog = true
+                            }
+                        )
+                    }
+                }
             }
         }
 
@@ -252,7 +303,7 @@ fun FullPlayerSheet(
                         Column {
                             Text(
                                 text = animatedTrack.title,
-                                style = Typography.headlineMedium.copy(fontSize = 24.sp, fontWeight = FontWeight.Bold),
+                                style = Typography.headlineMedium.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold),
                                 color = colors.textPrimary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -297,14 +348,14 @@ fun FullPlayerSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             PlayerScrubber(
                 viewModel = viewModel,
                 track = track
             )
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -395,13 +446,13 @@ fun FullPlayerSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
@@ -433,91 +484,9 @@ fun FullPlayerSheet(
                     )
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val playlists by viewModel.playlists.collectAsState()
-                    val isWatchLater = remember(playlists, track.id) {
-                        playlists.firstOrNull { it.name == "Putar Nanti" }?.tracks?.any { it.id == track.id } == true
-                    }
-                    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
-
-                    IconButton(
-                        onClick = {
-                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                            viewModel.toggleWatchLater(track)
-                        },
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(CircleShape)
-                            .background(if (isWatchLater) colors.accent else colors.card)
-                            .border(1.dp, if (isWatchLater) colors.accent else colors.border, CircleShape)
-                    ) {
-                        val iconRes = if (isWatchLater) R.drawable.ic_kuro_bookmark_filled else R.drawable.ic_kuro_bookmark_border
-                        Icon(
-                            painter = painterResource(iconRes),
-                            contentDescription = "Putar Nanti",
-                            tint = if (isWatchLater) colors.background else colors.textPrimary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-
-                    IconButton(
-                        onClick = {
-                            isLyricsExpanded = !isLyricsExpanded
-                            if (isLyricsExpanded) {
-                                scope.launch {
-                                    scrollState.animateScrollTo(scrollState.maxValue)
-                                }
-                            }
-                        },
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(CircleShape)
-                            .background(if (isLyricsExpanded) colors.accent else colors.card)
-                            .border(1.dp, colors.border, CircleShape)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.ChatBubbleOutline,
-                            contentDescription = "Lyrics",
-                            tint = if (isLyricsExpanded) colors.background else colors.textPrimary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-
-                    IconButton(
-                        onClick = { showAddToPlaylist = true },
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(CircleShape)
-                            .background(colors.card)
-                            .border(1.dp, colors.border, CircleShape)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.QueueMusic,
-                            contentDescription = "Add to playlist",
-                            tint = colors.textPrimary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-
-                    IconButton(
-                        onClick = { showSettingsDialog = true },
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(CircleShape)
-                            .background(colors.card)
-                            .border(1.dp, colors.border, CircleShape)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Tune,
-                            contentDescription = "Settings & Equalizer",
-                            tint = colors.textPrimary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             val hasLyrics = currentLyrics != null && currentLyrics!!.lines.isNotEmpty() &&
                     currentLyrics!!.lines.none { it.text.trim().equals("null", ignoreCase = true) }
