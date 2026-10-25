@@ -187,8 +187,30 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             when (intent?.action) {
                 PlaybackService.ACTION_NEXT -> skipNext()
                 PlaybackService.ACTION_PREV -> skipPrevious()
+                com.ayashii.kuro.widget.WIDGET_FAVORITES_CHANGED -> reloadFavoritesFromPrefs()
             }
         }
+    }
+
+    /** Keeps the in-app favorite state in sync when the home-screen widget toggles it. */
+    private fun reloadFavoritesFromPrefs() {
+        val latest = loadStoredFavorites()
+        _favorites.value = latest
+        val current = _currentTrack.value
+        if (current != null) {
+            val favorite = latest.any { it.id == current.id }
+            if (current.isFavorite != favorite) _currentTrack.value = current.copy(isFavorite = favorite)
+        }
+    }
+
+    /**
+     * Player state must be read on the main thread, but building RemoteViews and the
+     * AppWidgetManager binder call are moved off it.
+     */
+    private fun syncWidgetState() {
+        val controller = mediaController ?: return
+        persist(getApplication(), controller)
+        viewModelScope.launch(Dispatchers.IO) { updateKuroWidgets(getApplication()) }
     }
 
     init {
@@ -198,6 +220,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             val filter = android.content.IntentFilter().apply {
                 addAction(PlaybackService.ACTION_NEXT)
                 addAction(PlaybackService.ACTION_PREV)
+                addAction(com.ayashii.kuro.widget.WIDGET_FAVORITES_CHANGED)
             }
             androidx.core.content.ContextCompat.registerReceiver(
                 getApplication(),
@@ -224,8 +247,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 mediaController?.addListener(object : Player.Listener {
                     override fun onIsPlayingChanged(playing: Boolean) {
                         _isPlaying.value = playing
-                        mediaController?.let { persist(getApplication(), it) }
-                        updateKuroWidgets(getApplication())
+                        syncWidgetState()
                         if (playing) {
                             _isLoadingTrack.value = false
                             startProgressTracking()
@@ -235,8 +257,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     }
 
                     override fun onPlaybackStateChanged(playbackState: Int) {
-                        mediaController?.let { persist(getApplication(), it) }
-                        updateKuroWidgets(getApplication())
+                        syncWidgetState()
                         when (playbackState) {
                             Player.STATE_BUFFERING -> {
                                 _isLoadingTrack.value = true
@@ -298,6 +319,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                                                 .setArtist(fallbackTrack.artist)
                                                 .setArtworkUri(Uri.parse(fallbackTrack.highResThumbnailUrl))
                                                 .setDisplayTitle(fallbackTrack.title)
+                                                .setExtras(android.os.Bundle().apply {
+                                                    putString(com.ayashii.kuro.widget.WIDGET_SOURCE_URL_KEY, fallbackTrack.url)
+                                                })
                                                 .build()
 
                                             val item = MediaItem.Builder()
@@ -329,8 +353,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     }
 
                     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                        mediaController?.let { persist(getApplication(), it) }
-                        updateKuroWidgets(getApplication())
+                        syncWidgetState()
                     }
                 })
             } catch (e: Exception) {
@@ -360,10 +383,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
                 if (_isPlaying.value && now % 5_000L < 500L) {
-                    mediaController?.let { controller ->
-                        persist(getApplication(), controller)
-                        updateKuroWidgets(getApplication())
-                    }
+                    syncWidgetState()
                 }
                 delay(if (_isPlaying.value) 500 else 1000)
             }
@@ -532,6 +552,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                         .setArtist(updatedTrack.artist)
                         .setArtworkUri(Uri.parse(updatedTrack.highResThumbnailUrl))
                         .setDisplayTitle(updatedTrack.title)
+                        .setExtras(android.os.Bundle().apply {
+                            putString(com.ayashii.kuro.widget.WIDGET_SOURCE_URL_KEY, updatedTrack.url)
+                        })
                         .build()
 
                     val mediaItemBuilder = MediaItem.Builder()
@@ -688,8 +711,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
         _favorites.value = currentFavs
         saveStoredFavorites(currentFavs)
-        mediaController?.let { persist(getApplication(), it) }
-        updateKuroWidgets(getApplication())
+        syncWidgetState()
 
         if (_currentTrack.value?.id == track.id) {
             _currentTrack.value = _currentTrack.value?.copy(isFavorite = !exists)

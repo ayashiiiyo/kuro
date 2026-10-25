@@ -71,16 +71,19 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<EOF
-          ## Kuro v${VERSION_NAME} — Player Widgets & Full Player Redesign
+          ## Kuro v${VERSION_NAME} — Widget & Player Bugfix Audit
 
-          - Added compact 4×1 and square 2×2 home-screen player widgets with playback controls.
-          - Redesigned the full player with cleaner playback controls, lyrics, and a secondary actions menu.
+          - Fixed widget artwork refresh wiping the title, progress bar, and tap actions.
+          - Widget favorites now store the original watch URL, so saved songs stay playable.
+          - Favorites toggled from the widget sync back into the running app immediately.
+          - Widget refreshes run off the main thread and skip when no widget is on screen.
+          - Compact 4×1 widget hides the previous button on narrow layouts to keep titles readable.
           - Published signed release and debug APKs.
           EOF
           gh release create "$RELEASE_TAG" \
             "${{ steps.apk.outputs.release_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (Player Widgets & Full Player Redesign)" \
+            --title "Kuro $RELEASE_TAG (Widget & Player Bugfixes)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 

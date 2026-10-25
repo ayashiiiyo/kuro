@@ -11,6 +11,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.drawable.BitmapDrawable
+import android.view.View
 import android.widget.RemoteViews
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
@@ -29,6 +30,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 private const val COMMAND_ACTION = "com.ayashii.kuro.widget.COMMAND"
+const val WIDGET_SOURCE_URL_KEY = "kuro_source_url"
+const val WIDGET_FAVORITES_CHANGED = "com.ayashii.kuro.widget.FAVORITES_CHANGED"
 private const val PREFS = "kuro_widget_state"
 private const val KEY_TRACK = "track"
 private const val KEY_PLAYING = "playing"
@@ -42,6 +45,15 @@ private object WidgetRenderer {
     @Volatile private var cachedArtworkBitmap: Bitmap? = null
 
     fun update(context: Context) {
+        try {
+            updateInternal(context)
+        } catch (_: Exception) {
+            // A launcher may have removed the widget between id lookup and update; never
+            // let widget upkeep take the app down.
+        }
+    }
+
+    private fun updateInternal(context: Context) {
         val manager = AppWidgetManager.getInstance(context)
         val compact = ComponentName(context, KuroCompactWidgetProvider::class.java)
         val square = ComponentName(context, KuroSquareWidgetProvider::class.java)
@@ -86,7 +98,15 @@ private object WidgetRenderer {
         views.setProgressBar(R.id.widget_progress, 1000, if (duration > 0) ((position * 1000) / duration).toInt().coerceIn(0, 1000) else 0, false)
         setAction(context, views, R.id.widget_play, KuroWidgetActionReceiver.ACTION_PLAY_PAUSE, id * 10 + 1)
         setAction(context, views, R.id.widget_next, KuroWidgetActionReceiver.ACTION_NEXT, id * 10 + 2)
-        if (!square) setAction(context, views, R.id.widget_previous, KuroWidgetActionReceiver.ACTION_PREVIOUS, id * 10 + 3)
+        if (!square) {
+            // A true 4×1 cell can be as narrow as ~250dp; drop "previous" there so the
+            // title and artist keep a readable width on single-column launchers.
+            val options = manager.getAppWidgetOptions(id)
+            val minWidth = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0)
+            val showPrevious = minWidth == 0 || minWidth >= 300
+            views.setViewVisibility(R.id.widget_previous, if (showPrevious) View.VISIBLE else View.GONE)
+            if (showPrevious) setAction(context, views, R.id.widget_previous, KuroWidgetActionReceiver.ACTION_PREVIOUS, id * 10 + 3)
+        }
         if (square) {
             views.setTextViewText(R.id.widget_favorite, if (track?.isFavorite == true) "♥" else "♡")
             setAction(context, views, R.id.widget_previous, KuroWidgetActionReceiver.ACTION_PREVIOUS, id * 10 + 3)
@@ -120,7 +140,9 @@ private object WidgetRenderer {
                     val isSquare = id in squareIds
                     val views = RemoteViews(context.packageName, if (isSquare) R.layout.widget_kuro_square else R.layout.widget_kuro_compact)
                     views.setImageViewBitmap(R.id.widget_art, rounded)
-                    manager.updateAppWidget(id, views)
+                    // Partial update: a full update here would wipe the title, progress and
+                    // click intents that were set by render().
+                    manager.partiallyUpdateAppWidget(id, views)
                 }
                 artworkLoadInProgressFor = null
             } catch (_: Exception) {
@@ -145,12 +167,14 @@ private object WidgetRenderer {
 
 class KuroCompactWidgetProvider : AppWidgetProvider() {
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) = WidgetRenderer.update(context)
-    override fun onReceive(context: Context, intent: Intent) { super.onReceive(context, intent); WidgetRenderer.update(context) }
+    override fun onAppWidgetOptionsChanged(context: Context, manager: AppWidgetManager, id: Int, newOptions: android.os.Bundle) =
+        WidgetRenderer.update(context)
 }
 
 class KuroSquareWidgetProvider : AppWidgetProvider() {
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) = WidgetRenderer.update(context)
-    override fun onReceive(context: Context, intent: Intent) { super.onReceive(context, intent); WidgetRenderer.update(context) }
+    override fun onAppWidgetOptionsChanged(context: Context, manager: AppWidgetManager, id: Int, newOptions: android.os.Bundle) =
+        WidgetRenderer.update(context)
 }
 
 class KuroWidgetActionReceiver : android.content.BroadcastReceiver() {
@@ -175,13 +199,16 @@ class KuroWidgetActionReceiver : android.content.BroadcastReceiver() {
                     ACTION_FAVORITE -> toggleFavorite(context, controller)
                 }
                 persist(context, controller)
-                WidgetRenderer.update(context)
             } catch (_: Exception) {
-                WidgetRenderer.update(context)
-            } finally {
+                // Session may be gone; the redraw below restores whatever state is cached.
+            }
+            WidgetRenderer.update(context)
+            // Commands travel over IPC asynchronously: keep the connection alive briefly so
+            // pause/next are not dropped, then release instead of leaking a controller.
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                 MediaController.releaseFuture(future)
                 pendingResult.finish()
-            }
+            }, 300L)
         }, MoreExecutors.directExecutor())
     }
 
@@ -198,7 +225,10 @@ class KuroWidgetActionReceiver : android.content.BroadcastReceiver() {
         } else {
             array.put(org.json.JSONObject().apply {
                 put("id", id)
-                put("url", controller.currentMediaItem?.localConfiguration?.uri?.toString().orEmpty())
+                // keep the original watch URL: the player URI is a short-lived googlevideo
+                // stream link and can no longer be resolved later from the favorites list.
+                put("url", metadata.extras?.getString(WIDGET_SOURCE_URL_KEY)
+                    ?: controller.currentMediaItem?.localConfiguration?.uri?.toString().orEmpty())
                 put("title", metadata.title?.toString().orEmpty())
                 put("artist", metadata.artist?.toString().orEmpty())
                 put("thumbnailUrl", metadata.artworkUri?.toString().orEmpty())
@@ -206,6 +236,7 @@ class KuroWidgetActionReceiver : android.content.BroadcastReceiver() {
             })
             prefs.edit().putString("fav_list", array.toString()).apply()
         }
+        context.sendBroadcast(Intent(WIDGET_FAVORITES_CHANGED).setPackage(context.packageName))
     }
 }
 
@@ -216,7 +247,8 @@ internal fun persist(context: Context, controller: Player) {
     if (item != null && metadata != null) {
         val track = Track(
             id = item.mediaId,
-            url = item.localConfiguration?.uri?.toString().orEmpty(),
+            url = metadata.extras?.getString(WIDGET_SOURCE_URL_KEY)
+                ?: item.localConfiguration?.uri?.toString().orEmpty(),
             title = metadata.title?.toString().orEmpty(),
             artist = metadata.artist?.toString().orEmpty(),
             thumbnailUrl = metadata.artworkUri?.toString().orEmpty(),
@@ -225,7 +257,8 @@ internal fun persist(context: Context, controller: Player) {
         )
         prefs.edit().putString(KEY_TRACK, encodeTrack(track)).apply()
     }
-    prefs.edit().putBoolean(KEY_PLAYING, controller.isPlaying)
+    // playWhenReady flips synchronously on command; isPlaying lags behind on pause.
+    prefs.edit().putBoolean(KEY_PLAYING, controller.playWhenReady)
         .putLong(KEY_POSITION, controller.currentPosition.coerceAtLeast(0))
         .putLong(KEY_DURATION, controller.duration.coerceAtLeast(0)).apply()
 }
