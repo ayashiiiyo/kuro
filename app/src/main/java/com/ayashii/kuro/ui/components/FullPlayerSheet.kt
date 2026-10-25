@@ -269,40 +269,31 @@ fun FullPlayerSheet(
                     }
                 }
 
-                val playlists by viewModel.playlists.collectAsState()
-                val isWatchLater = remember(playlists, track.id) {
-                    playlists.firstOrNull { it.name == "Putar Nanti" }?.tracks?.any { it.id == track.id } == true
-                }
                 val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(
-                        onClick = {
-                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                            viewModel.toggleWatchLater(track)
-                        },
-                        modifier = Modifier.size(44.dp)
-                    ) {
-                        val iconRes = if (isWatchLater) R.drawable.ic_kuro_bookmark_filled else R.drawable.ic_kuro_bookmark_border
-                        Icon(
-                            painter = painterResource(iconRes),
-                            contentDescription = "Putar Nanti",
-                            tint = if (isWatchLater) colors.textPrimary else colors.textMuted,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-
-                    IconButton(
-                        onClick = onFavoriteClick,
-                        modifier = Modifier.size(44.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (track.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
-                            contentDescription = "Favorite",
-                            tint = if (track.isFavorite) Color(0xFFFF3B30) else colors.textMuted,
-                            modifier = Modifier.size(26.dp)
-                        )
-                    }
+                IconButton(
+                    onClick = {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        onFavoriteClick()
+                    },
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    val favScale by androidx.compose.animation.core.animateFloatAsState(
+                        targetValue = if (track.isFavorite) 1.15f else 1f,
+                        animationSpec = tween(durationMillis = 150),
+                        label = "player_fav_scale"
+                    )
+                    Icon(
+                        imageVector = if (track.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
+                        contentDescription = "Favorite",
+                        tint = if (track.isFavorite) Color(0xFFFF3B30) else colors.textMuted,
+                        modifier = Modifier
+                            .size(28.dp)
+                            .graphicsLayer {
+                                scaleX = favScale
+                                scaleY = favScale
+                            }
+                    )
                 }
             }
 
@@ -443,6 +434,32 @@ fun FullPlayerSheet(
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val playlists by viewModel.playlists.collectAsState()
+                    val isWatchLater = remember(playlists, track.id) {
+                        playlists.firstOrNull { it.name == "Putar Nanti" }?.tracks?.any { it.id == track.id } == true
+                    }
+                    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+
+                    IconButton(
+                        onClick = {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                            viewModel.toggleWatchLater(track)
+                        },
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(if (isWatchLater) colors.accent else colors.card)
+                            .border(1.dp, if (isWatchLater) colors.accent else colors.border, CircleShape)
+                    ) {
+                        val iconRes = if (isWatchLater) R.drawable.ic_kuro_bookmark_filled else R.drawable.ic_kuro_bookmark_border
+                        Icon(
+                            painter = painterResource(iconRes),
+                            contentDescription = "Putar Nanti",
+                            tint = if (isWatchLater) colors.background else colors.textPrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
                     IconButton(
                         onClick = {
                             isLyricsExpanded = !isLyricsExpanded

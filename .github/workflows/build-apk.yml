@@ -71,18 +71,17 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<EOF
-          ## Kuro v${VERSION_NAME} — Playlist & Bookmark (Putar Nanti) Overhaul
+          ## Kuro v${VERSION_NAME} — Polished Full Player & Refined Layout
 
-          - Added dedicated Watch Later / Putar Nanti feature with soft curved SVG ribbon icon.
-          - Converted Library screen into Playlist hub with distinct Liked Songs and custom playlists.
-          - Redesigned Search experience with modern gradient categories and refined empty states.
-          - Added playlist delete confirmation dialog and micro-animations on favorite buttons.
+          - Relocated Putar Nanti (bookmark ribbon) to lower action bar for clean, unclipped track titles.
+          - Streamlined title and artist row with dedicated, animated favorite button.
+          - Improved SVG ribbon vector proportions and contrast states.
           - Published signed release and debug APKs.
           EOF
           gh release create "$RELEASE_TAG" \
             "${{ steps.apk.outputs.release_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (Playlist & Bookmark Overhaul)" \
+            --title "Kuro $RELEASE_TAG (Polished Player Layout)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 
