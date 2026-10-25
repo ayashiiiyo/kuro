@@ -89,6 +89,33 @@ class PlaylistManager private constructor(context: Context) {
     }
 
     @Synchronized
+    fun getOrCreateWatchLaterPlaylist(): Playlist {
+        val current = _playlists.value
+        val existing = current.firstOrNull { it.name == "Putar Nanti" }
+        if (existing != null) return existing
+        return createPlaylist("Putar Nanti")
+    }
+
+    @Synchronized
+    fun isTrackInWatchLater(trackId: String): Boolean {
+        val playlist = _playlists.value.firstOrNull { it.name == "Putar Nanti" } ?: return false
+        return playlist.tracks.any { it.id == trackId }
+    }
+
+    @Synchronized
+    fun toggleWatchLater(track: Track): Boolean {
+        val target = getOrCreateWatchLaterPlaylist()
+        val isSaved = target.tracks.any { it.id == track.id }
+        if (isSaved) {
+            removeTrackFromPlaylist(target.id, track.id)
+            return false
+        } else {
+            addTrackToPlaylist(target.id, track)
+            return true
+        }
+    }
+
+    @Synchronized
     fun createPlaylist(name: String): Playlist {
         val trimmed = name.trim().ifBlank { "Playlist Baru" }
         val newPlaylist = Playlist(

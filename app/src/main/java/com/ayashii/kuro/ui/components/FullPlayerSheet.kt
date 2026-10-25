@@ -269,16 +269,40 @@ fun FullPlayerSheet(
                     }
                 }
 
-                IconButton(
-                    onClick = onFavoriteClick,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(
-                        imageVector = if (track.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
-                        contentDescription = "Favorite",
-                        tint = if (track.isFavorite) Color(0xFFFF3B30) else colors.textMuted,
-                        modifier = Modifier.size(28.dp)
-                    )
+                val playlists by viewModel.playlists.collectAsState()
+                val isWatchLater = remember(playlists, track.id) {
+                    playlists.firstOrNull { it.name == "Putar Nanti" }?.tracks?.any { it.id == track.id } == true
+                }
+                val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                            viewModel.toggleWatchLater(track)
+                        },
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        val iconRes = if (isWatchLater) R.drawable.ic_kuro_bookmark_filled else R.drawable.ic_kuro_bookmark_border
+                        Icon(
+                            painter = painterResource(iconRes),
+                            contentDescription = "Putar Nanti",
+                            tint = if (isWatchLater) colors.textPrimary else colors.textMuted,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onFavoriteClick,
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (track.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
+                            contentDescription = "Favorite",
+                            tint = if (track.isFavorite) Color(0xFFFF3B30) else colors.textMuted,
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
                 }
             }
 

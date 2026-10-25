@@ -71,17 +71,18 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<EOF
-          ## Kuro v${VERSION_NAME} — Home & Playback Polish
+          ## Kuro v${VERSION_NAME} — Playlist & Bookmark (Putar Nanti) Overhaul
 
-          - Updated the Home screen with personal music shelves and featured picks.
-          - Added smoother track transitions, play/pause feedback, and player open/close motion.
-          - Reduced artwork and animation overhead.
+          - Added dedicated Watch Later / Putar Nanti feature with soft curved SVG ribbon icon.
+          - Converted Library screen into Playlist hub with distinct Liked Songs and custom playlists.
+          - Redesigned Search experience with modern gradient categories and refined empty states.
+          - Added playlist delete confirmation dialog and micro-animations on favorite buttons.
           - Published signed release and debug APKs.
           EOF
           gh release create "$RELEASE_TAG" \
             "${{ steps.apk.outputs.release_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (Home & Playback Polish)" \
+            --title "Kuro $RELEASE_TAG (Playlist & Bookmark Overhaul)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 

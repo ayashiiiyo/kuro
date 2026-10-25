@@ -151,6 +151,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     fun renamePlaylist(id: String, name: String) = playlistManager.renamePlaylist(id, name)
     fun addTrackToPlaylist(id: String, track: Track) = playlistManager.addTrackToPlaylist(id, track)
     fun removeTrackFromPlaylist(id: String, trackId: String) = playlistManager.removeTrackFromPlaylist(id, trackId)
+    fun toggleWatchLater(track: Track) = playlistManager.toggleWatchLater(track)
+    fun isTrackInWatchLater(trackId: String) = playlistManager.isTrackInWatchLater(trackId)
 
     fun playPlaylist(playlist: com.ayashii.kuro.data.playlist.Playlist, startTrack: Track? = null, shuffle: Boolean = false) {
         if (playlist.tracks.isEmpty()) return
