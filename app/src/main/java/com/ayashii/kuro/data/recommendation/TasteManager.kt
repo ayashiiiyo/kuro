@@ -25,6 +25,11 @@ class TasteManager private constructor(context: Context) {
     private val playsMap = ConcurrentHashMap<String, Int>()
     private val trackDataMap = ConcurrentHashMap<String, Track>()
 
+    // Cached affinity set; invalidated whenever a score changes so rankRadioTracks()
+    // does not rescan the whole score map on every track change.
+    @Volatile
+    private var cachedTopArtists: Set<String>? = null
+
     init {
         loadDataFromPrefs()
     }
@@ -57,6 +62,7 @@ class TasteManager private constructor(context: Context) {
     private fun updateTrackScore(track: Track, deltaScore: Int, isPlay: Boolean) {
         val currentScore = scoresMap[track.id] ?: 0
         scoresMap[track.id] = maxOf(0, currentScore + deltaScore)
+        cachedTopArtists = null
 
         if (isPlay) {
             val currentPlays = playsMap[track.id] ?: 0
@@ -210,11 +216,49 @@ class TasteManager private constructor(context: Context) {
         trackDataMap.forEach { (id, track) ->
             val count = playsMap[id] ?: 0
             val artist = track.artist.trim()
-            if (artist.isNotBlank() && count > 0) {
+            if (artist.isNotBlank() && artist != "Unknown Artist" && count > 0) {
                 artistCounts[artist] = (artistCounts[artist] ?: 0) + count
             }
         }
-        return artistCounts.toList().sortedByDescending { it.second }.take(limit)
+        return artistCounts.entries
+            .sortedByDescending { it.value }
+            .take(limit)
+            .map { Pair(it.key, it.value) }
+    }
+
+    /** Artists the user actually interacts with, weighted by taste score (not play count). */
+    private fun topArtistSetByScore(limit: Int): Set<String> {
+        val artistScores = mutableMapOf<String, Int>()
+        scoresMap.forEach { (trackId, score) ->
+            val track = trackDataMap[trackId] ?: return@forEach
+            val artist = track.artist.trim()
+            if (artist.isBlank() || artist == "Unknown Artist" || score <= 0) return@forEach
+            artistScores[artist] = (artistScores[artist] ?: 0) + score
+        }
+        return artistScores.entries
+            .sortedByDescending { it.value }
+            .take(limit)
+            .mapTo(HashSet()) { it.key.lowercase() }
+    }
+
+    /**
+     * Ranks a list of candidate tracks based on user affinities:
+     * - Favored artist (+5 weight)
+     * - High past interaction score
+     * - Heavily penalized if repeatedly skipped
+     */
+    fun rankRadioTracks(candidates: List<Track>): List<Track> {
+        if (candidates.isEmpty()) return candidates
+        val topArtistSet = cachedTopArtists ?: topArtistSetByScore(10).also { cachedTopArtists = it }
+
+        return candidates.sortedByDescending { track ->
+            var score = scoresMap[track.id] ?: 0
+            if (score < 0) score = 0
+            if (track.artist.lowercase() in topArtistSet) {
+                score += 5
+            }
+            score
+        }
     }
 
     fun getUniqueArtistsCount(): Int {

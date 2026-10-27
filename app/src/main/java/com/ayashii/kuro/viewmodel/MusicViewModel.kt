@@ -174,6 +174,21 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     private val playlistQueue = java.util.Collections.synchronizedList(mutableListOf<Track>())
     private var currentIndex = -1
+
+    /**
+     * Appends radio tracks to the play queue atomically.
+     * Two radio fetches (track start + near-end prefetch) can run concurrently;
+     * without the lock they could both snapshot the same id set and append duplicates.
+     */
+    private fun appendRadioTracks(candidates: List<Track>) {
+        if (candidates.isEmpty()) return
+        synchronized(playlistQueue) {
+            val existingIds = playlistQueue.mapTo(HashSet()) { it.id }
+            val fresh = tasteManager.rankRadioTracks(candidates.filter { it.id !in existingIds })
+            if (fresh.isNotEmpty()) playlistQueue.addAll(fresh)
+        }
+    }
+
     private var progressJob: Job? = null
     private var suggestJob: Job? = null
     private var playJob: Job? = null
@@ -534,9 +549,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     try {
                         val radioTracks = repository.getRadioTracks(track.id)
                         if (radioTracks.isNotEmpty()) {
-                            val existingIds = playlistQueue.map { it.id }.toSet()
-                            val freshTracks = radioTracks.filter { it.id !in existingIds }
-                            playlistQueue.addAll(freshTracks)
+                            appendRadioTracks(radioTracks)
                             if (playlistQueue.size > 1) {
                                 repository.getAudioStreamUrl(playlistQueue[1].url, settingsManager.audioQuality.value)
                             }
@@ -702,9 +715,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 viewModelScope.launch(Dispatchers.IO) {
                     try {
                         val freshRadio = repository.getRadioTracks(seed.id)
-                        val existingIds = playlistQueue.map { it.id }.toSet()
-                        val toAdd = freshRadio.filter { it.id !in existingIds }
-                        playlistQueue.addAll(toAdd)
+                        appendRadioTracks(freshRadio)
                     } catch (_: Exception) {}
                 }
             }

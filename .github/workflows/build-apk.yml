@@ -71,20 +71,19 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.5.1 — Widget Playback Fix & Flexible Resizing
+          ## Kuro v3.5.2 — YouTube Music Recommendation Engine & Performance
 
-          - Fixed widget taps stopping playback: one single command path (MediaController) and play/pause now follows playWhenReady instead of isPlaying.
-          - Removed the duplicate next/previous dispatch that skipped two tracks per tap.
-          - Hardened the widget receiver: controller failures can no longer crash it or leave an ANR, and playback resumes after the service was stopped.
-          - Added full flexible widget resizing (minResizeWidth/minResizeHeight/maxResizeWidth/maxResizeHeight) for both Compact and Square widgets.
-          - Updater now verifies the DownloadManager status, stores the APK in app-private storage, handles the "install unknown apps" permission, and uses localized notifications.
-          - Fixed app language not applying on Android 12 and below, and localized the remaining widget/settings text.
+          - Upgraded InnerTube Client API to modern desktop web specs, delivering accurate automix radio tracks matching the official YouTube Music experience.
+          - Integrated hybrid recommendation ranking: prioritizes high-affinity artists and favorites while penalizing frequently skipped tracks.
+          - Added user session synchronization (X-Goog-AuthUser) so automix radio recommendations adapt to logged-in user preferences.
+          - Plugged HTTP response leaks across all remote network calls, ensuring optimal battery life and zero connection leaks during long listening sessions.
+          - Eliminated duplicate track races in play queue and cached artist taste affinities for lightweight CPU operation.
           - Published signed release and debug APKs.
           EOF
           gh release create "$RELEASE_TAG" \
             "${{ steps.apk.outputs.release_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (Widget Playback Fix & Flexible Resizing)" \
+            --title "Kuro $RELEASE_TAG (YTM Recommendation Engine & Optimization)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 
