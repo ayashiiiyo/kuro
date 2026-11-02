@@ -1,0 +1,5 @@
+[workspace]
+members = [
+    "kuro-core",
+]
+resolver = "2"

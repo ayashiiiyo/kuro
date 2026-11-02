@@ -1,0 +1,80 @@
+pub mod innertube;
+pub mod recommendation;
+pub mod sanitizer;
+
+use jni::objects::{JClass, JString};
+use jni::sys::jstring;
+use jni::JNIEnv;
+
+/// JNI bridge matching package: com.ayashii.kuro.data.native.KuroNativeCore
+
+#[no_mangle]
+pub extern "system" fn Java_com_ayashii_kuro_data_native_KuroNativeCore_cleanTrackTitle(
+    mut env: JNIEnv,
+    _class: JClass,
+    raw_title: JString,
+) -> jstring {
+    let input: String = match env.get_string(&raw_title) {
+        Ok(s) => s.into(),
+        Err(_) => return env.new_string("").unwrap().into_raw(),
+    };
+
+    let cleaned = sanitizer::clean_title(&input);
+    env.new_string(cleaned).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_ayashii_kuro_data_native_KuroNativeCore_rankCandidates(
+    mut env: JNIEnv,
+    _class: JClass,
+    candidates_json: JString,
+    profile_json: JString,
+) -> jstring {
+    let cand_str: String = match env.get_string(&candidates_json) {
+        Ok(s) => s.into(),
+        Err(_) => return env.new_string("[]").unwrap().into_raw(),
+    };
+
+    let prof_str: String = match env.get_string(&profile_json) {
+        Ok(s) => s.into(),
+        Err(_) => return env.new_string("[]").unwrap().into_raw(),
+    };
+
+    let candidates: Vec<recommendation::CandidateTrack> = match serde_json::from_str(&cand_str) {
+        Ok(c) => c,
+        Err(_) => return env.new_string(&cand_str).unwrap().into_raw(),
+    };
+
+    let profile: recommendation::TasteProfile = match serde_json::from_str(&prof_str) {
+        Ok(p) => p,
+        Err(_) => {
+            return env.new_string(&cand_str).unwrap().into_raw();
+        }
+    };
+
+    let ranked = recommendation::rank_candidates(candidates, &profile);
+    let output = serde_json::to_string(&ranked).unwrap_or_else(|_| "[]".to_string());
+    env.new_string(output).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_ayashii_kuro_data_native_KuroNativeCore_parseAutomixTracks(
+    mut env: JNIEnv,
+    _class: JClass,
+    raw_json: JString,
+    current_video_id: JString,
+) -> jstring {
+    let json_str: String = match env.get_string(&raw_json) {
+        Ok(s) => s.into(),
+        Err(_) => return env.new_string("[]").unwrap().into_raw(),
+    };
+
+    let video_id_str: String = match env.get_string(&current_video_id) {
+        Ok(s) => s.into(),
+        Err(_) => String::new(),
+    };
+
+    let tracks = innertube::parse_automix_radio(&json_str, &video_id_str);
+    let output = serde_json::to_string(&tracks).unwrap_or_else(|_| "[]".to_string());
+    env.new_string(output).unwrap().into_raw()
+}

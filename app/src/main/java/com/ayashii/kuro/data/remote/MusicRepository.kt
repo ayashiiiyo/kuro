@@ -43,10 +43,7 @@ class MusicRepository {
     }
 
     private fun cleanTrackTitle(raw: String): String {
-        return raw
-            .replace(Regex("""(?i)\s*[\(\[](?:official\s*(?:music\s*)?video|official\s*audio|music\s*video|lyric\s*video|lyrics|audio|visualizer|remastered|remaster|4k|hd|hq|mv|clip\s*officiel|video\s*oficial)[\)\]]"""), "")
-            .replace(Regex("""(?i)\s*\|\s*(?:official\s*(?:music\s*)?video|official\s*audio|visualizer).*"""), "")
-            .trim()
+        return com.ayashii.kuro.data.native.KuroNativeCore.sanitizeTitle(raw)
     }
 
     fun upgradeThumbnailUrl(rawUrl: String): String {
@@ -382,10 +379,21 @@ class MusicRepository {
                 reqBuilder.header("X-Goog-AuthUser", "0")
             }
 
-            val json = client.newCall(reqBuilder.build()).execute().use { resp ->
+            val jsonStr = client.newCall(reqBuilder.build()).execute().use { resp ->
                 if (!resp.isSuccessful) return@withContext emptyList()
-                org.json.JSONObject(resp.body?.string().orEmpty())
+                resp.body?.string().orEmpty()
             }
+            if (jsonStr.isBlank()) return@withContext emptyList()
+
+            // Try high-performance native parser first
+            val nativeParsed = com.ayashii.kuro.data.native.KuroNativeCore.parseAutomix(jsonStr, videoId)
+            if (nativeParsed != null && nativeParsed.isNotEmpty()) {
+                synchronized(radioCache) { radioCache.put(cacheKey, Pair(nativeParsed, now)) }
+                return@withContext nativeParsed
+            }
+
+            // Fallback to Kotlin JSON parsing
+            val json = org.json.JSONObject(jsonStr)
             val tabs = json.optJSONObject("contents")
                 ?.optJSONObject("singleColumnMusicWatchNextResultsRenderer")
                 ?.optJSONObject("tabbedRenderer")

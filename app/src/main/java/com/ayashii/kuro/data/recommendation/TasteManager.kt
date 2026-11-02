@@ -249,16 +249,13 @@ class TasteManager private constructor(context: Context) {
      */
     fun rankRadioTracks(candidates: List<Track>): List<Track> {
         if (candidates.isEmpty()) return candidates
-        val topArtistSet = cachedTopArtists ?: topArtistSetByScore(10).also { cachedTopArtists = it }
+        val topArtistList = getTopArtists(10).map { it.first }
 
-        return candidates.sortedByDescending { track ->
-            var score = scoresMap[track.id] ?: 0
-            if (score < 0) score = 0
-            if (track.artist.lowercase() in topArtistSet) {
-                score += 5
-            }
-            score
-        }
+        return com.ayashii.kuro.data.native.KuroNativeCore.rankRadioTracks(
+            candidates = candidates,
+            scores = scoresMap,
+            topArtists = topArtistList
+        )
     }
 
     fun getUniqueArtistsCount(): Int {

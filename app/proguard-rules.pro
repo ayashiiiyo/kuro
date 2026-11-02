@@ -35,3 +35,9 @@
 -keepclassmembers class * {
     @android.webkit.JavascriptInterface <methods>;
 }
+
+# Kuro Native Core (Rust JNI)
+-keepclasseswithmembernames class com.ayashii.kuro.data.native.KuroNativeCore {
+    native <methods>;
+}
+-keep class com.ayashii.kuro.data.native.** { *; }

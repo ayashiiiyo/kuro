@@ -48,6 +48,21 @@ jobs:
           printf '%s' "$KURO_KEYSTORE_BASE64" | base64 --decode > "$KURO_KEYSTORE_FILE"
           test -s "$KURO_KEYSTORE_FILE"
 
+      - name: Set up Rust Toolchain and Targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk
+
+      - name: Build Kuro Native Core (Rust)
+        run: |
+          mkdir -p app/src/main/jniLibs/arm64-v8a
+          mkdir -p app/src/main/jniLibs/armeabi-v7a
+          mkdir -p app/src/main/jniLibs/x86_64
+          cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -o app/src/main/jniLibs build --release --manifest-path kuro-core/Cargo.toml
+
       - name: Build Release and Debug APKs
         run: ./gradlew assembleRelease assembleDebug --stacktrace || (echo "=== GRADLE BUILD FAILED ===" && exit 1)
 
@@ -71,19 +86,18 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.5.3 — Ultra-Lean RAM & Memory Optimization
+          ## Kuro v3.6.0 — High-Performance Hybrid Rust Engine (kuro-core)
 
-          - Squeezed memory footprint for low-end/budget devices (2GB-4GB RAM).
-          - Configured Coil image loader with RGB_565 bitmap decoding and enabled hardware bitmap allocation on GPU memory.
-          - Lowered in-memory image cache cap from 15% to 8% and implemented onTrimMemory & onLowMemory callbacks to flush memory caches on system pressure.
-          - Reduced ExoPlayer audio buffer duration from 50s down to 20s and capped audio buffer allocation pool to 2MB RAM.
-          - Downscaled thumbnail display resolution requests in list/player components to match actual display pixel density.
+          - Integrated `kuro-core`: native Rust engine compiled for arm64-v8a, armeabi-v7a, and x86_64.
+          - Zero-GC automix radio parsing: InnerTube JSON responses are parsed directly in native memory via `serde_json`, eliminating Java Heap spikes and frame stutter.
+          - Accelerated Taste & Affinity Ranking in Rust with zero-copy title sanitization.
+          - Seamless fallback: if native libraries fail to load on legacy environments, Kuro gracefully falls back to Kotlin implementations.
           - Published signed release and debug APKs.
           EOF
           gh release create "$RELEASE_TAG" \
             "${{ steps.apk.outputs.release_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (Ultra-Lean RAM & Memory Optimization)" \
+            --title "Kuro $RELEASE_TAG (Native Rust Engine: kuro-core)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 
