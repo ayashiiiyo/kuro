@@ -49,7 +49,7 @@ jobs:
           test -s "$KURO_KEYSTORE_FILE"
 
       - name: Build Release and Debug APKs
-        run: ./gradlew assembleRelease assembleDebug --stacktrace
+        run: ./gradlew assembleRelease assembleDebug --stacktrace || (echo "=== GRADLE BUILD FAILED ===" && exit 1)
 
       - name: Name APKs with app version
         id: apk

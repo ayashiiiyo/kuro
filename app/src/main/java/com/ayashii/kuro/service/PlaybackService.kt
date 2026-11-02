@@ -78,13 +78,12 @@ class PlaybackService : MediaSessionService() {
 
         val mediaSourceFactory = DefaultMediaSourceFactory(httpDataSourceFactory, extractorsFactory)
 
-        // Lean audio buffer tuned for low RAM consumption without stutter
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                /* minBufferMs = */ 8_000,
-                /* maxBufferMs = */ 20_000,
+                /* minBufferMs = */ 15_000,
+                /* maxBufferMs = */ 30_000,
                 /* bufferForPlaybackMs = */ 500,
-                /* bufferForPlaybackAfterRebufferMs = */ 1_000
+                /* bufferForPlaybackAfterRebufferMs = */ 1_500
             )
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
