@@ -86,7 +86,6 @@ class PlaybackService : MediaSessionService() {
                 /* bufferForPlaybackMs = */ 500,
                 /* bufferForPlaybackAfterRebufferMs = */ 1_000
             )
-            .setTargetBufferBytes(2 * 1024 * 1024) // Cap buffer pool to 2MB RAM
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
 

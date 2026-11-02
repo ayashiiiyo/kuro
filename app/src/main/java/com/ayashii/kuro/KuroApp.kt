@@ -48,8 +48,6 @@ class KuroApp : Application(), ImageLoaderFactory {
                         .maxSizeBytes(40L * 1024 * 1024)
                         .build()
                 }
-                // RGB_565 halves memory footprint per bitmap compared to ARGB_8888
-                .bitmapConfig(Bitmap.Config.RGB_565)
                 .allowHardware(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
                 .allowRgb565(true)
                 .networkCachePolicy(CachePolicy.ENABLED)
