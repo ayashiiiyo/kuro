@@ -71,19 +71,19 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.5.2 — YouTube Music Recommendation Engine & Performance
+          ## Kuro v3.5.3 — Ultra-Lean RAM & Memory Optimization
 
-          - Upgraded InnerTube Client API to modern desktop web specs, delivering accurate automix radio tracks matching the official YouTube Music experience.
-          - Integrated hybrid recommendation ranking: prioritizes high-affinity artists and favorites while penalizing frequently skipped tracks.
-          - Added user session synchronization (X-Goog-AuthUser) so automix radio recommendations adapt to logged-in user preferences.
-          - Plugged HTTP response leaks across all remote network calls, ensuring optimal battery life and zero connection leaks during long listening sessions.
-          - Eliminated duplicate track races in play queue and cached artist taste affinities for lightweight CPU operation.
+          - Squeezed memory footprint for low-end/budget devices (2GB-4GB RAM).
+          - Configured Coil image loader with RGB_565 bitmap decoding and enabled hardware bitmap allocation on GPU memory.
+          - Lowered in-memory image cache cap from 15% to 8% and implemented onTrimMemory & onLowMemory callbacks to flush memory caches on system pressure.
+          - Reduced ExoPlayer audio buffer duration from 50s down to 20s and capped audio buffer allocation pool to 2MB RAM.
+          - Downscaled thumbnail display resolution requests in list/player components to match actual display pixel density.
           - Published signed release and debug APKs.
           EOF
           gh release create "$RELEASE_TAG" \
             "${{ steps.apk.outputs.release_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (YTM Recommendation Engine & Optimization)" \
+            --title "Kuro $RELEASE_TAG (Ultra-Lean RAM & Memory Optimization)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 

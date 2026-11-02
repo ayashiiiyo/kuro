@@ -78,7 +78,7 @@ fun TrackItem(
             contentAlignment = Alignment.Center
         ) {
             AsyncImage(
-                model = track.thumbnailUrlForDisplay(256),
+                model = track.thumbnailUrlForDisplay(160),
                 contentDescription = track.title,
                 modifier = Modifier
                     .size(50.dp)

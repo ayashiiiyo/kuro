@@ -78,14 +78,15 @@ class PlaybackService : MediaSessionService() {
 
         val mediaSourceFactory = DefaultMediaSourceFactory(httpDataSourceFactory, extractorsFactory)
 
-        // Ultra-low latency buffering with robust fMP4/AAC headroom
+        // Lean audio buffer tuned for low RAM consumption without stutter
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                /* minBufferMs = */ 15_000,
-                /* maxBufferMs = */ 50_000,
+                /* minBufferMs = */ 8_000,
+                /* maxBufferMs = */ 20_000,
                 /* bufferForPlaybackMs = */ 500,
-                /* bufferForPlaybackAfterRebufferMs = */ 1_500
+                /* bufferForPlaybackAfterRebufferMs = */ 1_000
             )
+            .setTargetBufferBytes(2 * 1024 * 1024) // Cap buffer pool to 2MB RAM
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
 

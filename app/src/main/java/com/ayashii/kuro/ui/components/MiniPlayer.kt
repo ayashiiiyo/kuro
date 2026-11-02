@@ -92,7 +92,7 @@ fun MiniPlayer(
                     label = "mini_artwork"
                 ) { animatedTrack ->
                     AsyncImage(
-                        model = animatedTrack.thumbnailUrlForDisplay(192),
+                        model = animatedTrack.thumbnailUrlForDisplay(144),
                         contentDescription = animatedTrack.title,
                         modifier = Modifier
                             .size(44.dp)
