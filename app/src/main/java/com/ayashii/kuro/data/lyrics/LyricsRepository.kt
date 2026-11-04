@@ -386,8 +386,47 @@ class LyricsRepository(private val context: Context) {
         result
     }
 
+    private val DEEPL_ENDPOINTS = listOf(
+        "https://oneshot.fal.free.deepl.com/v1/translate",
+        "https://oneshot.kef.free.deepl.com/v1/translate"
+    )
+    private val DEEPL_USER_AGENT = "DeepL/26.41.0 (com.deepl.mobiletranslator; build:264100; Android 14)"
+
     private fun translateLinesToIndonesian(lines: List<LyricLine>): List<LyricLine> {
         if (lines.isEmpty()) return lines
+
+        // 1. Try DeepL Native Translator
+        val rawTexts = lines.map { it.text }
+        val payload = com.ayashii.kuro.data.native.KuroNativeCore.buildDeepLRequestPayload(rawTexts, "id")
+
+        for (endpoint in DEEPL_ENDPOINTS) {
+            try {
+                val req = Request.Builder()
+                    .url(endpoint)
+                    .header("User-Agent", DEEPL_USER_AGENT)
+                    .header("Content-Type", "application/json")
+                    .post(payload.toRequestBody("application/json".toMediaType()))
+                    .build()
+
+                httpClient.newCall(req).execute().use { resp ->
+                    if (resp.isSuccessful) {
+                        val respBody = resp.body?.string().orEmpty()
+                        val translatedTexts = com.ayashii.kuro.data.native.KuroNativeCore.parseDeepLResponseTranslations(respBody)
+                        if (translatedTexts.isNotEmpty()) {
+                            return lines.mapIndexed { idx, line ->
+                                val trans = translatedTexts.getOrNull(idx)?.trim()
+                                val validTrans = if (!trans.isNullOrBlank() && !trans.equals(line.text.trim(), ignoreCase = true)) trans else null
+                                line.copy(translation = validTrans)
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.d("LyricsRepository", "DeepL endpoint $endpoint error: ${e.message}")
+            }
+        }
+
+        // 2. Fallback to Google Translate
         try {
             val textToTranslate = lines.joinToString("\n~~~\n") { it.text }
             val formBody = ("client=gtx&sl=auto&tl=id&dt=t&q=" + encode(textToTranslate))
@@ -399,34 +438,35 @@ class LyricsRepository(private val context: Context) {
                 .post(formBody)
                 .build()
 
-            val resp = httpClient.newCall(req).execute()
-            if (resp.isSuccessful) {
-                val jsonArr = JSONArray(resp.body?.string().orEmpty())
-                val segments = jsonArr.optJSONArray(0)
-                if (segments != null) {
-                    val sb = StringBuilder()
-                    for (i in 0 until segments.length()) {
-                        val seg = segments.optJSONArray(i)
-                        if (seg != null) {
-                            sb.append(seg.optString(0))
+            httpClient.newCall(req).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val jsonArr = JSONArray(resp.body?.string().orEmpty())
+                    val segments = jsonArr.optJSONArray(0)
+                    if (segments != null) {
+                        val sb = StringBuilder()
+                        for (i in 0 until segments.length()) {
+                            val seg = segments.optJSONArray(i)
+                            if (seg != null) {
+                                sb.append(seg.optString(0))
+                            }
                         }
-                    }
-                    val fullTranslated = sb.toString()
-                    val translatedBlocks = if (fullTranslated.contains("~~~")) {
-                        fullTranslated.split("~~~").map { it.trim() }
-                    } else {
-                        fullTranslated.lines().map { it.trim() }
-                    }
+                        val fullTranslated = sb.toString()
+                        val translatedBlocks = if (fullTranslated.contains("~~~")) {
+                            fullTranslated.split("~~~").map { it.trim() }
+                        } else {
+                            fullTranslated.lines().map { it.trim() }
+                        }
 
-                    return lines.mapIndexed { idx, line ->
-                        val trans = translatedBlocks.getOrNull(idx)?.trim()
-                        val validTrans = if (!trans.isNullOrBlank() && !trans.equals(line.text.trim(), ignoreCase = true) && !trans.equals("~~~")) trans else null
-                        line.copy(translation = validTrans)
+                        return lines.mapIndexed { idx, line ->
+                            val trans = translatedBlocks.getOrNull(idx)?.trim()
+                            val validTrans = if (!trans.isNullOrBlank() && !trans.equals(line.text.trim(), ignoreCase = true) && !trans.equals("~~~")) trans else null
+                            line.copy(translation = validTrans)
+                        }
                     }
                 }
             }
         } catch (e: Exception) {
-            Log.d("LyricsRepository", "Translation error: ${e.message}")
+            Log.d("LyricsRepository", "Fallback translation error: ${e.message}")
         }
         return lines
     }

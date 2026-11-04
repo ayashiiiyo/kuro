@@ -184,6 +184,13 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun getCurrentQueueIndex(): Int = currentIndex
 
+    fun addToQueue(track: Track) {
+        synchronized(playlistQueue) {
+            playlistQueue.add(track)
+        }
+        updateQueueState()
+    }
+
     /**
      * Appends radio tracks to the play queue atomically.
      * Two radio fetches (track start + near-end prefetch) can run concurrently;

@@ -23,6 +23,8 @@ object KuroNativeCore {
     private external fun cleanTrackTitle(rawTitle: String): String
     private external fun rankCandidates(candidatesJson: String, profileJson: String): String
     private external fun parseAutomixTracks(rawJson: String, currentVideoId: String): String
+    private external fun buildDeepLPayload(linesJson: String, targetLang: String): String
+    private external fun parseDeepLTranslations(responseJson: String): String
 
     fun sanitizeTitle(rawTitle: String): String {
         if (!isLoaded) return fallbackCleanTitle(rawTitle)
@@ -111,6 +113,60 @@ object KuroNativeCore {
         } catch (e: Throwable) {
             Log.e(TAG, "Native parseAutomix failed: ${e.message}")
             null
+        }
+    }
+
+    fun buildDeepLRequestPayload(lines: List<String>, targetLang: String): String {
+        if (!isLoaded) {
+            val arr = JSONArray()
+            lines.forEach { arr.put(it) }
+            val obj = JSONObject()
+            obj.put("text", arr)
+            obj.put("target_lang", targetLang)
+            return obj.toString()
+        }
+        return try {
+            val linesJson = JSONArray(lines).toString()
+            buildDeepLPayload(linesJson, targetLang)
+        } catch (e: Throwable) {
+            val arr = JSONArray()
+            lines.forEach { arr.put(it) }
+            val obj = JSONObject()
+            obj.put("text", arr)
+            obj.put("target_lang", targetLang)
+            obj.toString()
+        }
+    }
+
+    fun parseDeepLResponseTranslations(responseJson: String): List<String> {
+        if (!isLoaded) {
+            return fallbackParseDeepL(responseJson)
+        }
+        return try {
+            val parsed = parseDeepLTranslations(responseJson)
+            val arr = JSONArray(parsed)
+            val list = mutableListOf<String>()
+            for (i in 0 until arr.length()) {
+                list.add(arr.getString(i))
+            }
+            list
+        } catch (e: Throwable) {
+            fallbackParseDeepL(responseJson)
+        }
+    }
+
+    private fun fallbackParseDeepL(responseJson: String): List<String> {
+        return try {
+            val root = JSONObject(responseJson)
+            val transArr = root.optJSONArray("translations") ?: return emptyList()
+            val list = mutableListOf<String>()
+            for (i in 0 until transArr.length()) {
+                val item = transArr.optJSONObject(i)
+                list.add(item?.optString("text").orEmpty())
+            }
+            list
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 

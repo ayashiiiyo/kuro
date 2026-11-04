@@ -3,6 +3,7 @@ package com.ayashii.kuro.ui.components
 import android.content.Intent
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -210,80 +211,16 @@ fun FullPlayerSheet(
                     )
                 }
 
-                Box {
-                    IconButton(
-                        onClick = { showOptionsMenu = true },
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = "Opsi lagu",
-                            tint = colors.textPrimary,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-
-                    DropdownMenu(
-                        expanded = showOptionsMenu,
-                        onDismissRequest = { showOptionsMenu = false },
-                        modifier = Modifier.background(colors.card)
-                    ) {
-                        val playlists by viewModel.playlists.collectAsState()
-                        val isWatchLater = remember(playlists, track.id) {
-                            playlists.firstOrNull { it.name == "Putar Nanti" }?.tracks?.any { it.id == track.id } == true
-                        }
-                        DropdownMenuItem(
-                            text = {
-                                Text(
-                                    if (isWatchLater) stringResource(R.string.player_remove_watch_later) else stringResource(R.string.player_save_watch_later),
-                                    color = colors.textPrimary
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    painter = painterResource(if (isWatchLater) R.drawable.ic_kuro_bookmark_filled else R.drawable.ic_kuro_bookmark_border),
-                                    contentDescription = null,
-                                    tint = colors.textPrimary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            },
-                            onClick = {
-                                viewModel.toggleWatchLater(track)
-                                showOptionsMenu = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.player_add_to_playlist), color = colors.textPrimary) },
-                            leadingIcon = { Icon(Icons.Outlined.QueueMusic, contentDescription = null, tint = colors.textPrimary) },
-                            onClick = {
-                                showOptionsMenu = false
-                                showAddToPlaylist = true
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.player_share_song), color = colors.textPrimary) },
-                            leadingIcon = { Icon(Icons.Outlined.Share, contentDescription = null, tint = colors.textPrimary) },
-                            onClick = {
-                                showOptionsMenu = false
-                                try {
-                                    val shareTemplate = context.getString(R.string.player_share_text, track.title, track.artist, track.url)
-                                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                                        putExtra(Intent.EXTRA_TEXT, shareTemplate)
-                                        type = "text/plain"
-                                    }
-                                    context.startActivity(Intent.createChooser(sendIntent, context.getString(R.string.player_share_via)))
-                                } catch (_: Exception) {}
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.player_audio_settings), color = colors.textPrimary) },
-                            leadingIcon = { Icon(Icons.Outlined.Tune, contentDescription = null, tint = colors.textPrimary) },
-                            onClick = {
-                                showOptionsMenu = false
-                                showSettingsDialog = true
-                            }
-                        )
-                    }
+                IconButton(
+                    onClick = { showOptionsMenu = true },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "Opsi lagu",
+                        tint = colors.textPrimary,
+                        modifier = Modifier.size(22.dp)
+                    )
                 }
             }
 
@@ -324,11 +261,16 @@ fun FullPlayerSheet(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Live Lyric Line Snippet (Right under artwork, dynamically updating)
+            // Live Lyric Line Snippet (Right under artwork, dynamically updating with smooth slide-up animation)
             if (activeLineText.isNotBlank()) {
                 AnimatedContent(
                     targetState = activeLineText,
-                    transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(140)) },
+                    transitionSpec = {
+                        (slideInVertically(animationSpec = tween(320, easing = FastOutSlowInEasing)) { height -> height / 2 } + fadeIn(tween(260)))
+                            .togetherWith(
+                                slideOutVertically(animationSpec = tween(300, easing = FastOutSlowInEasing)) { height -> -height / 2 } + fadeOut(tween(220))
+                            )
+                    },
                     label = "live_lyric_snippet",
                     modifier = Modifier
                         .fillMaxWidth()
@@ -734,6 +676,18 @@ fun FullPlayerSheet(
                 onDismiss = { showFullScreenLyrics = false }
             )
         }
+    }
+
+    if (showOptionsMenu) {
+        TrackOptionsBottomSheet(
+            track = track,
+            viewModel = viewModel,
+            onDismiss = { showOptionsMenu = false },
+            onOpenLyrics = { showFullScreenLyrics = true },
+            onOpenQueue = { showQueueSheet = true },
+            onAddToPlaylist = { showAddToPlaylist = true },
+            onOpenSettings = { showSettingsDialog = true }
+        )
     }
 
     if (showQueueSheet) {

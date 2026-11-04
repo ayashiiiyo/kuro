@@ -1,6 +1,7 @@
 pub mod innertube;
 pub mod recommendation;
 pub mod sanitizer;
+pub mod translator;
 
 use jni::objects::{JClass, JString};
 use jni::sys::jstring;
@@ -76,5 +77,47 @@ pub extern "system" fn Java_com_ayashii_kuro_data_native_KuroNativeCore_parseAut
 
     let tracks = innertube::parse_automix_radio(&json_str, &video_id_str);
     let output = serde_json::to_string(&tracks).unwrap_or_else(|_| "[]".to_string());
+    env.new_string(output).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_ayashii_kuro_data_native_KuroNativeCore_buildDeepLPayload(
+    mut env: JNIEnv,
+    _class: JClass,
+    lines_json: JString,
+    target_lang: JString,
+) -> jstring {
+    let lines_str: String = match env.get_string(&lines_json) {
+        Ok(s) => s.into(),
+        Err(_) => return env.new_string("").unwrap().into_raw(),
+    };
+
+    let lang_str: String = match env.get_string(&target_lang) {
+        Ok(s) => s.into(),
+        Err(_) => "id".to_string(),
+    };
+
+    let lines: Vec<String> = match serde_json::from_str(&lines_str) {
+        Ok(l) => l,
+        Err(_) => Vec::new(),
+    };
+
+    let payload = translator::build_payload(&lines, &lang_str);
+    env.new_string(payload).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_ayashii_kuro_data_native_KuroNativeCore_parseDeepLTranslations(
+    mut env: JNIEnv,
+    _class: JClass,
+    response_json: JString,
+) -> jstring {
+    let resp_str: String = match env.get_string(&response_json) {
+        Ok(s) => s.into(),
+        Err(_) => return env.new_string("[]").unwrap().into_raw(),
+    };
+
+    let translations = translator::parse_response(&resp_str);
+    let output = serde_json::to_string(&translations).unwrap_or_else(|_| "[]".to_string());
     env.new_string(output).unwrap().into_raw()
 }

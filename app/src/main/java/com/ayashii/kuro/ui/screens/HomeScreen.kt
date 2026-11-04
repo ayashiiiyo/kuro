@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.CircularProgressIndicator
@@ -40,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -56,6 +58,7 @@ import com.ayashii.kuro.ui.components.AddToPlaylistDialog
 import com.ayashii.kuro.ui.components.LoginWebViewDialog
 import com.ayashii.kuro.ui.components.ProfileMenuSheet
 import com.ayashii.kuro.ui.components.TrackItem
+import com.ayashii.kuro.ui.components.TrackOptionsBottomSheet
 import com.ayashii.kuro.ui.theme.DarkBorder
 import com.ayashii.kuro.ui.theme.DarkCard
 import com.ayashii.kuro.ui.theme.MutedText
@@ -87,6 +90,7 @@ fun HomeScreen(
     var showSettingsDialog by remember { mutableStateOf(false) }
     var showRecentsDialog by remember { mutableStateOf(false) }
     var trackForPlaylist by remember { mutableStateOf<Track?>(null) }
+    var trackForOptions by remember { mutableStateOf<Track?>(null) }
 
     var selectedGenre by remember { mutableStateOf("Semua") }
     val genres = listOf("Semua", "Pop", "Lo-Fi", "Rock", "Acoustic", "Anime", "Hip-Hop", "R&B", "Top Global")
@@ -108,63 +112,42 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text(
-                        text = when (java.time.LocalTime.now().hour) {
-                            in 5..10 -> androidx.compose.ui.res.stringResource(com.ayashii.kuro.R.string.greeting_morning)
-                            in 11..14 -> androidx.compose.ui.res.stringResource(com.ayashii.kuro.R.string.greeting_afternoon)
-                            in 15..18 -> androidx.compose.ui.res.stringResource(com.ayashii.kuro.R.string.greeting_evening)
-                            else -> androidx.compose.ui.res.stringResource(com.ayashii.kuro.R.string.greeting_night)
-                        },
-                        style = Typography.headlineLarge.copy(fontSize = 25.sp),
-                        color = colors.textPrimary
-                    )
-                    Text(
-                        text = androidx.compose.ui.res.stringResource(com.ayashii.kuro.R.string.greeting_subtitle),
-                        style = Typography.bodyMedium,
-                        color = colors.textMuted
-                    )
-                }
                 AccountTopButton(
                     account = currentAccount,
                     onClick = { showProfileMenu = true }
                 )
-            }
-
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp)
-            ) {
-                items(genres) { genre ->
-                    val isSelected = selectedGenre == genre
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(if (isSelected) colors.textPrimary else colors.card)
-                            .border(1.dp, if (isSelected) colors.textPrimary else colors.border, RoundedCornerShape(20.dp))
-                            .clickable {
-                                selectedGenre = genre
-                                if (genre == "Semua") {
-                                    viewModel.loadTrending()
-                                } else {
-                                    viewModel.search("$genre music hits")
+                Spacer(modifier = Modifier.width(10.dp))
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    items(genres) { genre ->
+                        val isSelected = selectedGenre == genre
+                        val chipBg = if (isSelected) Color(0xFF1ED760) else Color(0xFF242424)
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(chipBg)
+                                .clickable {
+                                    selectedGenre = genre
+                                    if (genre == "Semua") {
+                                        viewModel.loadTrending()
+                                    } else {
+                                        viewModel.search("$genre music hits")
+                                    }
                                 }
-                            }
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = genre,
-                            style = Typography.labelMedium.copy(fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium),
-                            fontSize = 13.sp,
-                            color = if (isSelected) colors.background else colors.textPrimary
-                        )
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (genre == "Semua") "All" else genre,
+                                style = Typography.labelMedium.copy(fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium),
+                                fontSize = 13.sp,
+                                color = if (isSelected) Color.Black else PureWhite
+                            )
+                        }
                     }
                 }
             }
@@ -201,7 +184,7 @@ fun HomeScreen(
                             isLoading = isLoadingTrack && currentTrack?.id == track.id,
                             onClick = { viewModel.playTrackFromSearch(track) },
                             onFavoriteClick = { viewModel.toggleFavorite(track) },
-                            onMoreClick = { trackForPlaylist = track }
+                            onMoreClick = { trackForOptions = track }
                         )
                     }
                     item {
@@ -221,6 +204,146 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxSize()
             ) {
                 val homeTracks = trendingTracks.ifEmpty { homeSections.flatMap { it.tracks } }
+
+                // Section "Start listening" (Ref Image 1)
+                val startListeningTracks = (recentlyPlayed.ifEmpty { homeTracks }).distinctBy { it.id }.take(3)
+                if (startListeningTracks.isNotEmpty()) {
+                    item(key = "start_listening_header") {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 4.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.home_start_listening_sub),
+                                style = Typography.bodySmall.copy(fontSize = 12.sp),
+                                color = colors.textMuted
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = stringResource(R.string.home_start_listening),
+                                style = Typography.headlineMedium.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold),
+                                color = colors.textPrimary
+                            )
+                        }
+                    }
+
+                    items(startListeningTracks, key = { "start_listen_${it.id}" }) { track ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { viewModel.playTrack(track, startListeningTracks) }
+                                .padding(horizontal = 20.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            AsyncImage(
+                                model = track.thumbnailUrlForDisplay(192),
+                                contentDescription = track.title,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(52.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(colors.card)
+                            )
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = track.title,
+                                    style = Typography.titleMedium.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
+                                    color = colors.textPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = track.artist,
+                                    style = Typography.bodySmall.copy(fontSize = 13.sp),
+                                    color = colors.textMuted,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            IconButton(
+                                onClick = { trackForOptions = track },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.MoreVert,
+                                    contentDescription = "Options",
+                                    tint = colors.textMuted,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Section "To get you started" (Ref Image 1 Carousel)
+                val mixTracks = homeTracks.drop(3).take(8)
+                if (mixTracks.isNotEmpty()) {
+                    item(key = "to_get_you_started_header") {
+                        Text(
+                            text = stringResource(R.string.home_to_get_you_started),
+                            style = Typography.headlineMedium.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold),
+                            color = colors.textPrimary,
+                            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 12.dp)
+                        )
+                    }
+                    item(key = "to_get_you_started_carousel") {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 20.dp),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(mixTracks, key = { "mix_${it.id}" }) { track ->
+                                Column(
+                                    modifier = Modifier
+                                        .width(152.dp)
+                                        .clickable { viewModel.playTrack(track, mixTracks) }
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(152.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(colors.card)
+                                    ) {
+                                        AsyncImage(
+                                            model = track.thumbnailUrlForDisplay(512),
+                                            contentDescription = track.title,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .align(Alignment.BottomStart)
+                                                .padding(8.dp)
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(Color(0xFFCCFF00))
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                text = "${track.artist.take(12)} Mix",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Black,
+                                                color = Color.Black,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "${track.title} • ${track.artist}",
+                                        style = Typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 16.sp),
+                                        color = colors.textMuted,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 val quickPicks = (recentlyPlayed.ifEmpty { homeTracks }).distinctBy { it.id }.take(4)
                 if (quickPicks.isNotEmpty()) {
                     item(key = "quick_picks_title") {
@@ -525,6 +648,19 @@ fun HomeScreen(
         )
     }
 
+    if (trackForOptions != null) {
+        TrackOptionsBottomSheet(
+            track = trackForOptions!!,
+            viewModel = viewModel,
+            onDismiss = { trackForOptions = null },
+            onAddToPlaylist = {
+                val t = trackForOptions
+                trackForOptions = null
+                trackForPlaylist = t
+            }
+        )
+    }
+
     if (trackForPlaylist != null) {
         AddToPlaylistDialog(
             track = trackForPlaylist!!,
@@ -543,10 +679,9 @@ fun AccountTopButton(
 
     Box(
         modifier = Modifier
-            .size(40.dp)
+            .size(36.dp)
             .clip(CircleShape)
-            .background(colors.card)
-            .border(1.dp, if (account != null) colors.textPrimary else colors.border, CircleShape)
+            .background(if (account?.avatarUrl.isNullOrBlank()) Color(0xFF1ED760) else colors.card)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
@@ -559,18 +694,12 @@ fun AccountTopButton(
                     .fillMaxSize()
                     .clip(CircleShape)
             )
-        } else if (account != null) {
-            Text(
-                text = account.name.take(1).uppercase(),
-                style = Typography.titleMedium,
-                color = colors.textPrimary
-            )
         } else {
-            Icon(
-                imageVector = Icons.Outlined.AccountCircle,
-                contentDescription = "Login YouTube",
-                tint = colors.textSecondary,
-                modifier = Modifier.size(24.dp)
+            val initial = account?.name?.take(1)?.uppercase() ?: "K"
+            Text(
+                text = initial,
+                style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontSize = 16.sp),
+                color = Color.Black
             )
         }
     }
