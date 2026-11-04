@@ -120,13 +120,15 @@ fun FullPlayerSheet(
     val colors = KuroAppTheme.colors
 
     // Derive active lyric snippet for display right under artwork
-    val activeLineText by remember(currentLyrics, currentPositionMs) {
+    val activeLineText: String by remember(currentLyrics, currentPositionMs) {
         derivedStateOf {
-            if (currentLyrics != null && currentLyrics!!.lines.isNotEmpty()) {
-                val idx = currentLyrics!!.getCurrentLineIndex(currentPositionMs)
-                if (idx in currentLyrics!!.lines.indices) {
-                    val line = currentLyrics!!.lines[idx]
-                    if (!line.translation.isNullOrBlank()) line.translation else line.text
+            val lyrics = currentLyrics
+            if (lyrics != null && lyrics.lines.isNotEmpty()) {
+                val idx = lyrics.getCurrentLineIndex(currentPositionMs)
+                if (idx in lyrics.lines.indices) {
+                    val line = lyrics.lines[idx]
+                    val trans = line.translation
+                    if (!trans.isNullOrBlank()) trans else line.text
                 } else ""
             } else ""
         }

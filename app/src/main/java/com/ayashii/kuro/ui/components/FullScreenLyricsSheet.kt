@@ -222,7 +222,7 @@ fun FullScreenLyricsSheet(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        viewModel.seekTo(line.startTimeMs)
+                                        viewModel.seekTo(line.timeMs)
                                     }
                                     .padding(vertical = 4.dp)
                             ) {
