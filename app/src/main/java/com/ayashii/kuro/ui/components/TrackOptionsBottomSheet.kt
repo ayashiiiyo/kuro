@@ -55,10 +55,10 @@ fun TrackOptionsBottomSheet(
     track: Track,
     viewModel: MusicViewModel,
     onDismiss: () -> Unit,
-    onOpenLyrics: () -> Unit,
-    onOpenQueue: () -> Unit,
-    onAddToPlaylist: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenLyrics: () -> Unit = {},
+    onOpenQueue: () -> Unit = {},
+    onAddToPlaylist: () -> Unit = {},
+    onOpenSettings: () -> Unit = {}
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val colors = KuroAppTheme.colors

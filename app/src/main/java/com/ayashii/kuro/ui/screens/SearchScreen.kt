@@ -494,7 +494,7 @@ fun SearchScreen(
 
     if (showProfileMenu) {
         ProfileMenuSheet(
-            currentAccount = currentAccount,
+            account = currentAccount,
             viewModel = viewModel,
             onDismiss = { showProfileMenu = false }
         )

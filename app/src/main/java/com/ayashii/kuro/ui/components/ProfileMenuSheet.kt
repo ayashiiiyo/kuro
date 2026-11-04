@@ -58,9 +58,9 @@ import com.ayashii.kuro.viewmodel.MusicViewModel
 fun ProfileMenuSheet(
     account: UserAccount?,
     viewModel: MusicViewModel,
-    onLoginClick: () -> Unit,
-    onLogoutClick: () -> Unit,
-    onOpenSettingsClick: () -> Unit,
+    onLoginClick: () -> Unit = {},
+    onLogoutClick: () -> Unit = {},
+    onOpenSettingsClick: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     val colors = KuroAppTheme.colors
