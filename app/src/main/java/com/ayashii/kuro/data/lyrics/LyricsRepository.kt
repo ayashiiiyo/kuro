@@ -22,7 +22,14 @@ class LyricsRepository(private val context: Context) {
     private val memCache = LruCache<String, LyricsData>(100)
     private val negativeCache = LruCache<String, Long>(200)
     private val NEGATIVE_CACHE_TTL = 7 * 24 * 60 * 60 * 1000L // 7 days
-    private val diskCacheDir = File(context.cacheDir, "lyrics_cache_v3").apply { mkdirs() }
+    private val diskCacheDir = File(context.cacheDir, "lyrics_cache_v4").apply { mkdirs() }
+
+    companion object {
+        private const val YTM_CLIENT_NAME = "WEB_REMIX"
+        private const val YTM_CLIENT_VERSION = "1.20241028.01.00"
+        private const val YTM_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+        private const val YTM_ORIGIN = "https://music.youtube.com"
+    }
 
     suspend fun getLyrics(
         trackId: String,
@@ -68,21 +75,34 @@ class LyricsRepository(private val context: Context) {
         val cleanTitle = cleanSearchTerm(title)
         val cleanArtist = cleanSearchTerm(artist)
 
-        // 5. Fetch from LRCLIB
-        var lyrics = fetchFromLrcLib(trackId, title, artist, cleanTitle, cleanArtist, durationSeconds)
+        // Tier 1: YouTube Music InnerTube Timed Lyrics (100% audio sync)
+        val ytmLyrics = fetchFromYouTubeMusic(trackId, title, artist, durationSeconds)
+        var lyrics: LyricsData? = null
 
-        // 6. If LRCLIB had no lyrics, fallback to YouTube Music Official Lyrics
-        if (lyrics == null) {
-            lyrics = fetchFromYouTubeMusic(trackId, title, artist, durationSeconds)
+        if (ytmLyrics != null && ytmLyrics.isSynced) {
+            lyrics = ytmLyrics
+        } else {
+            // Tier 2: LRCLIB (synced lyrics with auto-offset compensation)
+            val lrcLibResult = fetchFromLrcLib(trackId, title, artist, cleanTitle, cleanArtist, durationSeconds)
+            if (lrcLibResult != null && lrcLibResult.isSynced) {
+                lyrics = compensateLrcOffset(lrcLibResult)
+            } else {
+                // Tier 3: Static plain lyrics fallback
+                lyrics = when {
+                    ytmLyrics != null && !ytmLyrics.isSynced -> ytmLyrics
+                    lrcLibResult != null && !lrcLibResult.isSynced -> lrcLibResult
+                    else -> ytmLyrics ?: lrcLibResult
+                }
+            }
         }
 
-        // 7. If lyrics found and translation requested:
+        // 5. If lyrics found and translation requested:
         if (lyrics != null && autoTranslate && lyrics.lines.isNotEmpty()) {
             val translatedLines = translateLinesToIndonesian(lyrics.lines)
             lyrics = lyrics.copy(lines = translatedLines)
         }
 
-        // 8. Save to cache
+        // 6. Save to cache
         if (lyrics != null) {
             synchronized(memCache) { memCache.put(trackId, lyrics) }
             try {
@@ -249,6 +269,44 @@ class LyricsRepository(private val context: Context) {
         return null
     }
 
+    private fun buildInnerTubeRequest(endpoint: String, payload: JSONObject): Request {
+        val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
+        val cookie = auth.getCookie().orEmpty()
+        val sapisidHash = auth.getSapisidHash(YTM_ORIGIN)
+
+        val reqBody = payload.toString().toRequestBody("application/json".toMediaType())
+        val builder = Request.Builder()
+            .url("$YTM_ORIGIN/youtubei/v1/$endpoint")
+            .header("Content-Type", "application/json")
+            .header("User-Agent", YTM_USER_AGENT)
+            .header("Origin", YTM_ORIGIN)
+            .header("Referer", "$YTM_ORIGIN/")
+            .header("X-Origin", YTM_ORIGIN)
+            .header("X-YouTube-Client-Name", "67")
+            .header("X-YouTube-Client-Version", YTM_CLIENT_VERSION)
+            .post(reqBody)
+
+        if (cookie.isNotBlank()) {
+            builder.header("Cookie", cookie)
+        }
+        if (!sapisidHash.isNullOrBlank()) {
+            builder.header("Authorization", sapisidHash)
+            builder.header("X-Goog-AuthUser", "0")
+        }
+        return builder.build()
+    }
+
+    private fun createInnerTubeContext(): JSONObject {
+        return JSONObject().apply {
+            put("client", JSONObject().apply {
+                put("clientName", YTM_CLIENT_NAME)
+                put("clientVersion", YTM_CLIENT_VERSION)
+                put("hl", "en")
+                put("gl", "US")
+            })
+        }
+    }
+
     private fun fetchFromYouTubeMusic(
         trackId: String,
         origTitle: String,
@@ -256,31 +314,15 @@ class LyricsRepository(private val context: Context) {
         durationSeconds: Long
     ): LyricsData? {
         try {
+            // Step 1: Query /youtubei/v1/next to get browseId for lyrics tab
             val nextPayload = JSONObject().apply {
-                put("context", JSONObject().apply {
-                    put("client", JSONObject().apply {
-                        put("clientName", "WEB_REMIX")
-                        put("clientVersion", "1.20240101.01.00")
-                        put("hl", "en")
-                        put("gl", "US")
-                    })
-                })
+                put("context", createInnerTubeContext())
                 put("videoId", trackId)
             }
-
-            val nextReq = Request.Builder()
-                .url("https://music.youtube.com/youtubei/v1/next")
-                .header("Content-Type", "application/json")
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                .header("Origin", "https://music.youtube.com")
-                .header("Referer", "https://music.youtube.com/")
-                .header("X-YouTube-Client-Name", "67")
-                .header("X-YouTube-Client-Version", "1.20240101.01.00")
-                .post(nextPayload.toString().toRequestBody("application/json".toMediaType()))
-                .build()
-
+            val nextReq = buildInnerTubeRequest("next", nextPayload)
             val nextResp = httpClient.newCall(nextReq).execute()
             if (!nextResp.isSuccessful) return null
+
             val nextJson = JSONObject(nextResp.body?.string().orEmpty())
             val tabs = nextJson.optJSONObject("contents")
                 ?.optJSONObject("singleColumnMusicWatchNextResultsRenderer")
@@ -290,57 +332,98 @@ class LyricsRepository(private val context: Context) {
 
             var browseId: String? = null
             for (i in 0 until tabs.length()) {
-                val tab = tabs.optJSONObject(i)?.optJSONObject("tabRenderer")
-                val title = tab?.optString("title", "")
-                if (title.equals("Lyrics", ignoreCase = true)) {
-                    browseId = tab?.optJSONObject("endpoint")?.optJSONObject("browseEndpoint")?.optString("browseId")
+                val tab = tabs.optJSONObject(i)?.optJSONObject("tabRenderer") ?: continue
+                val endpoint = tab.optJSONObject("endpoint") ?: tab.optJSONObject("unselectedEndpoint")
+                val bId = endpoint?.optJSONObject("browseEndpoint")?.optString("browseId").orEmpty()
+                val title = tab.optString("title", "")
+                if (title.equals("Lyrics", ignoreCase = true) || title.equals("Lirik", ignoreCase = true) || bId.startsWith("MPLY")) {
+                    browseId = bId
                     break
                 }
             }
 
-            if (!browseId.isNullOrBlank()) {
-                val browsePayload = JSONObject().apply {
-                    put("context", JSONObject().apply {
-                        put("client", JSONObject().apply {
-                            put("clientName", "WEB_REMIX")
-                            put("clientVersion", "1.20240101.01.00")
-                            put("hl", "en")
-                            put("gl", "US")
-                        })
-                    })
-                    put("browseId", browseId)
+            if (browseId.isNullOrBlank()) return null
+
+            // Step 2: Query /youtubei/v1/browse with browseId
+            val browsePayload = JSONObject().apply {
+                put("context", createInnerTubeContext())
+                put("browseId", browseId)
+            }
+            val browseReq = buildInnerTubeRequest("browse", browsePayload)
+            val browseResp = httpClient.newCall(browseReq).execute()
+            if (!browseResp.isSuccessful) return null
+
+            val browseJson = JSONObject(browseResp.body?.string().orEmpty())
+            val contents = browseJson.optJSONObject("contents")
+                ?.optJSONObject("sectionListRenderer")
+                ?.optJSONArray("contents") ?: return null
+
+            var timedLyricsRenderer: JSONObject? = null
+            var staticShelfRenderer: JSONObject? = null
+
+            for (i in 0 until contents.length()) {
+                val item = contents.optJSONObject(i) ?: continue
+                if (timedLyricsRenderer == null) {
+                    timedLyricsRenderer = item.optJSONObject("musicTimedLyricsRenderer")
                 }
+                if (staticShelfRenderer == null) {
+                    staticShelfRenderer = item.optJSONObject("musicDescriptionShelfRenderer")
+                }
+            }
 
-                val browseReq = Request.Builder()
-                    .url("https://music.youtube.com/youtubei/v1/browse")
-                    .header("Content-Type", "application/json")
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                    .header("Origin", "https://music.youtube.com")
-                    .header("Referer", "https://music.youtube.com/")
-                    .header("X-YouTube-Client-Name", "67")
-                    .header("X-YouTube-Client-Version", "1.20240101.01.00")
-                    .post(browsePayload.toString().toRequestBody("application/json".toMediaType()))
-                    .build()
+            // Sub-step 2a: Try parsing timed lyrics (100% audio sync)
+            if (timedLyricsRenderer != null) {
+                val timedData = timedLyricsRenderer.optJSONArray("timedLyricsData")
+                if (timedData != null && timedData.length() > 0) {
+                    val lines = mutableListOf<LyricLine>()
+                    for (i in 0 until timedData.length()) {
+                        val lineObj = timedData.optJSONObject(i) ?: continue
+                        val text = extractLyricText(lineObj)
+                        if (text.isBlank()) continue
 
-                val browseResp = httpClient.newCall(browseReq).execute()
-                if (browseResp.isSuccessful) {
-                    val browseJson = JSONObject(browseResp.body?.string().orEmpty())
-                    val contents = browseJson.optJSONObject("contents")
-                        ?.optJSONObject("sectionListRenderer")
-                        ?.optJSONArray("contents")
-                    val shelf = contents?.optJSONObject(0)?.optJSONObject("musicDescriptionShelfRenderer")
-                    val runs = shelf?.optJSONObject("description")?.optJSONArray("runs")
-                    if (runs != null && runs.length() > 0) {
-                        val sb = StringBuilder()
-                        for (j in 0 until runs.length()) {
-                            sb.append(runs.optJSONObject(j)?.optString("text", ""))
+                        val cueRange = lineObj.optJSONObject("cueRange")
+                        val rawTime = cueRange?.opt("startTimeMilliseconds")
+                            ?: lineObj.opt("cueRangeStartMillis")
+                            ?: lineObj.opt("startTimeMs")
+
+                        val timeMs = when (rawTime) {
+                            is Number -> rawTime.toLong()
+                            is String -> rawTime.toLongOrNull() ?: 0L
+                            else -> 0L
                         }
-                        val rawText = sb.toString().trim()
-                        if (isValidLyricsText(rawText)) {
-                            val lines = LrcParser.parsePlain(rawText)
-                            if (isValidLyricsLines(lines)) {
-                                return LyricsData(trackId, origTitle, origArtist, lines, isSynced = false)
-                            }
+                        lines.add(LyricLine(timeMs = timeMs, text = text))
+                    }
+                    if (lines.isNotEmpty() && isValidLyricsLines(lines)) {
+                        return LyricsData(
+                            trackId = trackId,
+                            title = origTitle,
+                            artist = origArtist,
+                            lines = lines.sortedBy { it.timeMs },
+                            isSynced = true
+                        )
+                    }
+                }
+            }
+
+            // Sub-step 2b: Fallback to static lyrics from musicDescriptionShelfRenderer
+            if (staticShelfRenderer != null) {
+                val runs = staticShelfRenderer.optJSONObject("description")?.optJSONArray("runs")
+                if (runs != null && runs.length() > 0) {
+                    val sb = StringBuilder()
+                    for (j in 0 until runs.length()) {
+                        sb.append(runs.optJSONObject(j)?.optString("text", "").orEmpty())
+                    }
+                    val rawText = sb.toString().trim()
+                    if (isValidLyricsText(rawText)) {
+                        val lines = LrcParser.parsePlain(rawText)
+                        if (isValidLyricsLines(lines)) {
+                            return LyricsData(
+                                trackId = trackId,
+                                title = origTitle,
+                                artist = origArtist,
+                                lines = lines,
+                                isSynced = false
+                            )
                         }
                     }
                 }
@@ -349,6 +432,47 @@ class LyricsRepository(private val context: Context) {
             Log.d("LyricsRepository", "YTM Lyrics fetch error: ${e.message}")
         }
         return null
+    }
+
+    private fun extractLyricText(lineObj: JSONObject): String {
+        val lyricLine = lineObj.opt("lyricLine")
+        return when (lyricLine) {
+            is String -> lyricLine.trim()
+            is JSONObject -> {
+                val runs = lyricLine.optJSONArray("runs")
+                if (runs != null) {
+                    val sb = StringBuilder()
+                    for (r in 0 until runs.length()) {
+                        sb.append(runs.optJSONObject(r)?.optString("text", "").orEmpty())
+                    }
+                    sb.toString().trim()
+                } else lyricLine.optString("text", "").trim()
+            }
+            else -> {
+                val runs = lineObj.optJSONArray("runs")
+                if (runs != null) {
+                    val sb = StringBuilder()
+                    for (r in 0 until runs.length()) {
+                        sb.append(runs.optJSONObject(r)?.optString("text", "").orEmpty())
+                    }
+                    sb.toString().trim()
+                } else {
+                    lineObj.optString("text", "").trim()
+                }
+            }
+        }
+    }
+
+    private fun compensateLrcOffset(lrcData: LyricsData): LyricsData {
+        if (lrcData.lines.isEmpty() || !lrcData.isSynced) return lrcData
+        val originalLines = lrcData.lines.sortedBy { it.timeMs }
+
+        val cleanedLines = originalLines.toMutableList()
+        while (cleanedLines.size > 1 && cleanedLines[0].timeMs == 0L && isIntroToken(cleanedLines[0].text)) {
+            cleanedLines.removeAt(0)
+        }
+
+        return lrcData.copy(lines = cleanedLines)
     }
 
     private fun isValidLyricsText(text: String): Boolean {

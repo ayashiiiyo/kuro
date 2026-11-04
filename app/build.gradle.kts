@@ -11,8 +11,8 @@ android {
         applicationId = "com.ayashii.kuro"
         minSdk = 26
         targetSdk = 34
-        versionCode = 41
-        versionName = "3.7.0"
+        versionCode = 42
+        versionName = "3.8.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -97,6 +97,9 @@ dependencies {
 
     // Coil Image Loading
     implementation("io.coil-kt:coil-compose:2.6.0")
+
+    // Palette API for Dynamic Ambient Album Theming
+    implementation("androidx.palette:palette-ktx:1.0.0")
 
     // NewPipeExtractor
     implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.5")

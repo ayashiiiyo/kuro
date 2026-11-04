@@ -49,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
@@ -63,7 +64,9 @@ import com.ayashii.kuro.R
 import com.ayashii.kuro.data.lyrics.LyricsData
 import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.ui.theme.KuroAppTheme
+import com.ayashii.kuro.ui.theme.PureBlack
 import com.ayashii.kuro.ui.theme.Typography
+import com.ayashii.kuro.ui.theme.rememberDynamicDominantColor
 import com.ayashii.kuro.viewmodel.MusicViewModel
 
 @Composable
@@ -79,6 +82,15 @@ fun FullScreenLyricsSheet(
 ) {
     val context = LocalContext.current
     val colors = KuroAppTheme.colors
+    val dominantColor = rememberDynamicDominantColor(track.thumbnailUrlForDisplay(768))
+    val lyricsGradient = remember(dominantColor) {
+        Brush.verticalGradient(
+            0.0f to dominantColor.copy(alpha = 0.45f),
+            0.35f to dominantColor.copy(alpha = 0.20f),
+            0.70f to PureBlack,
+            1.0f to PureBlack
+        )
+    }
     val currentPositionMs by viewModel.playbackPosition.collectAsState()
     val durationMs by viewModel.duration.collectAsState()
 
@@ -101,7 +113,7 @@ fun FullScreenLyricsSheet(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(colors.background)
+            .background(lyricsGradient)
     ) {
         Column(
             modifier = Modifier

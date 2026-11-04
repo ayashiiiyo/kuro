@@ -6,6 +6,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
+import android.os.SystemClock
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -298,11 +299,22 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                         when (playbackState) {
                             Player.STATE_BUFFERING -> {
                                 _isLoadingTrack.value = true
+                                mediaController?.let { ctrl ->
+                                    val pos = ctrl.currentPosition.coerceAtLeast(0L)
+                                    anchorPosition = pos
+                                    anchorTimestamp = SystemClock.elapsedRealtime()
+                                    _playbackPosition.value = pos
+                                }
                             }
                             Player.STATE_READY -> {
                                 _isLoadingTrack.value = false
                                 isSeeking = false
                                 mediaController?.let { controller ->
+                                    val pos = controller.currentPosition.coerceAtLeast(0L)
+                                    anchorPosition = pos
+                                    anchorTimestamp = SystemClock.elapsedRealtime()
+                                    lastGroundTruthSync = anchorTimestamp
+                                    _playbackPosition.value = pos
                                     val d = controller.duration
                                     if (d > 0) {
                                         _duration.value = d
@@ -390,6 +402,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     }
 
                     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                        anchorPosition = 0L
+                        val now = SystemClock.elapsedRealtime()
+                        anchorTimestamp = now
+                        lastGroundTruthSync = now
+                        _playbackPosition.value = 0L
                         syncCurrentTrackFromController()
                         syncWidgetState()
                     }
@@ -432,39 +449,102 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         _isPlaying.value = controller.isPlaying
         if (controller.duration > 0) _duration.value = controller.duration
         _playbackPosition.value = controller.currentPosition.coerceAtLeast(0)
+        anchorPosition = _playbackPosition.value
+        val now = SystemClock.elapsedRealtime()
+        anchorTimestamp = now
+        lastGroundTruthSync = now
         if (controller.isPlaying) startProgressTracking()
     }
 
+    private var anchorPosition = 0L
+    private var anchorTimestamp = 0L
+    private var lastGroundTruthSync = 0L
+    private var lastWidgetSync = 0L
     private var isSeeking = false
     private var lastSeekTimestamp = 0L
 
     private fun startProgressTracking() {
         progressJob?.cancel()
+        val controller = mediaController
+        val initialPos = controller?.currentPosition?.coerceAtLeast(0L) ?: _playbackPosition.value
+        anchorPosition = initialPos
+        anchorTimestamp = SystemClock.elapsedRealtime()
+        lastGroundTruthSync = anchorTimestamp
+        _playbackPosition.value = initialPos
+
         progressJob = viewModelScope.launch {
             while (true) {
-                val now = System.currentTimeMillis()
-                if (isSeeking && (now - lastSeekTimestamp < 1200L)) {
-                } else {
+                val now = SystemClock.elapsedRealtime()
+
+                // 1. Release seeking latch after 1200ms
+                if (isSeeking && (now - lastSeekTimestamp >= 1200L)) {
                     isSeeking = false
-                    mediaController?.let { controller ->
-                        val pos = controller.currentPosition.coerceAtLeast(0)
-                        _playbackPosition.value = pos
-                        val realDuration = controller.duration
+                }
+
+                // 2. Periodic ground-truth resync against mediaController.currentPosition every 500ms
+                if (!isSeeking && (now - lastGroundTruthSync >= 500L)) {
+                    mediaController?.let { ctrl ->
+                        val actualPos = ctrl.currentPosition.coerceAtLeast(0L)
+                        val realDuration = ctrl.duration
                         if (realDuration > 0) {
                             _duration.value = realDuration
                         }
+                        anchorPosition = actualPos
+                        anchorTimestamp = now
+                        lastGroundTruthSync = now
                     }
                 }
-                if (_isPlaying.value && now % 5_000L < 500L) {
+
+                // 3. Compute continuous interpolated position: Position = P0 + (now - T0)
+                if (!isSeeking) {
+                    val ctrl = mediaController
+                    val isBuffering = ctrl?.playbackState == Player.STATE_BUFFERING || _isLoadingTrack.value
+                    val isPlayingNow = _isPlaying.value && (ctrl?.isPlaying == true) && !isBuffering
+
+                    val pos = if (isPlayingNow) {
+                        val elapsed = now - anchorTimestamp
+                        val dur = _duration.value
+                        val calcPos = if (dur > 0) (anchorPosition + elapsed).coerceAtMost(dur)
+                        else anchorPosition + elapsed
+
+                        // Monotonic safeguard: prevent small audio sink sample latency jitter (< 200ms)
+                        // from jumping backwards during continuous playback
+                        val currentPos = _playbackPosition.value
+                        if (currentPos > 0 && calcPos < currentPos && (currentPos - calcPos) < 200L) {
+                            currentPos
+                        } else {
+                            calcPos
+                        }
+                    } else {
+                        // Paused or buffering: hold at anchor without advancing
+                        if (isBuffering) {
+                            anchorTimestamp = now
+                        }
+                        anchorPosition
+                    }
+                    _playbackPosition.value = pos.coerceAtLeast(0L)
+                }
+
+                // 4. Periodic widget sync (~every 5s)
+                if (_isPlaying.value && (now - lastWidgetSync >= 5000L)) {
+                    lastWidgetSync = now
                     syncWidgetState()
                 }
-                delay(if (_isPlaying.value) 500 else 1000)
+
+                // Continuous interpolation ticker: ~30 FPS (~33ms) to eliminate 500ms stutter
+                delay(33)
             }
         }
     }
 
     private fun stopProgressTracking() {
         progressJob?.cancel()
+        mediaController?.let { ctrl ->
+            val pos = ctrl.currentPosition.coerceAtLeast(0L)
+            anchorPosition = pos
+            anchorTimestamp = SystemClock.elapsedRealtime()
+            _playbackPosition.value = pos
+        }
     }
 
     fun loadTrending() {
@@ -545,6 +625,10 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             _currentTrack.value = track
             _isLoadingTrack.value = true
             _playbackPosition.value = 0L
+            anchorPosition = 0L
+            val now = SystemClock.elapsedRealtime()
+            anchorTimestamp = now
+            lastGroundTruthSync = now
             _duration.value = if (track.durationSeconds > 0) track.durationSeconds * 1000L else 0L
 
             if (newQueue.isNotEmpty() && newQueue !== playlistQueue) {
@@ -687,7 +771,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     fun seekTo(positionMs: Long) {
         val target = positionMs.coerceAtLeast(0L)
         _playbackPosition.value = target
-        lastSeekTimestamp = System.currentTimeMillis()
+        anchorPosition = target
+        val now = SystemClock.elapsedRealtime()
+        anchorTimestamp = now
+        lastGroundTruthSync = now
+        lastSeekTimestamp = now
         isSeeking = true
         mediaController?.let { controller ->
             controller.seekTo(target)

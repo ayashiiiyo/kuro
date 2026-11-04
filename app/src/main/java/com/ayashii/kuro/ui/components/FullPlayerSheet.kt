@@ -64,6 +64,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -83,7 +84,9 @@ import coil.request.ImageRequest
 import com.ayashii.kuro.R
 import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.ui.theme.KuroAppTheme
+import com.ayashii.kuro.ui.theme.PureBlack
 import com.ayashii.kuro.ui.theme.Typography
+import com.ayashii.kuro.ui.theme.rememberDynamicDominantColor
 import com.ayashii.kuro.viewmodel.MusicViewModel
 
 @Composable
@@ -119,6 +122,15 @@ fun FullPlayerSheet(
     var showTranslationInPreview by remember { mutableStateOf(true) }
 
     val colors = KuroAppTheme.colors
+    val dominantColor = rememberDynamicDominantColor(track.thumbnailUrlForDisplay(768))
+    val ambientGradient = remember(dominantColor) {
+        Brush.verticalGradient(
+            0.0f to dominantColor.copy(alpha = 0.55f),
+            0.30f to dominantColor.copy(alpha = 0.18f),
+            0.55f to PureBlack,
+            1.0f to PureBlack
+        )
+    }
 
     // Derive active lyric snippet for display right under artwork
     val activeLineText: String by remember(currentLyrics, currentPositionMs) {
@@ -138,7 +150,7 @@ fun FullPlayerSheet(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(colors.background)
+            .background(ambientGradient)
     ) {
         Column(
             modifier = Modifier
@@ -555,8 +567,12 @@ fun FullPlayerSheet(
                         .fillMaxWidth()
                         .padding(horizontal = 20.dp)
                         .clip(RoundedCornerShape(20.dp))
-                        .background(colors.card)
-                        .border(1.dp, colors.border, RoundedCornerShape(20.dp))
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(dominantColor.copy(alpha = 0.35f), colors.card)
+                            )
+                        )
+                        .border(1.dp, dominantColor.copy(alpha = 0.25f), RoundedCornerShape(20.dp))
                         .padding(18.dp)
                 ) {
                     Column(modifier = Modifier.fillMaxWidth()) {
