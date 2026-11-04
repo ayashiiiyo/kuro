@@ -11,8 +11,8 @@ android {
         applicationId = "com.ayashii.kuro"
         minSdk = 26
         targetSdk = 34
-        versionCode = 44
-        versionName = "3.8.2"
+        versionCode = 45
+        versionName = "3.8.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

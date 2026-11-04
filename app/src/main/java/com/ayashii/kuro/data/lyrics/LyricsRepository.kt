@@ -22,11 +22,13 @@ class LyricsRepository(private val context: Context) {
     private val memCache = LruCache<String, LyricsData>(100)
     private val negativeCache = LruCache<String, Long>(200)
     private val NEGATIVE_CACHE_TTL = 7 * 24 * 60 * 60 * 1000L
-    private val diskCacheDir = File(context.cacheDir, "lyrics_cache_v5").apply {
+    private val diskCacheDir = File(context.cacheDir, "lyrics_cache_v6").apply {
         mkdirs()
         try {
-            val oldCache = File(context.cacheDir, "lyrics_cache_v4")
-            if (oldCache.exists()) oldCache.deleteRecursively()
+            val oldCache5 = File(context.cacheDir, "lyrics_cache_v5")
+            if (oldCache5.exists()) oldCache5.deleteRecursively()
+            val oldCache4 = File(context.cacheDir, "lyrics_cache_v4")
+            if (oldCache4.exists()) oldCache4.deleteRecursively()
         } catch (_: Exception) {}
     }
 
@@ -83,20 +85,27 @@ class LyricsRepository(private val context: Context) {
         val cleanTitle = cleanSearchTerm(title)
         val cleanArtist = cleanSearchTerm(artist)
 
-        val ytmResult = fetchFromYouTubeMusic(trackId, title, artist, durationSeconds)
+        val betterLyricsResult = fetchFromBetterLyrics(trackId, title, artist, cleanTitle, cleanArtist, durationSeconds)
         var lyrics: LyricsData? = null
+        var ytmResult: LyricsFetchResult = LyricsFetchResult.Empty
         var lrcLibResult: LyricsFetchResult = LyricsFetchResult.Empty
 
-        if (ytmResult is LyricsFetchResult.Success && ytmResult.data.isSynced) {
-            lyrics = ytmResult.data
+        if (betterLyricsResult is LyricsFetchResult.Success && betterLyricsResult.data.isSynced) {
+            lyrics = betterLyricsResult.data
         } else {
-            lrcLibResult = fetchFromLrcLib(trackId, title, artist, cleanTitle, cleanArtist, durationSeconds)
-            if (lrcLibResult is LyricsFetchResult.Success && lrcLibResult.data.isSynced) {
-                lyrics = compensateLrcOffset(lrcLibResult.data)
+            ytmResult = fetchFromYouTubeMusic(trackId, title, artist, durationSeconds)
+            if (ytmResult is LyricsFetchResult.Success && ytmResult.data.isSynced) {
+                lyrics = ytmResult.data
             } else {
-                val ytmStatic = if (ytmResult is LyricsFetchResult.Success && !ytmResult.data.isSynced) ytmResult.data else null
-                val lrcStatic = if (lrcLibResult is LyricsFetchResult.Success && !lrcLibResult.data.isSynced) lrcLibResult.data else null
-                lyrics = ytmStatic ?: lrcStatic
+                lrcLibResult = fetchFromLrcLib(trackId, title, artist, cleanTitle, cleanArtist, durationSeconds)
+                if (lrcLibResult is LyricsFetchResult.Success && lrcLibResult.data.isSynced) {
+                    lyrics = compensateLrcOffset(lrcLibResult.data)
+                } else {
+                    val betterStatic = if (betterLyricsResult is LyricsFetchResult.Success && !betterLyricsResult.data.isSynced) betterLyricsResult.data else null
+                    val ytmStatic = if (ytmResult is LyricsFetchResult.Success && !ytmResult.data.isSynced) ytmResult.data else null
+                    val lrcStatic = if (lrcLibResult is LyricsFetchResult.Success && !lrcLibResult.data.isSynced) lrcLibResult.data else null
+                    lyrics = betterStatic ?: ytmStatic ?: lrcStatic
+                }
             }
         }
 
@@ -115,11 +124,12 @@ class LyricsRepository(private val context: Context) {
                 Log.d("LyricsRepository", "Disk cache save error: ${e.message}")
             }
         } else {
+            val betterVerifiedEmpty = betterLyricsResult is LyricsFetchResult.Empty
             val ytmVerifiedEmpty = ytmResult is LyricsFetchResult.Empty
             val lrcVerifiedEmpty = lrcLibResult is LyricsFetchResult.Empty
-            val hadNetworkError = ytmResult is LyricsFetchResult.Error || lrcLibResult is LyricsFetchResult.Error
+            val hadNetworkError = betterLyricsResult is LyricsFetchResult.Error || ytmResult is LyricsFetchResult.Error || lrcLibResult is LyricsFetchResult.Error
 
-            if (!hadNetworkError && (ytmVerifiedEmpty || lrcVerifiedEmpty)) {
+            if (!hadNetworkError && (betterVerifiedEmpty || ytmVerifiedEmpty || lrcVerifiedEmpty)) {
                 synchronized(negativeCache) { negativeCache.put(trackId, System.currentTimeMillis()) }
                 try {
                     emptyMarker.createNewFile()
@@ -154,6 +164,104 @@ class LyricsRepository(private val context: Context) {
         return lower.startsWith("by ") || lower.contains("sync by") || lower.contains("synced by") ||
                 lower.contains("lyrics by") || lower.contains("arranged by") || lower.contains("translated by") ||
                 lower.contains("med el baraka")
+    }
+
+    private suspend fun fetchFromBetterLyrics(
+        trackId: String,
+        title: String,
+        artist: String,
+        cleanTitle: String,
+        cleanArtist: String,
+        durationSeconds: Long
+    ): LyricsFetchResult = withContext(Dispatchers.IO) {
+        val directResult = queryBetterLyrics(trackId, title, artist, durationSeconds)
+        if (directResult is LyricsFetchResult.Success) {
+            return@withContext directResult
+        }
+
+        if (durationSeconds > 0) {
+            val noDurResult = queryBetterLyrics(trackId, title, artist, 0L)
+            if (noDurResult is LyricsFetchResult.Success) {
+                return@withContext noDurResult
+            }
+        }
+
+        if (cleanTitle != title || cleanArtist != artist) {
+            val cleanResult = queryBetterLyrics(trackId, cleanTitle, cleanArtist, durationSeconds)
+            if (cleanResult is LyricsFetchResult.Success) {
+                return@withContext cleanResult
+            }
+
+            if (durationSeconds > 0) {
+                val cleanNoDurResult = queryBetterLyrics(trackId, cleanTitle, cleanArtist, 0L)
+                if (cleanNoDurResult is LyricsFetchResult.Success) {
+                    return@withContext cleanNoDurResult
+                }
+            }
+        }
+
+        if (directResult is LyricsFetchResult.Error) {
+            LyricsFetchResult.Error
+        } else {
+            LyricsFetchResult.Empty
+        }
+    }
+
+    private fun queryBetterLyrics(
+        trackId: String,
+        title: String,
+        artist: String,
+        durationSeconds: Long
+    ): LyricsFetchResult {
+        return try {
+            val encodedTitle = URLEncoder.encode(title, "UTF-8")
+            val encodedArtist = URLEncoder.encode(artist, "UTF-8")
+            val urlBuilder = StringBuilder("https://lyrics-api.boidu.dev/getLyrics?s=")
+                .append(encodedTitle)
+                .append("&a=")
+                .append(encodedArtist)
+
+            if (durationSeconds > 0) {
+                urlBuilder.append("&d=").append(durationSeconds)
+            }
+
+            val request = Request.Builder()
+                .url(urlBuilder.toString())
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                .header("Accept", "application/json")
+                .get()
+                .build()
+
+            val response = httpClient.newCall(request).execute()
+            val code = response.code
+            val body = response.body?.string()
+
+            if (code == 200 && !body.isNullOrBlank()) {
+                val json = JSONObject(body)
+                val ttml = json.optString("ttml", "")
+                if (ttml.isNotBlank()) {
+                    val lines = TtmlParser.parseTtml(ttml)
+                    if (lines.isNotEmpty()) {
+                        return LyricsFetchResult.Success(
+                            LyricsData(
+                                trackId = trackId,
+                                title = title,
+                                artist = artist,
+                                lines = lines,
+                                isSynced = true
+                            )
+                        )
+                    }
+                }
+                LyricsFetchResult.Empty
+            } else if (code == 404 || code == 401 || code == 400 || (body != null && body.contains("\"error\""))) {
+                LyricsFetchResult.Empty
+            } else {
+                LyricsFetchResult.Error
+            }
+        } catch (_: Exception) {
+            LyricsFetchResult.Error
+        }
     }
 
     private fun fetchFromLrcLib(

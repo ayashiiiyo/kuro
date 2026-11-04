@@ -167,9 +167,8 @@ fun MainAppScreen(viewModel: MusicViewModel) {
                             onClick = {
                                 if (currentRoute != screen.route) {
                                     navController.navigate(screen.route) {
-                                        popUpTo(screen.route) {
+                                        popUpTo(navController.graph.findStartDestination().id) {
                                             saveState = true
-                                            inclusive = true
                                         }
                                         launchSingleTop = true
                                         restoreState = true
