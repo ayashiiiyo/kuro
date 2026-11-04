@@ -47,7 +47,6 @@ class KuroDownloader private constructor(context: Context? = null) : Downloader(
             )
         }
 
-        // Inject YouTube auth cookies & SAPISID header if user is logged in
         try {
             val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
             val cookie = auth.getCookie()

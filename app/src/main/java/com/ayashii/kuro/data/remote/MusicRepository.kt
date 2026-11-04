@@ -25,16 +25,16 @@ class MusicRepository {
 
     private val service = ServiceList.YouTube
     private val streamUrlCache = LruCache<String, Pair<String, Long>>(50)
-    private val CACHE_EXPIRY_MS = 3 * 60 * 60 * 1000L
+    private val CACHE_EXPIRY_MS = 20 * 60 * 1000L
 
     private var homeCache: Pair<List<HomeSection>, Long>? = null
-    private val HOME_CACHE_TTL = 10 * 60 * 1000L // 10 minutes
+    private val HOME_CACHE_TTL = 10 * 60 * 1000L
 
     private val searchCache = LruCache<String, Pair<List<Track>, Long>>(30)
-    private val SEARCH_CACHE_TTL = 5 * 60 * 1000L // 5 minutes
+    private val SEARCH_CACHE_TTL = 5 * 60 * 1000L
 
     private val radioCache = LruCache<String, Pair<List<Track>, Long>>(20)
-    private val RADIO_CACHE_TTL = 30 * 60 * 1000L // 30 minutes
+    private val RADIO_CACHE_TTL = 30 * 60 * 1000L
 
     companion object {
         private const val YTM_CLIENT_NAME = "WEB_REMIX"
@@ -75,8 +75,6 @@ class MusicRepository {
 
     suspend fun resolveBestThumbnail(track: Track): String = withContext(Dispatchers.IO) {
         val upgraded = upgradeThumbnailUrl(track.thumbnailUrl)
-        // YouTube Music artwork (googleusercontent) is already served at high resolution
-        // by upgradeThumbnailUrl; probing it again with a HEAD request wastes data/battery.
         val alreadyHighRes = upgraded.contains("googleusercontent.com") ||
             upgraded.contains("=w1080") ||
             upgraded.contains("maxresdefault")
@@ -126,14 +124,12 @@ class MusicRepository {
             }
         }
 
-        // 1. Prioritize YouTube Music Song Search (Pure Music Tracks!)
         val ytmTracks = searchYouTubeMusic(query)
         if (ytmTracks.isNotEmpty()) {
             synchronized(searchCache) { searchCache.put(q, Pair(ytmTracks, now)) }
             return@withContext ytmTracks
         }
 
-        // 2. Fallback to NewPipe Extractor
         try {
             val searchExtractor = service.getSearchExtractor(
                 query,
@@ -311,7 +307,6 @@ class MusicRepository {
             return@withContext ytmShelves
         }
 
-        // Fallback: group into categories
         val defaultTracks = searchTracks("Top Global Hits 2026")
         if (defaultTracks.isNotEmpty()) {
             listOf(
@@ -385,14 +380,12 @@ class MusicRepository {
             }
             if (jsonStr.isBlank()) return@withContext emptyList()
 
-            // Try high-performance native parser first
             val nativeParsed = com.ayashii.kuro.data.native.KuroNativeCore.parseAutomix(jsonStr, videoId)
             if (nativeParsed != null && nativeParsed.isNotEmpty()) {
                 synchronized(radioCache) { radioCache.put(cacheKey, Pair(nativeParsed, now)) }
                 return@withContext nativeParsed
             }
 
-            // Fallback to Kotlin JSON parsing
             val json = org.json.JSONObject(jsonStr)
             val tabs = json.optJSONObject("contents")
                 ?.optJSONObject("singleColumnMusicWatchNextResultsRenderer")
@@ -699,7 +692,6 @@ class MusicRepository {
             } ?: httpAudios.maxByOrNull { it.averageBitrate } ?: httpAudios.firstOrNull()
 
             val resolved = chosenAudio?.content ?: run {
-                // Fallback to muxed video/audio stream if separate audio stream is unavailable
                 streamInfo.videoStreams
                     .filter { it.content != null && it.content.startsWith("http") }
                     .firstOrNull()?.content
@@ -713,6 +705,17 @@ class MusicRepository {
         } catch (e: Exception) {
             Log.e("MusicRepository", "Failed to get audio stream for $url: ${e.message}", e)
             null
+        }
+    }
+
+    fun evictStreamUrl(songUrl: String) {
+        synchronized(streamUrlCache) {
+            val snapshot = streamUrlCache.snapshot()
+            for (key in snapshot.keys) {
+                if (key == songUrl || key.startsWith("$songUrl#") || snapshot[key]?.first == songUrl) {
+                    streamUrlCache.remove(key)
+                }
+            }
         }
     }
 
@@ -867,7 +870,6 @@ class MusicRepository {
             Log.e("MusicRepository", "Liked songs InnerTube fetch error: ${e.message}", e)
         }
 
-        // Fallback: NewPipe playlist extractor
         try {
             val playlistExtractor = service.getPlaylistExtractor("https://www.youtube.com/playlist?list=LL")
             playlistExtractor.fetchPage()

@@ -7,7 +7,7 @@ use jni::objects::{JClass, JString};
 use jni::sys::jstring;
 use jni::JNIEnv;
 
-/// JNI bridge matching package: com.ayashii.kuro.data.native.KuroNativeCore
+/** JNI bridge matching package: com.ayashii.kuro.data.native.KuroNativeCore */
 
 #[no_mangle]
 pub extern "system" fn Java_com_ayashii_kuro_data_native_KuroNativeCore_cleanTrackTitle(

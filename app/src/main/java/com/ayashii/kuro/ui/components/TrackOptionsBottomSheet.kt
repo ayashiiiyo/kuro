@@ -83,7 +83,6 @@ fun TrackOptionsBottomSheet(
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp, vertical = 6.dp)
         ) {
-            // Track Info Header (Image 3)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -124,7 +123,6 @@ fun TrackOptionsBottomSheet(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // 1. Share
             TrackOptionItem(
                 icon = Icons.Outlined.Share,
                 title = stringResource(R.string.player_share),
@@ -141,7 +139,6 @@ fun TrackOptionsBottomSheet(
                 }
             )
 
-            // 2. Lyrics • Indonesian
             TrackOptionItem(
                 icon = Icons.Outlined.Translate,
                 title = "Lyrics • " + stringResource(R.string.player_indonesian),
@@ -151,7 +148,6 @@ fun TrackOptionsBottomSheet(
                 }
             )
 
-            // 3. Add to Liked Songs / Favorite
             TrackOptionItem(
                 icon = if (track.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
                 title = if (track.isFavorite) "Disukai (Tersimpan)" else "Add to Liked Songs",
@@ -162,7 +158,6 @@ fun TrackOptionsBottomSheet(
                 }
             )
 
-            // 4. Add to playlist
             TrackOptionItem(
                 icon = Icons.Outlined.AddCircleOutline,
                 title = stringResource(R.string.player_add_to_playlist),
@@ -172,7 +167,6 @@ fun TrackOptionsBottomSheet(
                 }
             )
 
-            // 5. Add to Queue
             TrackOptionItem(
                 icon = Icons.Outlined.QueueMusic,
                 title = "Add to Queue",
@@ -182,7 +176,6 @@ fun TrackOptionsBottomSheet(
                 }
             )
 
-            // 6. Go to Queue
             TrackOptionItem(
                 icon = Icons.Outlined.FormatListBulleted,
                 title = "Go to Queue",
@@ -192,7 +185,6 @@ fun TrackOptionsBottomSheet(
                 }
             )
 
-            // 7. Audio settings
             TrackOptionItem(
                 icon = Icons.Outlined.Tune,
                 title = stringResource(R.string.player_audio_settings),

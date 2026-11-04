@@ -86,25 +86,31 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.8.1 — Opaque Player Theme, Spotify Search Redesign & Accurate Synced Lyrics
+          ## Kuro v3.8.2 — Comprehensive Bug & UX Remediation (31 Fixes)
 
-          - **Fix Player Transparency Bug**: Full Player Sheet and Full Screen Lyrics now render with 100% opaque, solid OLED PureBlack backdrops and `lerp` ambient tints. Eliminates background elements bleeding through the player sheet.
-          - **Search Screen Spotify Redesign**:
-            - Dark pill search bar (`#242424`) with smooth back arrow navigation and clear button.
-            - "Recents" section showing recently played tracks with 48dp thumbnails, clean `Song • [Artist]` typography, `(+)` save button, and `(X)` remove-from-recents button.
-            - Centered bordered pill button: "Clear recent searches".
-            - Clean search suggestions with magnifying glass and diagonal arrows, matching Spotify spacing and typography.
-            - Refined search results rows with square album art, `Song • [Artist]`, 3-dots options `⋮`, and `(+)` save button.
-          - **Fix Lyrics Accuracy & Corrupt Candidate Filtering**:
-            - Multi-source candidate evaluation for LRCLIB with intelligent scoring: rejects corrupted/mistimed candidates with abnormal line 0 gaps (e.g. "The Winner Takes It All" starting at second 6 during piano intro).
-            - Discards uploader watermark lines and selects the highest-scoring candidate matching actual vocal timing.
-            - Upgraded cache directory to `lyrics_cache_v5` with automatic cleanup of previous cache.
+          - **Search Staged Back-Navigation (NAV-CORE-01)**: First back press clears query; second back press exits search mode; third back press pops backstack naturally without dumping user to Home screen.
+          - **UI & Theme Contrast (UI-01..12)**:
+            - Light Theme text contrast repaired to WCAG AAA using dynamic theme tokens (no more invisible white-on-white text).
+            - Added missing BackHandlers across Library, Home, and Player Sheets.
+            - Activated dead action buttons on track options and profile menu sheets.
+            - Display cutout insets, auto-scroll user touch pause, and rotation state preservation.
+          - **Playback Pipeline & Service Decoupling (PB-01..19)**:
+            - Dedicated `PlayerQueueManager` decoupling playback service from UI lifecycle (uninterrupted background notification next/prev controls).
+            - Automatic background track advancement on track completion.
+            - Preserved pause state when seeking (no more surprise auto-playing).
+            - Error cascade skipping circuit breaker and YouTube stream token 403 eviction with 20m cache TTL.
+            - Positional queue index navigation and full queue management controls.
+          - **State Management & Caching (ST-01..09)**:
+            - Repeat-one infinite retry loop terminated.
+            - Fixed 7-day negative lyrics cache poisoning on transient network drops.
+            - Settings cache calculation and clearing updated for active `lyrics_cache_v5`.
+          - **Codebase Cleanliness**: Removed all single-line `//` comments across the entire project.
           - Published signed release and debug APKs.
           EOF
           gh release create "$RELEASE_TAG" \
             "${{ steps.apk.outputs.release_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (Opaque Player, Spotify Search & Lyric Fix)" \
+            --title "Kuro $RELEASE_TAG (31 Bug & UX Fixes, Background Service Decoupling)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 

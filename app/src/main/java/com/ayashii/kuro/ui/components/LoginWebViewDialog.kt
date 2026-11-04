@@ -82,7 +82,6 @@ fun LoginWebViewDialog(
                 .fillMaxSize()
                 .background(PureBlack)
         ) {
-            // Header Bar
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -120,7 +119,6 @@ fun LoginWebViewDialog(
                 }
             }
 
-            // Progress bar
             if (isLoading) {
                 LinearProgressIndicator(
                     progress = { pageProgress },
@@ -132,7 +130,6 @@ fun LoginWebViewDialog(
                 Spacer(modifier = Modifier.height(2.dp))
             }
 
-            // WebView
             Box(modifier = Modifier.fillMaxSize()) {
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
@@ -144,6 +141,8 @@ fun LoginWebViewDialog(
                             )
 
                             val cookieManager = CookieManager.getInstance()
+                            cookieManager.removeAllCookies(null)
+                            cookieManager.flush()
                             cookieManager.setAcceptCookie(true)
                             cookieManager.setAcceptThirdPartyCookies(this, true)
 
@@ -154,7 +153,6 @@ fun LoginWebViewDialog(
                                 setSupportZoom(true)
                                 builtInZoomControls = true
                                 displayZoomControls = false
-                                // Clean standard modern Chrome mobile user agent with real device model (prevents 'disallowed_useragent' Google error)
                                 val deviceModel = android.os.Build.MODEL.ifBlank { "Android Device" }
                                 val osVersion = android.os.Build.VERSION.RELEASE.ifBlank { "14" }
                                 userAgentString = "Mozilla/5.0 (Linux; Android $osVersion; $deviceModel) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Mobile Safari/537.36"
@@ -189,7 +187,6 @@ fun LoginWebViewDialog(
                                             cookies.contains("LOGIN_INFO") ||
                                             cookies.contains("__Secure-3PAPISID")
 
-                                    // Extract Google avatar and name directly from DOM!
                                     view?.evaluateJavascript(
                                         """
                                         (() => {

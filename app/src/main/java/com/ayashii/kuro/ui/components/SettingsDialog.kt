@@ -104,7 +104,6 @@ fun SettingsDialog(
                     .fillMaxWidth()
                     .verticalScroll(scrollState)
             ) {
-                // Header
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -135,7 +134,6 @@ fun SettingsDialog(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // 1. Audio Quality Section
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Outlined.GraphicEq,
@@ -206,7 +204,6 @@ fun SettingsDialog(
                 HorizontalDivider(color = colors.border, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // 2. Theme Selection
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Outlined.Palette,
@@ -295,7 +292,6 @@ fun SettingsDialog(
                 HorizontalDivider(color = colors.border, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // App Language Section
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Outlined.Translate,
@@ -336,9 +332,6 @@ fun SettingsDialog(
                             .background(if (isSelected) colors.card else Color.Transparent)
                             .clickable {
                                 settingsManager.setLanguage(lang)
-                                // Android 12 and below applies app locales only through
-                                // AppCompat activities; our activity reads the saved locale
-                                // in attachBaseContext, so a recreate is enough.
                                 if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.S_V2) {
                                     var ctx: android.content.Context? = context
                                     while (ctx is android.content.ContextWrapper && ctx !is android.app.Activity) {
@@ -381,7 +374,6 @@ fun SettingsDialog(
                 HorizontalDivider(color = colors.border, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // 3. Lyrics Translation Toggle
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -426,7 +418,6 @@ fun SettingsDialog(
                 HorizontalDivider(color = colors.border, thickness = 1.dp)
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // 4. Storage & Cache
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -483,7 +474,6 @@ fun SettingsDialog(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // 5. Check for Updates
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -536,7 +526,6 @@ fun SettingsDialog(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // 6. About / Version Footer
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally

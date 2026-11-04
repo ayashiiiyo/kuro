@@ -11,8 +11,8 @@ android {
         applicationId = "com.ayashii.kuro"
         minSdk = 26
         targetSdk = 34
-        versionCode = 43
-        versionName = "3.8.1"
+        versionCode = 44
+        versionName = "3.8.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -90,24 +90,18 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.7.7")
 
-    // Media3 (ExoPlayer + MediaSession)
     implementation("androidx.media3:media3-exoplayer:1.3.1")
     implementation("androidx.media3:media3-session:1.3.1")
     implementation("androidx.media3:media3-common:1.3.1")
 
-    // Coil Image Loading
     implementation("io.coil-kt:coil-compose:2.6.0")
 
-    // Palette API for Dynamic Ambient Album Theming
     implementation("androidx.palette:palette-ktx:1.0.0")
 
-    // NewPipeExtractor
     implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.5")
 
-    // OkHttp (for networking & downloader)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
-    // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")

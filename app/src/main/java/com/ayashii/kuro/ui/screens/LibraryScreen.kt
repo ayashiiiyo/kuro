@@ -1,5 +1,8 @@
 package com.ayashii.kuro.ui.screens
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.saveable.rememberSaveable
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -73,12 +76,16 @@ fun LibraryScreen(
     val currentTrack by viewModel.currentTrack.collectAsState()
     val currentAccount by viewModel.authState.collectAsState()
 
-    var selectedTab by remember { mutableStateOf(0) } // 0: Liked Songs, 1: Playlists
-    var selectedPlaylistId by remember { mutableStateOf<String?>(null) }
+    var selectedTab by rememberSaveable { mutableStateOf(0) }
+    var selectedPlaylistId by rememberSaveable { mutableStateOf<String?>(null) }
     var trackForPlaylist by remember { mutableStateOf<Track?>(null) }
-    var showCreateDialog by remember { mutableStateOf(false) }
+    var showCreateDialog by rememberSaveable { mutableStateOf(false) }
     var playlistToDelete by remember { mutableStateOf<Playlist?>(null) }
-    var newPlaylistName by remember { mutableStateOf("") }
+    var newPlaylistName by rememberSaveable { mutableStateOf("") }
+
+    BackHandler(enabled = selectedPlaylistId != null) {
+        selectedPlaylistId = null
+    }
 
     val colors = KuroAppTheme.colors
     val selectedPlaylist = playlists.firstOrNull { it.id == selectedPlaylistId }

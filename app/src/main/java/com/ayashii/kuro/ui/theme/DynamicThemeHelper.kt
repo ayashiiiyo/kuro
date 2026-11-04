@@ -46,7 +46,7 @@ object DynamicThemeHelper {
             val request = ImageRequest.Builder(context)
                 .data(imageUrl)
                 .size(32, 32)
-                .allowHardware(false) // Mandatory: prevent Hardware Bitmap exception in Palette
+                .allowHardware(false)
                 .build()
 
             val result = loader.execute(request)
@@ -77,9 +77,7 @@ object DynamicThemeHelper {
                 colorCache.put(imageUrl, extractedColor)
                 return@withContext extractedColor
             }
-        } catch (_: Exception) {
-            // Fallback gracefully on network, decoding or palette errors
-        }
+        } catch (_: Exception) {}
 
         DarkCard
     }
@@ -95,11 +93,15 @@ fun rememberDynamicDominantColor(
     defaultColor: Color = DarkCard
 ): Color {
     val context = LocalContext.current
-    var dominantColor by remember(imageUrl) {
+    var dominantColor by remember {
         mutableStateOf(DynamicThemeHelper.getCachedColor(imageUrl) ?: defaultColor)
     }
 
     LaunchedEffect(imageUrl) {
+        val cached = DynamicThemeHelper.getCachedColor(imageUrl)
+        if (cached != null) {
+            dominantColor = cached
+        }
         if (!imageUrl.isNullOrBlank()) {
             dominantColor = DynamicThemeHelper.extractDominantColor(context, imageUrl)
         } else {

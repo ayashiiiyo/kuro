@@ -20,7 +20,7 @@ struct DeepLResponse {
     translations: Option<Vec<DeepLTranslationItem>>,
 }
 
-/// Builds JSON payload for DeepL Mobile batch translation request.
+/** Builds JSON payload for DeepL Mobile batch translation request. */
 pub fn build_payload(texts: &[String], target_lang: &str) -> String {
     let normalized_lang = if target_lang.trim().is_empty() {
         "id"
@@ -36,7 +36,7 @@ pub fn build_payload(texts: &[String], target_lang: &str) -> String {
     serde_json::to_string(&req).unwrap_or_else(|_| "{\"text\":[],\"target_lang\":\"id\"}".to_string())
 }
 
-/// Parses DeepL API response JSON and extracts translated strings.
+/** Parses DeepL API response JSON and extracts translated strings. */
 pub fn parse_response(response_json: &str) -> Vec<String> {
     if response_json.trim().is_empty() {
         return Vec::new();

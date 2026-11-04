@@ -54,12 +54,16 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -114,12 +118,16 @@ fun FullPlayerSheet(
     val audioDeviceState by viewModel.audioDeviceState.collectAsState()
     val currentPositionMs by viewModel.playbackPosition.collectAsState()
 
-    var showAddToPlaylist by remember { mutableStateOf(false) }
-    var showSettingsDialog by remember { mutableStateOf(false) }
-    var showOptionsMenu by remember { mutableStateOf(false) }
-    var showQueueSheet by remember { mutableStateOf(false) }
-    var showFullScreenLyrics by remember { mutableStateOf(false) }
-    var showTranslationInPreview by remember { mutableStateOf(true) }
+    var showAddToPlaylist by rememberSaveable { mutableStateOf(false) }
+    var showSettingsDialog by rememberSaveable { mutableStateOf(false) }
+    var showOptionsMenu by rememberSaveable { mutableStateOf(false) }
+    var showQueueSheet by rememberSaveable { mutableStateOf(false) }
+    var showFullScreenLyrics by rememberSaveable { mutableStateOf(false) }
+    var showTranslationInPreview by rememberSaveable { mutableStateOf(true) }
+
+    BackHandler(enabled = showFullScreenLyrics) {
+        showFullScreenLyrics = false
+    }
 
     val colors = KuroAppTheme.colors
     val dominantColor = rememberDynamicDominantColor(track.thumbnailUrlForDisplay(768))
@@ -134,7 +142,6 @@ fun FullPlayerSheet(
         )
     }
 
-    // Derive active lyric snippet for display right under artwork
     val activeLineText: String by remember(currentLyrics, currentPositionMs) {
         derivedStateOf {
             val lyrics = currentLyrics
@@ -178,10 +185,10 @@ fun FullPlayerSheet(
                 }
                 .verticalScroll(scrollState)
         ) {
-            // Modern Header Bar: Collapse Arrow, Playing From context, More options
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .statusBarsPadding()
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
@@ -241,7 +248,6 @@ fun FullPlayerSheet(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Centered 1:1 Album Artwork (Clean & Focused)
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -276,7 +282,6 @@ fun FullPlayerSheet(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Live Lyric Line Snippet (Right under artwork, dynamically updating with smooth slide-up animation)
             if (activeLineText.isNotBlank()) {
                 AnimatedContent(
                     targetState = activeLineText,
@@ -309,7 +314,6 @@ fun FullPlayerSheet(
                 Spacer(modifier = Modifier.height(6.dp))
             }
 
-            // Song Info: Title & Artist on left, (+) / Favorite button on right
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -377,7 +381,6 @@ fun FullPlayerSheet(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Scrubber Progress Slider
             PlayerScrubber(
                 viewModel = viewModel,
                 track = track,
@@ -386,7 +389,6 @@ fun FullPlayerSheet(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Main Playback Controls: Shuffle | Prev | Play/Pause (Big Solid White) | Next | Repeat
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -493,7 +495,6 @@ fun FullPlayerSheet(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Bottom Utility Bar: Audio Output Icon (NO "Phone Speaker" TEXT!) | Share & Queue on right
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -501,7 +502,6 @@ fun FullPlayerSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Sleek Icon-only Audio Output Switcher (replaces old bulky text chip)
                 IconButton(
                     onClick = { viewModel.openAudioOutputSettings() },
                     modifier = Modifier.size(40.dp)
@@ -560,7 +560,6 @@ fun FullPlayerSheet(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Lyrics Preview Card (Spotify-style peeking bottom card with "Show lyrics" pill)
             val hasLyrics = currentLyrics != null && currentLyrics!!.lines.isNotEmpty() &&
                     currentLyrics!!.lines.none { it.text.trim().equals("null", ignoreCase = true) }
 
@@ -611,7 +610,6 @@ fun FullPlayerSheet(
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // Preview lines (around active line or first 4 lines)
                         val lines = currentLyrics!!.lines
                         val activeIdx = currentLyrics!!.getCurrentLineIndex(currentPositionMs)
                         val previewStart = if (activeIdx >= 0) (activeIdx - 1).coerceAtLeast(0) else 0
@@ -651,7 +649,6 @@ fun FullPlayerSheet(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // "Show lyrics" Pill Button
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(20.dp))
@@ -676,7 +673,6 @@ fun FullPlayerSheet(
             }
         }
 
-        // Dedicated Full Screen Lyrics Sheet (Image 3)
         AnimatedVisibility(
             visible = showFullScreenLyrics,
             enter = fadeIn(tween(220)) + slideInVertically(
@@ -748,16 +744,27 @@ fun PlayerScrubber(
         (currentPositionMs.toFloat() / effectiveDuration.toFloat()).coerceIn(0f, 1f)
     } else 0f
 
-    val currentFormatted = formatMs(currentPositionMs)
+    var isDragging by remember { mutableStateOf(false) }
+    var dragProgress by remember { mutableFloatStateOf(0f) }
+
+    val displayProgress = if (isDragging) dragProgress else progress
+    val displayCurrentMs = if (isDragging) (dragProgress * effectiveDuration).toLong() else currentPositionMs
+
+    val currentFormatted = formatMs(displayCurrentMs)
     val totalFormatted = formatMs(effectiveDuration)
 
     val colors = KuroAppTheme.colors
 
     Column(modifier = modifier.fillMaxWidth()) {
         Slider(
-            value = progress,
+            value = displayProgress,
             onValueChange = { newProgress ->
-                viewModel.seekTo((newProgress * effectiveDuration).toLong())
+                isDragging = true
+                dragProgress = newProgress
+            },
+            onValueChangeFinished = {
+                viewModel.seekTo((dragProgress * effectiveDuration).toLong())
+                isDragging = false
             },
             colors = SliderDefaults.colors(
                 thumbColor = colors.textPrimary,

@@ -152,7 +152,6 @@ class PlaylistManager private constructor(context: Context) {
         if (index == -1) return false
 
         val p = current[index]
-        // Prevent duplicate track
         if (p.tracks.any { it.id == track.id }) return false
 
         val newTracks = p.tracks.toMutableList().apply { add(track) }

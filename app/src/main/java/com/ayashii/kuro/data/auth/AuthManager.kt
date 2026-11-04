@@ -40,7 +40,6 @@ class AuthManager private constructor(private val context: Context) {
         var handle = prefs.getString(KEY_HANDLE, "") ?: ""
         val avatar = prefs.getString(KEY_AVATAR, "") ?: ""
 
-        // Sanitize if previously saved as raw JSON object string
         if (name.startsWith("{") || name.contains("\"runs\"")) {
             name = parseRawJsonRuns(name).ifBlank { "YouTube User" }
         }
@@ -117,7 +116,6 @@ class AuthManager private constructor(private val context: Context) {
 
         _authState.value = initialAccount
 
-        // Fetch detailed profile from InnerTube in background
         CoroutineScope(Dispatchers.IO).launch {
             fetchAccountInfo(cookie)
         }
@@ -144,7 +142,6 @@ class AuthManager private constructor(private val context: Context) {
     }
 
     suspend fun fetchAccountInfo(cookie: String) {
-        // Try YouTube Music first, then YouTube Web fallback
         val success = tryFetchAccountMenu(cookie, isMusic = true)
         if (!success) {
             tryFetchAccountMenu(cookie, isMusic = false)

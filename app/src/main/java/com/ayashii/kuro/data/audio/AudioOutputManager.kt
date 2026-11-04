@@ -56,7 +56,12 @@ class AudioOutputManager(private val context: Context) {
                 addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED)
                 addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED)
             }
-            context.registerReceiver(plugReceiver, filter)
+            androidx.core.content.ContextCompat.registerReceiver(
+                context,
+                plugReceiver,
+                filter,
+                androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+            )
         } catch (_: Exception) {}
         updateState()
     }
@@ -65,7 +70,6 @@ class AudioOutputManager(private val context: Context) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-                // 1. Check Bluetooth output first
                 val btDevice = devices.firstOrNull {
                     it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
                     it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
@@ -78,7 +82,6 @@ class AudioOutputManager(private val context: Context) {
                     return
                 }
 
-                // 2. Check Wired Headphones / Headset (Jack 3.5mm, USB-C)
                 val wiredDevice = devices.firstOrNull {
                     it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
                     it.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
@@ -91,7 +94,6 @@ class AudioOutputManager(private val context: Context) {
                 }
             }
 
-            // 3. Fallback to built-in speaker
             _deviceState.value = AudioDeviceState("Phone Speaker", OutputType.SPEAKER)
         } catch (_: Exception) {
             _deviceState.value = AudioDeviceState("Phone Speaker", OutputType.SPEAKER)

@@ -63,7 +63,6 @@ fun UpdateDialog(
             Column(
                 modifier = Modifier.fillMaxWidth()
             ) {
-                // Header Icon & Title
                 Row(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -101,7 +100,6 @@ fun UpdateDialog(
 
                 Spacer(modifier = Modifier.height(18.dp))
 
-                // Release notes section
                 if (updateInfo.releaseNotes.isNotBlank()) {
                     Text(
                         text = stringResource(R.string.update_whats_new),
@@ -131,7 +129,6 @@ fun UpdateDialog(
                     Spacer(modifier = Modifier.height(20.dp))
                 }
 
-                // Action buttons
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)

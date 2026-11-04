@@ -45,14 +45,13 @@ class UpdateManager private constructor(private val context: Context) {
         private const val TAG = "KuroUpdateManager"
         private const val PREFS_NAME = "kuro_update_prefs"
         private const val KEY_LAST_CHECK_TIME = "last_check_timestamp"
-        private const val MIN_CHECK_INTERVAL_MS = 15 * 60 * 1000L // 15 minutes throttle
+        private const val MIN_CHECK_INTERVAL_MS = 15 * 60 * 1000L
         private const val NOTIFICATION_CHANNEL_UPDATE = "kuro_app_update_channel"
         private const val NOTIFICATION_ID_UPDATE = 2002
 
         @Volatile
         private var instance: UpdateManager? = null
 
-        // In-memory flag: true if a check has already executed in this cold-start process
         @Volatile
         var hasCheckedThisSession = false
 
@@ -92,8 +91,6 @@ class UpdateManager private constructor(private val context: Context) {
                 return@withContext null
             }
 
-            // ResponseBody.string() closes the source; close the response too so a
-            // failed connection cannot leak the underlying socket.
             val bodyString = try {
                 response.body?.string()
             } finally {
@@ -107,7 +104,6 @@ class UpdateManager private constructor(private val context: Context) {
 
             val currentVersion = BuildConfig.VERSION_NAME
             if (isNewerVersion(currentVersion, tagName)) {
-                // Find release apk asset
                 val assets = json.optJSONArray("assets") ?: return@withContext null
                 var downloadUrl: String? = null
                 var fileName: String? = null
@@ -122,7 +118,6 @@ class UpdateManager private constructor(private val context: Context) {
                     }
                 }
 
-                // Fallback to any apk asset if release name pattern doesn't match
                 if (downloadUrl == null) {
                     for (i in 0 until assets.length()) {
                         val asset = assets.getJSONObject(i)
@@ -170,8 +165,6 @@ class UpdateManager private constructor(private val context: Context) {
         }
         val uri = Uri.parse(updateInfo.downloadUrl)
 
-        // App-specific external storage is always readable via FileProvider without any
-        // storage permission, and stays valid under scoped storage on Android 10+.
         val downloadDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
         if (downloadDir == null) {
             Log.e(TAG, "External files dir unavailable; cannot download update")
@@ -192,20 +185,16 @@ class UpdateManager private constructor(private val context: Context) {
         val downloadId = try {
             downloadManager.enqueue(request)
         } catch (e: Exception) {
-            // Invalid URL / storage unavailable: never crash the UI, fall back to the browser.
             Log.e(TAG, "Unable to enqueue update download: ${e.message}")
             openDownloadPage(updateInfo.downloadUrl)
             return
         }
 
-        // Register one-shot broadcast receiver for completion (exported because DownloadManager is a system UID)
         val onComplete = object : BroadcastReceiver() {
             override fun onReceive(ctxt: Context, intent: Intent) {
                 val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
                 if (id != downloadId) return
                 try {
-                    // DownloadManager reports completion even for failed downloads, so the
-                    // actual status must be checked before telling the user it is ready.
                     if (!isDownloadSuccessful(downloadManager, downloadId) ||
                         !destinationFile.exists() ||
                         destinationFile.length() <= 0L
@@ -215,8 +204,6 @@ class UpdateManager private constructor(private val context: Context) {
                         return
                     }
                     if (hasInstallPermission()) {
-                        // Show the notification first, then try the direct prompt only when
-                        // the app is in the foreground (background activity starts are blocked).
                         showInstallNotification(updateInfo, destinationFile)
                         if (isAppForeground()) installApk(destinationFile)
                     } else {
@@ -341,7 +328,6 @@ class UpdateManager private constructor(private val context: Context) {
             )
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setAutoCancel(true)
-            // Tapping again after granting the permission opens the installer directly.
             .setContentIntent(installPendingIntent)
             .addAction(
                 R.drawable.ic_notification,
@@ -380,8 +366,6 @@ class UpdateManager private constructor(private val context: Context) {
         try {
             context.startActivity(createInstallIntent(file))
         } catch (e: Exception) {
-            // Android 10+ blocks background activity starts; the notification remains the
-            // reliable install path, so this is not fatal.
             Log.w(TAG, "Direct install prompt unavailable: ${e.message}")
         }
     }

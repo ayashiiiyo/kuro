@@ -1,6 +1,7 @@
 package com.ayashii.kuro
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -94,12 +95,28 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        if (intent?.getBooleanExtra(EXTRA_EXPAND_PLAYER, false) == true) {
+            viewModel.expandPlayer(true)
+        }
+
         setContent {
             val themeMode by viewModel.themeMode.collectAsState()
             KuroTheme(themeMode = themeMode) {
                 MainAppScreen(viewModel = viewModel)
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_EXPAND_PLAYER, false)) {
+            viewModel.expandPlayer(true)
+        }
+    }
+
+    companion object {
+        const val EXTRA_EXPAND_PLAYER = "EXTRA_EXPAND_PLAYER"
     }
 }
 
@@ -148,12 +165,15 @@ fun MainAppScreen(viewModel: MusicViewModel) {
                         NavigationBarItem(
                             selected = selected,
                             onClick = {
-                                navController.navigate(screen.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
+                                if (currentRoute != screen.route) {
+                                    navController.navigate(screen.route) {
+                                        popUpTo(screen.route) {
+                                            saveState = true
+                                            inclusive = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
                                     }
-                                    launchSingleTop = true
-                                    restoreState = true
                                 }
                             },
                             icon = {

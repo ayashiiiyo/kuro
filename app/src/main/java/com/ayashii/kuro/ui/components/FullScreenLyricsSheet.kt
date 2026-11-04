@@ -19,8 +19,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -43,6 +45,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -106,7 +109,7 @@ fun FullScreenLyricsSheet(
     }
 
     LaunchedEffect(activeIndex) {
-        if (activeIndex >= 0) {
+        if (activeIndex >= 0 && !listState.isScrollInProgress) {
             val targetScroll = (activeIndex - 2).coerceAtLeast(0)
             listState.animateScrollToItem(targetScroll)
         }
@@ -123,10 +126,10 @@ fun FullScreenLyricsSheet(
                 .fillMaxSize()
                 .padding(horizontal = 20.dp)
         ) {
-            // Header: Down arrow, Song Title & Artist, More
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .statusBarsPadding()
                     .padding(vertical = 14.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
@@ -195,7 +198,6 @@ fun FullScreenLyricsSheet(
                 }
             }
 
-            // Synced Karaoke Lyrics List
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -262,7 +264,6 @@ fun FullScreenLyricsSheet(
                             }
                         }
 
-                        // Bottom Actions: Share pill & Language translation pill (Like in image 3)
                         item {
                             Spacer(modifier = Modifier.height(16.dp))
                             Row(
@@ -270,7 +271,6 @@ fun FullScreenLyricsSheet(
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                // Share Pill
                                 Row(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(20.dp))
@@ -303,7 +303,6 @@ fun FullScreenLyricsSheet(
                                     )
                                 }
 
-                                // Translation Pill
                                 Row(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape(20.dp))
@@ -333,19 +332,30 @@ fun FullScreenLyricsSheet(
                 }
             }
 
-            // Bottom Player Scrubber + Play/Pause Button (Image 3)
             val effectiveDuration = if (durationMs > 0) durationMs else (track.durationSeconds * 1000L).coerceAtLeast(1L)
             val progress = (currentPositionMs.toFloat() / effectiveDuration.toFloat()).coerceIn(0f, 1f)
+
+            var isDragging by remember { mutableStateOf(false) }
+            var dragProgress by remember { mutableFloatStateOf(0f) }
+
+            val displayProgress = if (isDragging) dragProgress else progress
+            val displayCurrentMs = if (isDragging) (dragProgress * effectiveDuration).toLong() else currentPositionMs
 
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .navigationBarsPadding()
                     .padding(bottom = 20.dp)
             ) {
                 Slider(
-                    value = progress,
+                    value = displayProgress,
                     onValueChange = { newProgress ->
-                        viewModel.seekTo((newProgress * effectiveDuration).toLong())
+                        isDragging = true
+                        dragProgress = newProgress
+                    },
+                    onValueChangeFinished = {
+                        viewModel.seekTo((dragProgress * effectiveDuration).toLong())
+                        isDragging = false
                     },
                     colors = SliderDefaults.colors(
                         thumbColor = colors.textPrimary,
@@ -362,7 +372,7 @@ fun FullScreenLyricsSheet(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = formatMs(currentPositionMs),
+                        text = formatMs(displayCurrentMs),
                         style = Typography.bodySmall,
                         color = colors.textMuted
                     )

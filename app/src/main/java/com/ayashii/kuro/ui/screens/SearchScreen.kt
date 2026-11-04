@@ -75,8 +75,13 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.ayashii.kuro.R
 import com.ayashii.kuro.data.model.Track
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import com.ayashii.kuro.ui.components.AddToPlaylistDialog
+import com.ayashii.kuro.ui.components.LoginWebViewDialog
 import com.ayashii.kuro.ui.components.ProfileMenuSheet
+import com.ayashii.kuro.ui.components.QueueBottomSheet
+import com.ayashii.kuro.ui.components.SettingsDialog
 import com.ayashii.kuro.ui.components.TrackOptionsBottomSheet
 import com.ayashii.kuro.ui.theme.KuroAppTheme
 import com.ayashii.kuro.ui.theme.Typography
@@ -93,11 +98,14 @@ fun SearchScreen(
     viewModel: MusicViewModel,
     modifier: Modifier = Modifier
 ) {
-    var searchQuery by remember { mutableStateOf("") }
-    var isSearchActive by remember { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var isSearchActive by rememberSaveable { mutableStateOf(false) }
     var trackForPlaylist by remember { mutableStateOf<Track?>(null) }
     var trackForOptions by remember { mutableStateOf<Track?>(null) }
-    var showProfileMenu by remember { mutableStateOf(false) }
+    var showProfileMenu by rememberSaveable { mutableStateOf(false) }
+    var showQueueSheet by rememberSaveable { mutableStateOf(false) }
+    var showLoginWebView by rememberSaveable { mutableStateOf(false) }
+    var showSettingsDialog by rememberSaveable { mutableStateOf(false) }
 
     val searchResults by viewModel.searchResults.collectAsState()
     val suggestions by viewModel.suggestions.collectAsState()
@@ -110,6 +118,7 @@ fun SearchScreen(
     val favoriteIds by remember(favorites) { derivedStateOf { favorites.mapTo(HashSet()) { it.id } } }
 
     val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val focusRequester = remember { FocusRequester() }
     val colors = KuroAppTheme.colors
 
@@ -126,11 +135,15 @@ fun SearchScreen(
         )
     }
 
-    BackHandler(enabled = isSearchActive || searchQuery.isNotEmpty()) {
-        isSearchActive = false
+    BackHandler(enabled = searchQuery.isNotEmpty()) {
         searchQuery = ""
-        focusManager.clearFocus()
         viewModel.search("")
+    }
+
+    BackHandler(enabled = isSearchActive && searchQuery.isEmpty()) {
+        isSearchActive = false
+        focusManager.clearFocus()
+        keyboardController?.hide()
     }
 
     Column(
@@ -138,9 +151,7 @@ fun SearchScreen(
             .fillMaxSize()
             .background(colors.background)
     ) {
-        // TOP APP BAR
         if (!isSearchActive && searchQuery.isEmpty()) {
-            // Default Browse Mode Header (Avatar + Title "Search" + Camera)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -166,7 +177,6 @@ fun SearchScreen(
                 )
             }
 
-            // Clickable search pill for Browse mode
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -177,7 +187,7 @@ fun SearchScreen(
                         .fillMaxWidth()
                         .height(46.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFF242424))
+                        .background(colors.card)
                         .clickable { isSearchActive = true }
                         .padding(horizontal = 16.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -197,7 +207,6 @@ fun SearchScreen(
                 }
             }
         } else {
-            // Active Search Mode Header (Back Arrow + Dark Pill Search Bar matching Ref Image 2 & 3)
             LaunchedEffect(Unit) {
                 focusRequester.requestFocus()
             }
@@ -210,17 +219,21 @@ fun SearchScreen(
             ) {
                 IconButton(
                     onClick = {
-                        isSearchActive = false
-                        searchQuery = ""
-                        focusManager.clearFocus()
-                        viewModel.search("")
+                        if (searchQuery.isNotEmpty()) {
+                            searchQuery = ""
+                            viewModel.search("")
+                        } else if (isSearchActive) {
+                            isSearchActive = false
+                            focusManager.clearFocus()
+                            keyboardController?.hide()
+                        }
                     },
                     modifier = Modifier.size(44.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.ArrowBack,
                         contentDescription = "Back",
-                        tint = Color.White,
+                        tint = colors.textPrimary,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -265,12 +278,12 @@ fun SearchScreen(
                         }
                     }),
                     colors = TextFieldDefaults.colors(
-                        focusedContainerColor = Color(0xFF242424),
-                        unfocusedContainerColor = Color(0xFF242424),
+                        focusedContainerColor = colors.card,
+                        unfocusedContainerColor = colors.card,
                         focusedIndicatorColor = Color.Transparent,
                         unfocusedIndicatorColor = Color.Transparent,
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
+                        focusedTextColor = colors.textPrimary,
+                        unfocusedTextColor = colors.textPrimary,
                         cursorColor = colors.accent
                     ),
                     shape = CircleShape,
@@ -284,14 +297,11 @@ fun SearchScreen(
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        // MAIN CONTENT AREA
         if (searchQuery.isNotEmpty()) {
-            // SEARCH QUERY TYPED (Ref Image 2: Suggestions & Results)
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 120.dp)
             ) {
-                // 1. Suggestions rows (Ref Image 2)
                 if (suggestions.isNotEmpty()) {
                     items(suggestions) { suggestion ->
                         Row(
@@ -315,7 +325,7 @@ fun SearchScreen(
                             Text(
                                 text = suggestion,
                                 style = Typography.bodyLarge.copy(fontSize = 15.sp, fontWeight = FontWeight.Medium),
-                                color = Color.White,
+                                color = colors.textPrimary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f)
@@ -334,7 +344,6 @@ fun SearchScreen(
                     }
                 }
 
-                // 2. Loading indicator
                 if (isSearching) {
                     item {
                         Box(
@@ -352,7 +361,6 @@ fun SearchScreen(
                     }
                 }
 
-                // 3. Search results (Ref Image 2: Album art, Title, Song • Artist, 3-dots, (+))
                 if (searchResults.isNotEmpty()) {
                     items(searchResults, key = { it.id }) { track ->
                         val isCurrent = currentTrack?.id == track.id
@@ -386,7 +394,7 @@ fun SearchScreen(
                                     style = Typography.bodyLarge.copy(
                                         fontSize = 15.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (isCurrent) colors.accent else Color.White
+                                        color = if (isCurrent) colors.accent else colors.textPrimary
                                     ),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -463,7 +471,7 @@ fun SearchScreen(
                                 Text(
                                     text = stringResource(R.string.search_not_found),
                                     style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = Color.White
+                                    color = colors.textPrimary
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
@@ -478,7 +486,6 @@ fun SearchScreen(
                 }
             }
         } else if (isSearchActive) {
-            // ACTIVE SEARCH BUT QUERY EMPTY (Ref Image 3: Recents + Clear recent searches)
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 120.dp)
@@ -488,7 +495,7 @@ fun SearchScreen(
                         Text(
                             text = "Recents",
                             style = Typography.headlineMedium.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold),
-                            color = Color.White,
+                            color = colors.textPrimary,
                             modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 12.dp)
                         )
                     }
@@ -522,7 +529,7 @@ fun SearchScreen(
                                 Text(
                                     text = track.title,
                                     style = Typography.bodyLarge.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
-                                    color = Color.White,
+                                    color = colors.textPrimary,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -588,7 +595,7 @@ fun SearchScreen(
                                 Text(
                                     text = "Clear recent searches",
                                     style = Typography.labelMedium.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold),
-                                    color = Color.White
+                                    color = colors.textPrimary
                                 )
                             }
                         }
@@ -611,7 +618,6 @@ fun SearchScreen(
                 }
             }
         } else {
-            // BROWSE MODE (Categories grid + Discover something new)
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
@@ -623,7 +629,7 @@ fun SearchScreen(
                     Text(
                         text = stringResource(R.string.search_explore_categories),
                         style = Typography.titleLarge.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold),
-                        color = Color.White,
+                        color = colors.textPrimary,
                         modifier = Modifier.padding(bottom = 14.dp)
                     )
                 }
@@ -685,7 +691,7 @@ fun SearchScreen(
                             Text(
                                 text = "Discover something new",
                                 style = Typography.headlineMedium.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold),
-                                color = Color.White
+                                color = colors.textPrimary
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             LazyRow(
@@ -711,7 +717,7 @@ fun SearchScreen(
                                         Text(
                                             text = track.title,
                                             style = Typography.bodyMedium.copy(fontWeight = FontWeight.Bold, fontSize = 13.sp),
-                                            color = Color.White,
+                                            color = colors.textPrimary,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
@@ -737,6 +743,18 @@ fun SearchScreen(
             track = trackForOptions!!,
             viewModel = viewModel,
             onDismiss = { trackForOptions = null },
+            onOpenLyrics = {
+                trackForOptions = null
+                viewModel.expandPlayer(true)
+            },
+            onOpenQueue = {
+                trackForOptions = null
+                showQueueSheet = true
+            },
+            onOpenSettings = {
+                trackForOptions = null
+                showSettingsDialog = true
+            },
             onAddToPlaylist = {
                 val t = trackForOptions
                 trackForOptions = null
@@ -749,7 +767,39 @@ fun SearchScreen(
         ProfileMenuSheet(
             account = currentAccount,
             viewModel = viewModel,
+            onLoginClick = {
+                showProfileMenu = false
+                showLoginWebView = true
+            },
+            onLogoutClick = {
+                showProfileMenu = false
+                viewModel.logout()
+            },
+            onOpenSettingsClick = {
+                showProfileMenu = false
+                showSettingsDialog = true
+            },
             onDismiss = { showProfileMenu = false }
+        )
+    }
+
+    if (showQueueSheet) {
+        QueueBottomSheet(
+            viewModel = viewModel,
+            onDismiss = { showQueueSheet = false }
+        )
+    }
+
+    if (showLoginWebView) {
+        LoginWebViewDialog(
+            onDismiss = { showLoginWebView = false },
+            onLoginSuccess = { showProfileMenu = true }
+        )
+    }
+
+    if (showSettingsDialog) {
+        SettingsDialog(
+            onDismiss = { showSettingsDialog = false }
         )
     }
 

@@ -47,10 +47,7 @@ private object WidgetRenderer {
     fun update(context: Context) {
         try {
             updateInternal(context)
-        } catch (_: Exception) {
-            // A launcher may have removed the widget between id lookup and update; never
-            // let widget upkeep take the app down.
-        }
+        } catch (_: Exception) {}
     }
 
     private fun updateInternal(context: Context) {
@@ -84,6 +81,7 @@ private object WidgetRenderer {
         val views = RemoteViews(context.packageName, if (square) R.layout.widget_kuro_square else R.layout.widget_kuro_compact)
         val open = Intent(context, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            putExtra(MainActivity.EXTRA_EXPAND_PLAYER, true)
         }
         views.setOnClickPendingIntent(R.id.widget_root, PendingIntent.getActivity(context, 1, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
         val title = track?.title?.takeIf(String::isNotBlank) ?: context.getString(R.string.widget_placeholder_title)
@@ -104,8 +102,6 @@ private object WidgetRenderer {
         setAction(context, views, R.id.widget_play, KuroWidgetActionReceiver.ACTION_PLAY_PAUSE, id * 10 + 1)
         setAction(context, views, R.id.widget_next, KuroWidgetActionReceiver.ACTION_NEXT, id * 10 + 2)
         if (!square) {
-            // A true 4×1 cell can be as narrow as ~250dp; drop "previous" there so the
-            // title and artist keep a readable width on single-column launchers.
             val options = manager.getAppWidgetOptions(id)
             val minWidth = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0)
             val showPrevious = minWidth == 0 || minWidth >= 300
@@ -156,8 +152,6 @@ private object WidgetRenderer {
                     val isSquare = id in squareIds
                     val views = RemoteViews(context.packageName, if (isSquare) R.layout.widget_kuro_square else R.layout.widget_kuro_compact)
                     views.setImageViewBitmap(R.id.widget_art, rounded)
-                    // Partial update: a full update here would wipe the title, progress and
-                    // click intents that were set by render().
                     manager.partiallyUpdateAppWidget(id, views)
                 }
                 artworkLoadInProgressFor = null
@@ -168,8 +162,6 @@ private object WidgetRenderer {
     }
 
     private fun roundedBitmap(source: Bitmap): Bitmap {
-        // RGB_565 uses 2 bytes per pixel (half the memory of ARGB_8888)
-        // This significantly cuts IPC payload size when communicating with Launcher RemoteViews
         val output = Bitmap.createBitmap(160, 160, Bitmap.Config.RGB_565)
         val canvas = Canvas(output)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
@@ -208,8 +200,6 @@ class KuroWidgetActionReceiver : android.content.BroadcastReceiver() {
         val command = intent.getStringExtra("widget_command") ?: intent.action
         if (command == null) return
 
-        // A BroadcastReceiver context is a ReceiverRestrictedContext; using the app context
-        // avoids surprises when media3 binds/unbinds the service.
         val appContext = context.applicationContext
         val pendingResult = goAsync()
         val handler = android.os.Handler(android.os.Looper.getMainLooper())
@@ -225,8 +215,6 @@ class KuroWidgetActionReceiver : android.content.BroadcastReceiver() {
             } catch (_: Exception) {}
         }
 
-        // Never hold the receiver open longer than the system tolerates (~10s). A stuck
-        // MediaController connection previously left pendingResult unfinished -> ANR.
         handler.postDelayed({ finishOnce() }, 2500L)
 
         val future = try {
@@ -244,13 +232,9 @@ class KuroWidgetActionReceiver : android.content.BroadcastReceiver() {
                 val controller = future.get()
                 when (command) {
                     ACTION_PLAY_PAUSE -> {
-                        // playWhenReady is authoritative. isPlaying is false while buffering,
-                        // which made the widget pause a track that was still starting.
                         if (controller.playWhenReady) controller.pause() else controller.play()
                     }
                     ACTION_NEXT -> {
-                        // ForwardingPlayer already broadcasts ACTION_NEXT to the ViewModel
-                        // (queue owner). Calling it here too caused a double skip.
                         if (controller.isCommandAvailable(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)) {
                             controller.seekToNextMediaItem()
                         } else if (controller.isCommandAvailable(Player.COMMAND_SEEK_TO_NEXT)) {
@@ -294,8 +278,6 @@ class KuroWidgetActionReceiver : android.content.BroadcastReceiver() {
         } else {
             array.put(org.json.JSONObject().apply {
                 put("id", id)
-                // keep the original watch URL: the player URI is a short-lived googlevideo
-                // stream link and can no longer be resolved later from the favorites list.
                 put("url", metadata.extras?.getString(WIDGET_SOURCE_URL_KEY)
                     ?: controller.currentMediaItem?.localConfiguration?.uri?.toString().orEmpty())
                 put("title", metadata.title?.toString().orEmpty())
@@ -326,7 +308,6 @@ internal fun persist(context: Context, controller: Player) {
         )
         prefs.edit().putString(KEY_TRACK, encodeTrack(track)).apply()
     }
-    // playWhenReady flips synchronously on command; isPlaying lags behind on pause.
     prefs.edit().putBoolean(KEY_PLAYING, controller.playWhenReady)
         .putLong(KEY_POSITION, controller.currentPosition.coerceAtLeast(0))
         .putLong(KEY_DURATION, controller.duration.coerceAtLeast(0)).apply()

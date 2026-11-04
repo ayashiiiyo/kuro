@@ -50,6 +50,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.ayashii.kuro.R
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.saveable.rememberSaveable
 import com.ayashii.kuro.data.auth.UserAccount
 import androidx.compose.material.icons.outlined.History
 import com.ayashii.kuro.data.model.Track
@@ -57,6 +59,7 @@ import com.ayashii.kuro.data.model.HomeSection
 import com.ayashii.kuro.ui.components.AddToPlaylistDialog
 import com.ayashii.kuro.ui.components.LoginWebViewDialog
 import com.ayashii.kuro.ui.components.ProfileMenuSheet
+import com.ayashii.kuro.ui.components.QueueBottomSheet
 import com.ayashii.kuro.ui.components.TrackItem
 import com.ayashii.kuro.ui.components.TrackOptionsBottomSheet
 import com.ayashii.kuro.ui.theme.DarkBorder
@@ -75,7 +78,7 @@ fun HomeScreen(
 ) {
     val homeSections by viewModel.homeSections.collectAsState()
     val trendingTracks by viewModel.trendingTracks.collectAsState()
-    val searchResults by viewModel.searchResults.collectAsState()
+    val genreTracks by viewModel.genreTracks.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
     val isLoadingTrending by viewModel.isLoadingTrending.collectAsState()
     val isLoadingTrack by viewModel.isLoadingTrack.collectAsState()
@@ -85,15 +88,21 @@ fun HomeScreen(
     val recentlyPlayed by viewModel.recentlyPlayed.collectAsState()
     val favoriteIds by remember(favorites) { androidx.compose.runtime.derivedStateOf { favorites.mapTo(HashSet()) { it.id } } }
 
-    var showProfileMenu by remember { mutableStateOf(false) }
-    var showLoginWebView by remember { mutableStateOf(false) }
-    var showSettingsDialog by remember { mutableStateOf(false) }
-    var showRecentsDialog by remember { mutableStateOf(false) }
+    var showProfileMenu by rememberSaveable { mutableStateOf(false) }
+    var showLoginWebView by rememberSaveable { mutableStateOf(false) }
+    var showSettingsDialog by rememberSaveable { mutableStateOf(false) }
+    var showRecentsDialog by rememberSaveable { mutableStateOf(false) }
+    var showQueueSheet by rememberSaveable { mutableStateOf(false) }
     var trackForPlaylist by remember { mutableStateOf<Track?>(null) }
     var trackForOptions by remember { mutableStateOf<Track?>(null) }
 
-    var selectedGenre by remember { mutableStateOf("Semua") }
+    var selectedGenre by rememberSaveable { mutableStateOf("Semua") }
     val genres = listOf("Semua", "Pop", "Lo-Fi", "Rock", "Acoustic", "Anime", "Hip-Hop", "R&B", "Top Global")
+
+    BackHandler(enabled = selectedGenre != "Semua") {
+        selectedGenre = "Semua"
+        viewModel.loadTrending()
+    }
 
     val colors = com.ayashii.kuro.ui.theme.KuroAppTheme.colors
 
@@ -125,7 +134,7 @@ fun HomeScreen(
                 ) {
                     items(genres) { genre ->
                         val isSelected = selectedGenre == genre
-                        val chipBg = if (isSelected) Color(0xFF1ED760) else Color(0xFF242424)
+                        val chipBg = if (isSelected) Color(0xFF1ED760) else colors.card
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(20.dp))
@@ -135,7 +144,7 @@ fun HomeScreen(
                                     if (genre == "Semua") {
                                         viewModel.loadTrending()
                                     } else {
-                                        viewModel.search("$genre music hits")
+                                        viewModel.loadGenreTracks(genre)
                                     }
                                 }
                                 .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -145,7 +154,7 @@ fun HomeScreen(
                                 text = if (genre == "Semua") "All" else genre,
                                 style = Typography.labelMedium.copy(fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium),
                                 fontSize = 13.sp,
-                                color = if (isSelected) Color.Black else PureWhite
+                                color = if (isSelected) Color.Black else colors.textPrimary
                             )
                         }
                     }
@@ -163,7 +172,7 @@ fun HomeScreen(
                 ) {
                     CircularProgressIndicator(color = colors.textPrimary)
                 }
-            } else if (searchResults.isEmpty()) {
+            } else if (genreTracks.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -176,7 +185,7 @@ fun HomeScreen(
                 }
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(searchResults, key = { it.id }, contentType = { "track" }) { track ->
+                    items(genreTracks, key = { it.id }, contentType = { "track" }) { track ->
                         val isFav = track.id in favoriteIds
                         TrackItem(
                             track = track.copy(isFavorite = isFav),
@@ -205,7 +214,6 @@ fun HomeScreen(
             ) {
                 val homeTracks = trendingTracks.ifEmpty { homeSections.flatMap { it.tracks } }
 
-                // Section "Start listening" (Ref Image 1)
                 val startListeningTracks = (recentlyPlayed.ifEmpty { homeTracks }).distinctBy { it.id }.take(3)
                 if (startListeningTracks.isNotEmpty()) {
                     item(key = "start_listening_header") {
@@ -278,7 +286,6 @@ fun HomeScreen(
                     }
                 }
 
-                // Section "To get you started" (Ref Image 1 Carousel)
                 val mixTracks = homeTracks.drop(3).take(8)
                 if (mixTracks.isNotEmpty()) {
                     item(key = "to_get_you_started_header") {
@@ -653,11 +660,30 @@ fun HomeScreen(
             track = trackForOptions!!,
             viewModel = viewModel,
             onDismiss = { trackForOptions = null },
+            onOpenLyrics = {
+                trackForOptions = null
+                viewModel.expandPlayer(true)
+            },
+            onOpenQueue = {
+                trackForOptions = null
+                showQueueSheet = true
+            },
+            onOpenSettings = {
+                trackForOptions = null
+                showSettingsDialog = true
+            },
             onAddToPlaylist = {
                 val t = trackForOptions
                 trackForOptions = null
                 trackForPlaylist = t
             }
+        )
+    }
+
+    if (showQueueSheet) {
+        QueueBottomSheet(
+            viewModel = viewModel,
+            onDismiss = { showQueueSheet = false }
         )
     }
 
