@@ -86,18 +86,20 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.6.0 — High-Performance Hybrid Rust Engine (kuro-core)
+          ## Kuro v3.6.1 — Modern Player Redesign, Clean Audio Output & Full Lyrics Sheet
 
-          - Integrated `kuro-core`: native Rust engine compiled for arm64-v8a, armeabi-v7a, and x86_64.
-          - Zero-GC automix radio parsing: InnerTube JSON responses are parsed directly in native memory via `serde_json`, eliminating Java Heap spikes and frame stutter.
-          - Accelerated Taste & Affinity Ranking in Rust with zero-copy title sanitization.
-          - Seamless fallback: if native libraries fail to load on legacy environments, Kuro gracefully falls back to Kotlin implementations.
+          - Modern Full Player Sheet: Centered 1:1 square artwork with rounded corners (16dp).
+          - Live Lyric Snippet: Dynamically updates the current vocal line directly under the album artwork.
+          - Clean Audio Output: Removed bulky "Phone Speaker" text chip in favor of a sleek, minimalist audio device switcher icon.
+          - Full Screen Lyrics Mode: Implemented dedicated full-screen karaoke lyrics with auto-scroll, bilingual Indonesian translation toggle, and floating playback controls.
+          - Queue Bottom Sheet: Quick access to currently playing and upcoming queue tracks via the queue button.
+          - PureBlack Theme Fidelity: Preserved 100% OLED black aesthetics across all newly introduced player surfaces.
           - Published signed release and debug APKs.
           EOF
           gh release create "$RELEASE_TAG" \
             "${{ steps.apk.outputs.release_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (Native Rust Engine: kuro-core)" \
+            --title "Kuro $RELEASE_TAG (Modern Player Redesign, Clean Audio Output & Full Lyrics Sheet)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 

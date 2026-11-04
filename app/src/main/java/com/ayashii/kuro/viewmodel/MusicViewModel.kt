@@ -175,6 +175,15 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val playlistQueue = java.util.Collections.synchronizedList(mutableListOf<Track>())
     private var currentIndex = -1
 
+    private val _queueState = MutableStateFlow<List<Track>>(emptyList())
+    val queueState = _queueState.asStateFlow()
+
+    fun updateQueueState() {
+        _queueState.value = synchronized(playlistQueue) { playlistQueue.toList() }
+    }
+
+    fun getCurrentQueueIndex(): Int = currentIndex
+
     /**
      * Appends radio tracks to the play queue atomically.
      * Two radio fetches (track start + near-end prefetch) can run concurrently;
@@ -187,6 +196,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             val fresh = tasteManager.rankRadioTracks(candidates.filter { it.id !in existingIds })
             if (fresh.isNotEmpty()) playlistQueue.addAll(fresh)
         }
+        updateQueueState()
     }
 
     private var progressJob: Job? = null
@@ -543,6 +553,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     currentIndex = 0
                 }
             }
+            updateQueueState()
 
             if (playlistQueue.size <= 2) {
                 launch(Dispatchers.IO) {

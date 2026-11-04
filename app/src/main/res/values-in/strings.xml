@@ -73,6 +73,13 @@
 
     <!-- Player Sheet -->
     <string name="player_now_playing">SEDANG DIPUTAR</string>
+    <string name="player_playing_from">Memutar dari</string>
+    <string name="player_lyrics_preview">Pratinjau lirik</string>
+    <string name="player_show_lyrics">Tampilkan lirik</string>
+    <string name="player_share">Bagikan</string>
+    <string name="player_indonesian">Indonesia</string>
+    <string name="player_queue">Antrean</string>
+    <string name="player_queue_empty">Antrean kosong</string>
     <string name="player_remove_watch_later">Hapus dari Putar Nanti</string>
     <string name="player_save_watch_later">Simpan ke Putar Nanti</string>
     <string name="player_add_to_playlist">Tambah ke playlist</string>
