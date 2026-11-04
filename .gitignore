@@ -17,3 +17,5 @@ app/build
 *.apk
 *.aab
 app/*.keystore
+.agents/
+

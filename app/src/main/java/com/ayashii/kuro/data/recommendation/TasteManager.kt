@@ -86,6 +86,18 @@ class TasteManager private constructor(context: Context) {
         persistTasteDataAsync()
     }
 
+    fun removeFromRecents(trackId: String) {
+        val current = _recentlyPlayed.value.toMutableList()
+        current.removeAll { it.id == trackId }
+        _recentlyPlayed.value = current
+        saveRecents(current)
+    }
+
+    fun clearRecents() {
+        _recentlyPlayed.value = emptyList()
+        prefs.edit().remove(KEY_RECENTS).apply()
+    }
+
     private fun addToRecents(track: Track) {
         val current = _recentlyPlayed.value.toMutableList()
         current.removeAll { it.id == track.id }
@@ -93,10 +105,12 @@ class TasteManager private constructor(context: Context) {
 
         val trimmed = if (current.size > MAX_RECENTS) current.take(MAX_RECENTS) else current
         _recentlyPlayed.value = trimmed
+        saveRecents(trimmed)
+    }
 
-        // Persist recents
+    private fun saveRecents(tracks: List<Track>) {
         val arr = JSONArray()
-        for (t in trimmed) {
+        for (t in tracks) {
             val obj = JSONObject().apply {
                 put("id", t.id)
                 put("url", t.url)

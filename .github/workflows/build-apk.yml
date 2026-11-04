@@ -86,19 +86,25 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.8.0 — YouTube Music Timed Lyrics, Continuous Clock & Dynamic Ambient Theme
+          ## Kuro v3.8.1 — Opaque Player Theme, Spotify Search Redesign & Accurate Synced Lyrics
 
-          - **YouTube Music InnerTube Timed Lyrics**: Native integration with YouTube Music InnerTube endpoints (`/youtubei/v1/next` and `/youtubei/v1/browse`) parsing `musicTimedLyricsRenderer` / `timedLyricsData` cue ranges using authenticated Google Account credentials (`authManager.getSapisidHash()`, `authManager.getCookie()`) for 100% audio-synchronized lyrics with zero delay or stuck intros. Graceful multi-tier fallback to LRCLIB (with auto-offset compensation) and static plain lyrics.
-          - **Continuous Interpolated Clock**: Smooth 60 FPS continuous playback position interpolation in `MusicViewModel`, eliminating the 500ms polling stutter and lyric lag.
-          - **Instrumental Intro Handling**: Intelligent intro guard preventing premature display of line 0 at 00:00 when tracks begin with instrumental sections.
-          - **Dynamic Ambient Theme Gradient**: Spotify-style album color bleed on Full Player Sheet, Full Screen Lyrics, and Lyrics Preview Card powered by `androidx.palette` with 32x32 downsampling and LRU caching (<3ms).
-          - **OLED PureBlack Integrity**: Bottom playback controls and scrubber strictly preserved at 100% OLED PureBlack (`#000000`).
+          - **Fix Player Transparency Bug**: Full Player Sheet and Full Screen Lyrics now render with 100% opaque, solid OLED PureBlack backdrops and `lerp` ambient tints. Eliminates background elements bleeding through the player sheet.
+          - **Search Screen Spotify Redesign**:
+            - Dark pill search bar (`#242424`) with smooth back arrow navigation and clear button.
+            - "Recents" section showing recently played tracks with 48dp thumbnails, clean `Song • [Artist]` typography, `(+)` save button, and `(X)` remove-from-recents button.
+            - Centered bordered pill button: "Clear recent searches".
+            - Clean search suggestions with magnifying glass and diagonal arrows, matching Spotify spacing and typography.
+            - Refined search results rows with square album art, `Song • [Artist]`, 3-dots options `⋮`, and `(+)` save button.
+          - **Fix Lyrics Accuracy & Corrupt Candidate Filtering**:
+            - Multi-source candidate evaluation for LRCLIB with intelligent scoring: rejects corrupted/mistimed candidates with abnormal line 0 gaps (e.g. "The Winner Takes It All" starting at second 6 during piano intro).
+            - Discards uploader watermark lines and selects the highest-scoring candidate matching actual vocal timing.
+            - Upgraded cache directory to `lyrics_cache_v5` with automatic cleanup of previous cache.
           - Published signed release and debug APKs.
           EOF
           gh release create "$RELEASE_TAG" \
             "${{ steps.apk.outputs.release_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (InnerTube Timed Lyrics & Dynamic Ambient Theme)" \
+            --title "Kuro $RELEASE_TAG (Opaque Player, Spotify Search & Lyric Fix)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 

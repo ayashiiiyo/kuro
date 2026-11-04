@@ -22,7 +22,13 @@ class LyricsRepository(private val context: Context) {
     private val memCache = LruCache<String, LyricsData>(100)
     private val negativeCache = LruCache<String, Long>(200)
     private val NEGATIVE_CACHE_TTL = 7 * 24 * 60 * 60 * 1000L // 7 days
-    private val diskCacheDir = File(context.cacheDir, "lyrics_cache_v4").apply { mkdirs() }
+    private val diskCacheDir = File(context.cacheDir, "lyrics_cache_v5").apply {
+        mkdirs()
+        try {
+            val oldCache = File(context.cacheDir, "lyrics_cache_v4")
+            if (oldCache.exists()) oldCache.deleteRecursively()
+        } catch (_: Exception) {}
+    }
 
     companion object {
         private const val YTM_CLIENT_NAME = "WEB_REMIX"
@@ -142,6 +148,13 @@ class LyricsRepository(private val context: Context) {
             .trim()
     }
 
+    private fun isWatermarkLine(text: String): Boolean {
+        val lower = text.lowercase().trim()
+        return lower.startsWith("by ") || lower.contains("sync by") || lower.contains("synced by") ||
+                lower.contains("lyrics by") || lower.contains("arranged by") || lower.contains("translated by") ||
+                lower.contains("med el baraka")
+    }
+
     private fun fetchFromLrcLib(
         trackId: String,
         origTitle: String,
@@ -150,122 +163,141 @@ class LyricsRepository(private val context: Context) {
         cleanArtist: String,
         durationSeconds: Long
     ): LyricsData? {
+        val candidates = mutableListOf<JSONObject>()
+
+        // 1. Query targeted search by track and artist
         try {
-            // Attempt 1: Exact search with duration
-            if (durationSeconds > 0) {
-                val exactUrl = "https://lrclib.net/api/get?track_name=${encode(cleanTitle)}&artist_name=${encode(cleanArtist)}&duration=$durationSeconds"
-                val exactReq = Request.Builder()
-                    .url(exactUrl)
-                    .header("User-Agent", "KuroMusic/2.4.0 (Android)")
-                    .build()
-
-                val exactResp = httpClient.newCall(exactReq).execute()
-                if (exactResp.isSuccessful) {
-                    val json = JSONObject(exactResp.body?.string().orEmpty())
-                    val synced = json.optString("syncedLyrics")
-                    val plain = json.optString("plainLyrics")
-
-                    if (synced.isNotBlank()) {
-                        val lines = LrcParser.parse(synced)
-                        if (lines.isNotEmpty()) {
-                            return LyricsData(trackId, origTitle, origArtist, lines, isSynced = true)
-                        }
-                    } else if (plain.isNotBlank()) {
-                        val lines = LrcParser.parsePlain(plain, durationSeconds * 1000L)
-                        return LyricsData(trackId, origTitle, origArtist, lines, isSynced = false)
-                    }
-                }
-            }
-
-            // Attempt 2: Smart Search with Duration-Matching Filter
             val targetedUrl = "https://lrclib.net/api/search?track_name=${encode(cleanTitle)}&artist_name=${encode(cleanArtist)}"
             val targetedReq = Request.Builder()
                 .url(targetedUrl)
-                .header("User-Agent", "KuroMusic/2.4.0 (Android)")
+                .header("User-Agent", "KuroMusic/3.0.0 (Android)")
                 .build()
 
-            val targetedResp = httpClient.newCall(targetedReq).execute()
-            if (targetedResp.isSuccessful) {
-                val arr = JSONArray(targetedResp.body?.string().orEmpty())
-                val candidates = mutableListOf<JSONObject>()
-                for (i in 0 until arr.length()) {
-                    candidates.add(arr.getJSONObject(i))
-                }
-
-                // Filter synced lyrics first, sorted by closest duration!
-                val syncedCandidates = candidates.filter { it.optString("syncedLyrics").isNotBlank() }
-                if (syncedCandidates.isNotEmpty()) {
-                    val best = if (durationSeconds > 0) {
-                        // Priority: Within +/- 2.5 seconds
-                        val closeMatch = syncedCandidates.filter {
-                            val dur = it.optDouble("duration", 0.0)
-                            kotlin.math.abs(dur - durationSeconds) <= 2.5
-                        }.minByOrNull { kotlin.math.abs(it.optDouble("duration", 0.0) - durationSeconds) }
-
-                        closeMatch ?: syncedCandidates.minByOrNull { kotlin.math.abs(it.optDouble("duration", 0.0) - durationSeconds) }
-                    } else {
-                        syncedCandidates.firstOrNull()
-                    }
-
-                    if (best != null) {
-                        val lines = LrcParser.parse(best.getString("syncedLyrics"))
-                        if (lines.isNotEmpty()) {
-                            return LyricsData(trackId, origTitle, origArtist, lines, isSynced = true)
-                        }
-                    }
-                }
-
-                // Fallback to plain lyrics with closest duration
-                val plainCandidates = candidates.filter { it.optString("plainLyrics").isNotBlank() }
-                if (plainCandidates.isNotEmpty()) {
-                    val bestPlain = if (durationSeconds > 0) {
-                        plainCandidates.minByOrNull { kotlin.math.abs(it.optDouble("duration", 0.0) - durationSeconds) }
-                    } else plainCandidates.firstOrNull()
-
-                    if (bestPlain != null) {
-                        val lines = LrcParser.parsePlain(bestPlain.getString("plainLyrics"))
-                        return LyricsData(trackId, origTitle, origArtist, lines, isSynced = false)
-                    }
-                }
-            }
-
-            // Attempt 3: General query search (Ensures we never miss synced lyrics!)
-            val generalUrl = "https://lrclib.net/api/search?q=${encode("$cleanTitle $cleanArtist")}"
-            val generalReq = Request.Builder()
-                .url(generalUrl)
-                .header("User-Agent", "KuroMusic/2.5.0 (Android)")
-                .build()
-
-            val generalResp = httpClient.newCall(generalReq).execute()
-            if (generalResp.isSuccessful) {
-                val arr = JSONArray(generalResp.body?.string().orEmpty())
-                val candidates = mutableListOf<JSONObject>()
-                for (i in 0 until arr.length()) {
-                    candidates.add(arr.getJSONObject(i))
-                }
-                val syncedCandidates = candidates.filter { it.optString("syncedLyrics").isNotBlank() }
-                if (syncedCandidates.isNotEmpty()) {
-                    val best = if (durationSeconds > 0) {
-                        val closeMatch = syncedCandidates.filter {
-                            val dur = it.optDouble("duration", 0.0)
-                            kotlin.math.abs(dur - durationSeconds) <= 2.5
-                        }.minByOrNull { kotlin.math.abs(it.optDouble("duration", 0.0) - durationSeconds) }
-                        closeMatch ?: syncedCandidates.minByOrNull { kotlin.math.abs(it.optDouble("duration", 0.0) - durationSeconds) }
-                    } else {
-                        syncedCandidates.firstOrNull()
-                    }
-
-                    if (best != null) {
-                        val lines = LrcParser.parse(best.getString("syncedLyrics"))
-                        if (lines.isNotEmpty()) {
-                            return LyricsData(trackId, origTitle, origArtist, lines, isSynced = true)
-                        }
+            httpClient.newCall(targetedReq).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val arr = JSONArray(resp.body?.string().orEmpty())
+                    for (i in 0 until arr.length()) {
+                        candidates.add(arr.getJSONObject(i))
                     }
                 }
             }
         } catch (e: Exception) {
-            Log.e("LyricsRepository", "LRCLIB fetch error: ${e.message}")
+            Log.d("LyricsRepository", "LRCLIB targeted search error: ${e.message}")
         }
+
+        // 2. Query general search query
+        try {
+            val generalUrl = "https://lrclib.net/api/search?q=${encode("$cleanTitle $cleanArtist")}"
+            val generalReq = Request.Builder()
+                .url(generalUrl)
+                .header("User-Agent", "KuroMusic/3.0.0 (Android)")
+                .build()
+
+            httpClient.newCall(generalReq).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val arr = JSONArray(resp.body?.string().orEmpty())
+                    for (i in 0 until arr.length()) {
+                        candidates.add(arr.getJSONObject(i))
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.d("LyricsRepository", "LRCLIB general search error: ${e.message}")
+        }
+
+        // 3. Query exact endpoint
+        try {
+            val exactUrl = if (durationSeconds > 0) {
+                "https://lrclib.net/api/get?track_name=${encode(cleanTitle)}&artist_name=${encode(cleanArtist)}&duration=$durationSeconds"
+            } else {
+                "https://lrclib.net/api/get?track_name=${encode(cleanTitle)}&artist_name=${encode(cleanArtist)}"
+            }
+            val exactReq = Request.Builder()
+                .url(exactUrl)
+                .header("User-Agent", "KuroMusic/3.0.0 (Android)")
+                .build()
+
+            httpClient.newCall(exactReq).execute().use { resp ->
+                if (resp.isSuccessful) {
+                    val obj = JSONObject(resp.body?.string().orEmpty())
+                    if (obj.has("id")) {
+                        candidates.add(obj)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.d("LyricsRepository", "LRCLIB exact get error: ${e.message}")
+        }
+
+        if (candidates.isEmpty()) return null
+
+        val uniqueCandidates = candidates.distinctBy { it.optLong("id", -1L) }
+
+        data class ScoredCandidate(
+            val lines: List<LyricLine>,
+            val score: Double
+        )
+
+        val scoredSynced = mutableListOf<ScoredCandidate>()
+
+        for (cand in uniqueCandidates) {
+            val synced = cand.optString("syncedLyrics")
+            if (synced.isBlank()) continue
+
+            val rawLines = LrcParser.parse(synced)
+            if (rawLines.isEmpty()) continue
+
+            // Clean leading intro tokens or uploader watermarks
+            val lines = rawLines.toMutableList()
+            while (lines.size > 1 && lines[0].timeMs == 0L && (isIntroToken(lines[0].text) || isWatermarkLine(lines[0].text))) {
+                lines.removeAt(0)
+            }
+
+            var score = 1000.0
+            val candDur = cand.optDouble("duration", 0.0)
+            if (durationSeconds > 0 && candDur > 0) {
+                val durDiff = kotlin.math.abs(candDur - durationSeconds)
+                score -= durDiff * 20.0
+            }
+
+            // CRITICAL SANITY CHECK: Detect corrupt first line timestamp
+            // Example: "The Winner Takes It All" bad candidate has line 0 at 00:06.29 and line 1 at 00:37.08 (gap > 30s)
+            if (lines.size > 1) {
+                val t0 = lines[0].timeMs
+                val t1 = lines[1].timeMs
+                if (t0 < 15000L && (t1 - t0) > 15000L && !isIntroToken(lines[0].text)) {
+                    score -= 5000.0 // heavily penalize mistimed first line!
+                }
+            }
+
+            // Line count score
+            if (lines.size < 8) {
+                score -= 400.0
+            } else if (lines.size in 25..85) {
+                score += 50.0
+            }
+
+            scoredSynced.add(ScoredCandidate(lines, score))
+        }
+
+        val bestSynced = scoredSynced.maxByOrNull { it.score }
+        if (bestSynced != null && bestSynced.score > 0) {
+            return LyricsData(trackId, origTitle, origArtist, bestSynced.lines, isSynced = true)
+        }
+
+        // Fallback: plain lyrics
+        val plainCandidates = uniqueCandidates.filter { it.optString("plainLyrics").isNotBlank() }
+        if (plainCandidates.isNotEmpty()) {
+            val bestPlainObj = if (durationSeconds > 0) {
+                plainCandidates.minByOrNull { kotlin.math.abs(it.optDouble("duration", 0.0) - durationSeconds) }
+            } else plainCandidates.firstOrNull()
+
+            if (bestPlainObj != null) {
+                val lines = LrcParser.parsePlain(bestPlainObj.getString("plainLyrics"), durationSeconds * 1000L)
+                return LyricsData(trackId, origTitle, origArtist, lines, isSynced = false)
+            }
+        }
+
         return null
     }
 

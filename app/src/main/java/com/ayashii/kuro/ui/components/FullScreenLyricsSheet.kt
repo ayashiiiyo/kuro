@@ -84,9 +84,11 @@ fun FullScreenLyricsSheet(
     val colors = KuroAppTheme.colors
     val dominantColor = rememberDynamicDominantColor(track.thumbnailUrlForDisplay(768))
     val lyricsGradient = remember(dominantColor) {
+        val topTint = androidx.compose.ui.graphics.lerp(PureBlack, dominantColor, 0.45f)
+        val midTint = androidx.compose.ui.graphics.lerp(PureBlack, dominantColor, 0.20f)
         Brush.verticalGradient(
-            0.0f to dominantColor.copy(alpha = 0.45f),
-            0.35f to dominantColor.copy(alpha = 0.20f),
+            0.0f to topTint,
+            0.35f to midTint,
             0.70f to PureBlack,
             1.0f to PureBlack
         )
@@ -113,6 +115,7 @@ fun FullScreenLyricsSheet(
     Box(
         modifier = modifier
             .fillMaxSize()
+            .background(PureBlack)
             .background(lyricsGradient)
     ) {
         Column(

@@ -147,6 +147,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     val recentlyPlayed = tasteManager.recentlyPlayed
     val onRepeatTracks = tasteManager.onRepeatTracks
 
+    fun removeFromRecents(trackId: String) = tasteManager.removeFromRecents(trackId)
+    fun clearRecentSearches() = tasteManager.clearRecents()
+
     val playlistManager = com.ayashii.kuro.data.playlist.PlaylistManager.getInstance(getApplication())
     val playlists = playlistManager.playlists
 

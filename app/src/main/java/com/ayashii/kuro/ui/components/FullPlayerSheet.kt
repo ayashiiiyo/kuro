@@ -124,10 +124,12 @@ fun FullPlayerSheet(
     val colors = KuroAppTheme.colors
     val dominantColor = rememberDynamicDominantColor(track.thumbnailUrlForDisplay(768))
     val ambientGradient = remember(dominantColor) {
+        val topTint = androidx.compose.ui.graphics.lerp(PureBlack, dominantColor, 0.40f)
+        val midTint = androidx.compose.ui.graphics.lerp(PureBlack, dominantColor, 0.15f)
         Brush.verticalGradient(
-            0.0f to dominantColor.copy(alpha = 0.55f),
-            0.30f to dominantColor.copy(alpha = 0.18f),
-            0.55f to PureBlack,
+            0.0f to topTint,
+            0.35f to midTint,
+            0.65f to PureBlack,
             1.0f to PureBlack
         )
     }
@@ -150,6 +152,7 @@ fun FullPlayerSheet(
     Box(
         modifier = modifier
             .fillMaxSize()
+            .background(PureBlack)
             .background(ambientGradient)
     ) {
         Column(
@@ -569,10 +572,13 @@ fun FullPlayerSheet(
                         .clip(RoundedCornerShape(20.dp))
                         .background(
                             Brush.verticalGradient(
-                                listOf(dominantColor.copy(alpha = 0.35f), colors.card)
+                                listOf(
+                                    androidx.compose.ui.graphics.lerp(colors.card, dominantColor, 0.28f),
+                                    colors.card
+                                )
                             )
                         )
-                        .border(1.dp, dominantColor.copy(alpha = 0.25f), RoundedCornerShape(20.dp))
+                        .border(1.dp, androidx.compose.ui.graphics.lerp(colors.border, dominantColor, 0.35f), RoundedCornerShape(20.dp))
                         .padding(18.dp)
                 ) {
                     Column(modifier = Modifier.fillMaxWidth()) {
