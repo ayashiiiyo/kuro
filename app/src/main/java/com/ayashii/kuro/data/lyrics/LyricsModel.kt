@@ -70,7 +70,8 @@ data class LyricsData(
         if (result >= 0) {
             val activeLine = lines[result]
             val end = activeLine.endTimeMs
-            if (end != null && effectivePos > end) {
+            val nextLineStart = if (result + 1 < lines.size) lines[result + 1].timeMs else Long.MAX_VALUE
+            if (end != null && nextLineStart - end > 5000L && effectivePos > end) {
                 return -1
             }
             if (activeLine.text.isBlank()) {

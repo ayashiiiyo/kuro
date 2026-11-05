@@ -86,27 +86,30 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.8.3 — Bottom Navigation Fix & Studio-Synced BetterLyrics Provider
+          ## Kuro v3.8.4 — LiriQo Rust Multi-Provider Lyrics Engine & Smooth Lyrics UI Animation
 
-          - **Bottom Navigation Fix**:
-            - Repaired tab switching failure where clicking Home or Library from the Search tab did not respond.
-            - Restored standard Jetpack Compose navigation with `findStartDestination` backstack handling.
-          - **Studio-Synced BetterLyrics Provider (Metrolist Issue #2970)**:
-            - Integrated Tier 1 BetterLyrics provider retrieving Apple Music / Musixmatch studio-synced TTML XML.
-            - Absolute timestamp accuracy without intro delay (e.g., ABBA's *The Winner Takes It All* activates line 1 at exactly 00:32.433 after the 32-second piano intro).
-            - Added `TtmlParser` supporting exact start and end timestamps per lyric line for instrumental solo deactivation.
-            - Smart query fallback across exact title/artist and cleaned title/artist variations.
+          - **Smooth Lyrics UI Animation & Elimination of Flickering**:
+            - Repaired lyrics animation regression: restored smooth downward auto-scrolling with `FastOutSlowInEasing` and `animateScrollToItem`.
+            - Fixed line dimming/flickering bug ("redup cerah"): phrasing gaps (1–3s) between lines no longer deactivate the active line; line remains active until next line begins.
+            - Preserved true instrumental solo deactivation for extended interlude breaks (> 5000ms).
+            - Added user scroll gesture interaction tracking (`collectIsDraggedAsState`) to pause auto-scrolling smoothly during manual touch gestures.
+          - **LiriQo Rust Multi-Provider Lyrics Engine**:
+            - Ported core backend of LiriQo (`AlFarrizi-Studio/Liriqo`) to native Rust (`kuro-core/src/liriqo.rs`) with JNI bridge in `KuroNativeCore`.
+            - Direct studio-synchronized timestamps across 8 top-tier providers: Apple Music, Musixmatch, Unison, NetEase, KuGou Legato, QQ Portato, LRCLIB, and YouTube Music.
+            - Dynamic provider quality ranking prioritizing studio syllable/word synchronization.
+            - Integrated junk metadata and watermark filtering.
+            - Dual query fallback: primary query by video ID (`?v={videoId}`), fallback by song title, artist, and duration.
           - **Disk Cache Upgrade**:
-            - Upgraded lyrics disk cache to `lyrics_cache_v6` with automatic purging of older cache versions.
-            - Added `lyrics_cache_v6` support across Settings cache size calculation and cache clearing routines.
-          - **Codebase Cleanliness**:
-            - Maintained zero single-line `//` comments across the entire project.
+            - Upgraded lyrics disk cache to `lyrics_cache_v7` with automatic purging of older cache versions (`v4`, `v5`, `v6`).
+            - Added `lyrics_cache_v7` support across Settings cache size calculation and cache clearing routines.
+          - **Codebase Hygiene**:
+            - Enforced strict zero single-line `//` and `///` comments across the entire project.
           - Published signed release and debug APKs.
           EOF
           gh release create "$RELEASE_TAG" \
             "${{ steps.apk.outputs.release_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (31 Bug & UX Fixes, Background Service Decoupling)" \
+            --title "Kuro $RELEASE_TAG (LiriQo Rust Engine & Smooth Lyrics Animation)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 

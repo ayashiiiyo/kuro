@@ -98,6 +98,7 @@ class SettingsManager private constructor(private val context: Context) {
         var total = 0L
         try {
             val cacheDirs = listOf(
+                File(context.cacheDir, "lyrics_cache_v7"),
                 File(context.cacheDir, "lyrics_cache_v6"),
                 File(context.cacheDir, "lyrics_cache_v5"),
                 File(context.cacheDir, "lyrics_cache_v4"),
@@ -141,6 +142,7 @@ class SettingsManager private constructor(private val context: Context) {
     suspend fun clearCacheAsync(): Boolean = withContext(Dispatchers.IO) {
         try {
             val cacheDirs = listOf(
+                File(context.cacheDir, "lyrics_cache_v7"),
                 File(context.cacheDir, "lyrics_cache_v6"),
                 File(context.cacheDir, "lyrics_cache_v5"),
                 File(context.cacheDir, "lyrics_cache_v4"),
@@ -168,6 +170,7 @@ class SettingsManager private constructor(private val context: Context) {
     fun clearCache(): Boolean {
         return try {
             val cacheDirs = listOf(
+                File(context.cacheDir, "lyrics_cache_v7"),
                 File(context.cacheDir, "lyrics_cache_v6"),
                 File(context.cacheDir, "lyrics_cache_v5"),
                 File(context.cacheDir, "lyrics_cache_v4"),

@@ -1,4 +1,5 @@
 pub mod innertube;
+pub mod liriqo;
 pub mod recommendation;
 pub mod sanitizer;
 pub mod translator;
@@ -119,5 +120,25 @@ pub extern "system" fn Java_com_ayashii_kuro_data_native_KuroNativeCore_parseDee
 
     let translations = translator::parse_response(&resp_str);
     let output = serde_json::to_string(&translations).unwrap_or_else(|_| "[]".to_string());
+    env.new_string(output).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_ayashii_kuro_data_native_KuroNativeCore_parseLiriqoLyrics(
+    mut env: JNIEnv,
+    _class: JClass,
+    raw_json: JString,
+    duration_ms: jni::sys::jlong,
+) -> jstring {
+    let json_str: String = match env.get_string(&raw_json) {
+        Ok(s) => s.into(),
+        Err(_) => return env.new_string("").unwrap().into_raw(),
+    };
+
+    let result = liriqo::parse_liriqo_response(&json_str, duration_ms);
+    let output = match result {
+        Some(lyrics) => serde_json::to_string(&lyrics).unwrap_or_default(),
+        None => String::new(),
+    };
     env.new_string(output).unwrap().into_raw()
 }

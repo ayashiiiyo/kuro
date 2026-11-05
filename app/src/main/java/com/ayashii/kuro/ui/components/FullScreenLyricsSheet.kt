@@ -3,6 +3,7 @@ package com.ayashii.kuro.ui.components
 import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -10,6 +11,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -101,6 +103,16 @@ fun FullScreenLyricsSheet(
 
     var showTranslation by remember { mutableStateOf(true) }
     val listState = rememberLazyListState()
+    val isUserDragging by listState.interactionSource.collectIsDraggedAsState()
+    var userScrolledRecently by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isUserDragging) {
+        if (isUserDragging) {
+            userScrolledRecently = true
+            kotlinx.coroutines.delay(3500)
+            userScrolledRecently = false
+        }
+    }
 
     val activeIndex by remember(lyricsData, currentPositionMs) {
         derivedStateOf {
@@ -109,7 +121,7 @@ fun FullScreenLyricsSheet(
     }
 
     LaunchedEffect(activeIndex) {
-        if (activeIndex >= 0 && !listState.isScrollInProgress) {
+        if (activeIndex >= 0 && !userScrolledRecently && !listState.isScrollInProgress) {
             val targetScroll = (activeIndex - 2).coerceAtLeast(0)
             listState.animateScrollToItem(targetScroll)
         }
@@ -225,13 +237,13 @@ fun FullScreenLyricsSheet(
                             val isActive = index == activeIndex
                             val animatedFontSize by animateFloatAsState(
                                 targetValue = if (isActive) 26f else 20f,
-                                animationSpec = tween(200),
+                                animationSpec = tween(320, easing = FastOutSlowInEasing),
                                 label = "lyrics_font_size"
                             )
 
                             val textColor by animateColorAsState(
                                 targetValue = if (isActive) colors.textPrimary else colors.textSecondary.copy(alpha = 0.35f),
-                                animationSpec = tween(220),
+                                animationSpec = tween(350, easing = FastOutSlowInEasing),
                                 label = "lyrics_color"
                             )
 
