@@ -2,13 +2,11 @@ package com.ayashii.kuro.data.remote
 
 import android.util.Log
 import android.util.LruCache
-import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.data.model.HomeSection
-import kotlinx.coroutines.CoroutineScope
+import com.ayashii.kuro.data.model.Track
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -24,22 +22,36 @@ data class ResolvedStream(
 class MusicRepository {
 
     private val service = ServiceList.YouTube
-    private val streamUrlCache = LruCache<String, Pair<String, Long>>(50)
     private val CACHE_EXPIRY_MS = 20 * 60 * 1000L
-
-    private var homeCache: Pair<List<HomeSection>, Long>? = null
     private val HOME_CACHE_TTL = 10 * 60 * 1000L
-
-    private val searchCache = LruCache<String, Pair<List<Track>, Long>>(30)
     private val SEARCH_CACHE_TTL = 5 * 60 * 1000L
-
-    private val radioCache = LruCache<String, Pair<List<Track>, Long>>(20)
     private val RADIO_CACHE_TTL = 30 * 60 * 1000L
 
     companion object {
         private const val YTM_CLIENT_NAME = "WEB_REMIX"
         private const val YTM_CLIENT_VERSION = "1.20241028.01.00"
         private const val YTM_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+
+        private val THUMB_WH_CHECK_REGEX = Regex("=w\\d+-h\\d+")
+        private val THUMB_WH_REGEX = Regex("=w\\d+-h\\d+[^&?]*")
+        private val THUMB_S_CHECK_REGEX = Regex("=s\\d+")
+        private val THUMB_S_REGEX = Regex("=s\\d+[^&?]*")
+        private val THUMB_EQ_REGEX = Regex("=[^=]*$")
+
+        private val streamUrlCache = LruCache<String, Pair<String, Long>>(60)
+        private var homeCache: Pair<List<HomeSection>, Long>? = null
+        private val homeCacheLock = Any()
+        private val searchCache = LruCache<String, Pair<List<Track>, Long>>(30)
+        private val radioCache = LruCache<String, Pair<List<Track>, Long>>(20)
+
+        @Volatile
+        private var INSTANCE: MusicRepository? = null
+
+        fun getInstance(): MusicRepository {
+            return INSTANCE ?: synchronized(this) {
+                INSTANCE ?: MusicRepository().also { INSTANCE = it }
+            }
+        }
     }
 
     private fun cleanTrackTitle(raw: String): String {
@@ -53,12 +65,12 @@ class MusicRepository {
             u = "https:$u"
         }
         if (u.contains("googleusercontent.com")) {
-            return if (u.contains(Regex("=w\\d+-h\\d+"))) {
-                u.replace(Regex("=w\\d+-h\\d+[^&?]*"), "=w1080-h1080-l90-rj")
-            } else if (u.contains(Regex("=s\\d+"))) {
-                u.replace(Regex("=s\\d+[^&?]*"), "=w1080-h1080-l90-rj")
+            return if (u.contains(THUMB_WH_CHECK_REGEX)) {
+                u.replace(THUMB_WH_REGEX, "=w1080-h1080-l90-rj")
+            } else if (u.contains(THUMB_S_CHECK_REGEX)) {
+                u.replace(THUMB_S_REGEX, "=w1080-h1080-l90-rj")
             } else if (u.contains("=")) {
-                u.replace(Regex("=[^=]*$"), "=w1080-h1080-l90-rj")
+                u.replace(THUMB_EQ_REGEX, "=w1080-h1080-l90-rj")
             } else {
                 "$u=w1080-h1080-l90-rj"
             }
@@ -294,7 +306,7 @@ class MusicRepository {
 
     suspend fun getHomeShelves(): List<HomeSection> = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
-        synchronized(this) {
+        synchronized(homeCacheLock) {
             homeCache?.let { (cached, time) ->
                 if (now - time < HOME_CACHE_TTL) {
                     return@withContext cached
@@ -303,7 +315,7 @@ class MusicRepository {
         }
         val ytmShelves = fetchYouTubeMusicShelves()
         if (ytmShelves.isNotEmpty()) {
-            synchronized(this) { homeCache = Pair(ytmShelves, now) }
+            synchronized(homeCacheLock) { homeCache = Pair(ytmShelves, now) }
             return@withContext ytmShelves
         }
 
@@ -753,6 +765,60 @@ class MusicRepository {
         }
     }
 
+    /**
+     * Two-way YouTube Music Like/Unlike synchronization via InnerTube API.
+     * Mutates the user's official YouTube Music "Liked Music" library when logged in.
+     */
+    suspend fun setTrackLikeStatus(videoId: String, isLiked: Boolean): Boolean = withContext(Dispatchers.IO) {
+        if (videoId.isBlank()) return@withContext false
+        val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
+        val cookie = auth.getCookie()
+        if (cookie.isNullOrBlank()) return@withContext false
+
+        try {
+            val origin = "https://music.youtube.com"
+            val sapisidHash = auth.getSapisidHash(origin) ?: return@withContext false
+            val endpoint = if (isLiked) "like/like" else "like/removelike"
+
+            val payload = org.json.JSONObject().apply {
+                put("context", org.json.JSONObject().apply {
+                    put("client", org.json.JSONObject().apply {
+                        put("clientName", YTM_CLIENT_NAME)
+                        put("clientVersion", YTM_CLIENT_VERSION)
+                        put("hl", "id")
+                        put("gl", "ID")
+                    })
+                })
+                put("target", org.json.JSONObject().apply {
+                    put("videoId", videoId)
+                })
+            }
+
+            val reqBody = payload.toString().toRequestBody("application/json".toMediaType())
+            val req = okhttp3.Request.Builder()
+                .url("$origin/youtubei/v1/$endpoint")
+                .header("Content-Type", "application/json")
+                .header("User-Agent", YTM_USER_AGENT)
+                .header("Origin", origin)
+                .header("Referer", "$origin/")
+                .header("X-Origin", origin)
+                .header("X-Goog-AuthUser", "0")
+                .header("X-YouTube-Client-Name", "67")
+                .header("X-YouTube-Client-Version", YTM_CLIENT_VERSION)
+                .header("Cookie", cookie)
+                .header("Authorization", sapisidHash)
+                .post(reqBody)
+                .build()
+
+            HttpClientProvider.client.newCall(req).execute().use { resp ->
+                resp.isSuccessful
+            }
+        } catch (e: Exception) {
+            Log.e("MusicRepository", "Failed to sync like status to YTM: ${e.message}")
+            false
+        }
+    }
+
     suspend fun getLikedTracks(): List<Track> = withContext(Dispatchers.IO) {
         val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
         val cookie = auth.getCookie()
@@ -783,6 +849,7 @@ class MusicRepository {
                 .header("Origin", origin)
                 .header("Referer", "$origin/")
                 .header("X-Origin", origin)
+                .header("X-Goog-AuthUser", "0")
                 .header("X-YouTube-Client-Name", "67")
                 .header("X-YouTube-Client-Version", YTM_CLIENT_VERSION)
                 .header("Cookie", cookie)
@@ -817,28 +884,43 @@ class MusicRepository {
                         val row = items.optJSONObject(i)?.optJSONObject("musicResponsiveListItemRenderer")
                         if (row != null) {
                             val cols = row.optJSONArray("flexColumns")
-                            val title = cols?.optJSONObject(0)
+                            val col0Runs = cols?.optJSONObject(0)
                                 ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
                                 ?.optJSONObject("text")
                                 ?.optJSONArray("runs")
-                                ?.optJSONObject(0)
-                                ?.optString("text") ?: ""
 
-                            val videoId = cols?.optJSONObject(0)
-                                ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
-                                ?.optJSONObject("text")
-                                ?.optJSONArray("runs")
-                                ?.optJSONObject(0)
+                            val title = col0Runs?.optJSONObject(0)?.optString("text") ?: ""
+
+                            var videoId = col0Runs?.optJSONObject(0)
                                 ?.optJSONObject("navigationEndpoint")
                                 ?.optJSONObject("watchEndpoint")
                                 ?.optString("videoId") ?: ""
+                            if (videoId.isBlank()) {
+                                videoId = row.optJSONObject("playlistItemData")?.optString("videoId") ?: ""
+                            }
 
-                            val artist = cols?.optJSONObject(1)
+                            val col1Runs = cols?.optJSONObject(1)
                                 ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
                                 ?.optJSONObject("text")
                                 ?.optJSONArray("runs")
-                                ?.optJSONObject(0)
-                                ?.optString("text") ?: "YouTube Music"
+
+                            val artist = col1Runs?.optJSONObject(0)?.optString("text") ?: "YouTube Music"
+
+                            var durationSec = 0L
+                            val fixedCols = row.optJSONArray("fixedColumns")
+                            if (fixedCols != null && fixedCols.length() > 0) {
+                                val durText = fixedCols.optJSONObject(0)
+                                    ?.optJSONObject("musicResponsiveListItemFixedColumnRenderer")
+                                    ?.optJSONObject("text")
+                                    ?.optJSONArray("runs")
+                                    ?.optJSONObject(0)
+                                    ?.optString("text", "") ?: ""
+                                durationSec = parseDurationToSeconds(durText)
+                            }
+                            if (durationSec <= 0L && col1Runs != null && col1Runs.length() > 0) {
+                                val lastRun = col1Runs.optJSONObject(col1Runs.length() - 1)?.optString("text", "") ?: ""
+                                durationSec = parseDurationToSeconds(lastRun)
+                            }
 
                             val thumb = row.optJSONObject("thumbnail")
                                 ?.optJSONObject("musicThumbnailRenderer")
@@ -854,7 +936,7 @@ class MusicRepository {
                                         title = cleanTrackTitle(title),
                                         artist = artist.replace(" - Topic", ""),
                                         thumbnailUrl = upgradeThumbnailUrl(thumb),
-                                        durationSeconds = 0,
+                                        durationSeconds = durationSec,
                                         isFavorite = true
                                     )
                                 )

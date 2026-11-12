@@ -2,9 +2,11 @@ package com.ayashii.kuro.ui.components
 
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
+import android.net.Uri
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
@@ -40,13 +42,24 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.ayashii.kuro.data.auth.AuthManager
-import com.ayashii.kuro.ui.theme.DarkBorder
-import com.ayashii.kuro.ui.theme.DarkCard
-import com.ayashii.kuro.ui.theme.MutedText
-import com.ayashii.kuro.ui.theme.PureBlack
-import com.ayashii.kuro.ui.theme.PureWhite
-import com.ayashii.kuro.ui.theme.SubtleGray
+import com.ayashii.kuro.ui.theme.KuroAppTheme
 import com.ayashii.kuro.ui.theme.Typography
+
+private fun isTrustedGoogleAuthHost(url: String?): Boolean {
+    if (url.isNullOrBlank()) return false
+    val host = try {
+        Uri.parse(url).host?.lowercase() ?: return false
+    } catch (_: Exception) {
+        return false
+    }
+    return host == "google.com" ||
+        host.endsWith(".google.com") ||
+        host == "youtube.com" ||
+        host.endsWith(".youtube.com") ||
+        host.endsWith(".gstatic.com") ||
+        host.endsWith(".googleapis.com") ||
+        host.endsWith(".googleusercontent.com")
+}
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -57,10 +70,12 @@ fun LoginWebViewDialog(
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
     var pageProgress by remember { mutableFloatStateOf(0f) }
     var isLoading by remember { mutableStateOf(true) }
+    val colors = KuroAppTheme.colors
 
     androidx.compose.runtime.DisposableEffect(Unit) {
         onDispose {
             webViewInstance?.stopLoading()
+            webViewInstance?.removeJavascriptInterface("KuroBridge")
             webViewInstance?.destroy()
             webViewInstance = null
         }
@@ -80,13 +95,13 @@ fun LoginWebViewDialog(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(PureBlack)
+                .background(colors.background)
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp)
-                    .background(DarkCard)
+                    .background(colors.card)
                     .padding(horizontal = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -94,7 +109,7 @@ fun LoginWebViewDialog(
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "Close",
-                        tint = PureWhite
+                        tint = colors.textPrimary
                     )
                 }
                 Spacer(modifier = Modifier.width(8.dp))
@@ -102,19 +117,19 @@ fun LoginWebViewDialog(
                     Text(
                         text = "Login to YouTube",
                         style = Typography.titleMedium,
-                        color = PureWhite
+                        color = colors.textPrimary
                     )
                     Text(
                         text = "Sign in via official Google login",
                         style = Typography.bodyMedium,
-                        color = MutedText
+                        color = colors.textMuted
                     )
                 }
                 IconButton(onClick = { webViewInstance?.reload() }) {
                     Icon(
                         imageVector = Icons.Default.Refresh,
                         contentDescription = "Refresh",
-                        tint = SubtleGray
+                        tint = colors.textSecondary
                     )
                 }
             }
@@ -123,8 +138,8 @@ fun LoginWebViewDialog(
                 LinearProgressIndicator(
                     progress = { pageProgress },
                     modifier = Modifier.fillMaxWidth().height(2.dp),
-                    color = PureWhite,
-                    trackColor = DarkBorder
+                    color = colors.textPrimary,
+                    trackColor = colors.border
                 )
             } else {
                 Spacer(modifier = Modifier.height(2.dp))
@@ -150,6 +165,8 @@ fun LoginWebViewDialog(
                                 javaScriptEnabled = true
                                 domStorageEnabled = true
                                 databaseEnabled = true
+                                allowFileAccess = false
+                                allowContentAccess = false
                                 setSupportZoom(true)
                                 builtInZoomControls = true
                                 displayZoomControls = false
@@ -168,6 +185,11 @@ fun LoginWebViewDialog(
                             }, "KuroBridge")
 
                             webViewClient = object : WebViewClient() {
+                                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                                    val targetUrl = request?.url?.toString()
+                                    return !isTrustedGoogleAuthHost(targetUrl)
+                                }
+
                                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                                     super.onPageStarted(view, url, favicon)
                                     isLoading = true
@@ -178,6 +200,8 @@ fun LoginWebViewDialog(
                                     isLoading = false
 
                                     val currentUrl = url ?: ""
+                                    if (!isTrustedGoogleAuthHost(currentUrl)) return
+
                                     val cookies = cookieManager.getCookie("https://music.youtube.com")
                                         ?: cookieManager.getCookie("https://www.youtube.com")
                                         ?: cookieManager.getCookie(currentUrl)
@@ -239,6 +263,7 @@ fun LoginWebViewDialog(
                                 override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
                                     super.doUpdateVisitedHistory(view, url, isReload)
                                     val currentUrl = url ?: ""
+                                    if (!isTrustedGoogleAuthHost(currentUrl)) return
                                     val cookies = cookieManager.getCookie(currentUrl) ?: ""
                                     if ((cookies.contains("SAPISID") || cookies.contains("LOGIN_INFO")) &&
                                         (currentUrl.contains("music.youtube.com") || currentUrl.contains("youtube.com"))) {
@@ -264,7 +289,7 @@ fun LoginWebViewDialog(
                 if (isLoading && pageProgress < 0.2f) {
                     CircularProgressIndicator(
                         modifier = Modifier.align(Alignment.Center).size(36.dp),
-                        color = PureWhite
+                        color = colors.textPrimary
                     )
                 }
             }

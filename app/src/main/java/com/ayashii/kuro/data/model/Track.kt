@@ -2,6 +2,12 @@ package com.ayashii.kuro.data.model
 
 import androidx.compose.runtime.Immutable
 
+private val THUMB_WH_REGEX = Regex("=w\\d+-h\\d+[^&?]*")
+private val THUMB_WH_CHECK_REGEX = Regex("=w\\d+-h\\d+")
+private val THUMB_S_REGEX = Regex("=s\\d+[^&?]*")
+private val THUMB_S_CHECK_REGEX = Regex("=s\\d+")
+private val THUMB_EQ_REGEX = Regex("=[^=]*$")
+
 @Immutable
 data class Track(
     val id: String,
@@ -22,12 +28,12 @@ data class Track(
                 u = "https:$u"
             }
             if (u.contains("googleusercontent.com")) {
-                return if (u.contains(Regex("=w\\d+-h\\d+"))) {
-                    u.replace(Regex("=w\\d+-h\\d+[^&?]*"), "=w1080-h1080-l90-rj")
-                } else if (u.contains(Regex("=s\\d+"))) {
-                    u.replace(Regex("=s\\d+[^&?]*"), "=w1080-h1080-l90-rj")
+                return if (u.contains(THUMB_WH_CHECK_REGEX)) {
+                    u.replace(THUMB_WH_REGEX, "=w1080-h1080-l90-rj")
+                } else if (u.contains(THUMB_S_CHECK_REGEX)) {
+                    u.replace(THUMB_S_REGEX, "=w1080-h1080-l90-rj")
                 } else if (u.contains("=")) {
-                    u.replace(Regex("=[^=]*$"), "=w1080-h1080-l90-rj")
+                    u.replace(THUMB_EQ_REGEX, "=w1080-h1080-l90-rj")
                 } else {
                     "$u=w1080-h1080-l90-rj"
                 }
@@ -47,7 +53,7 @@ data class Track(
         val boundedSize = maxPixels.coerceIn(96, 1080)
         val highRes = highResThumbnailUrl
         return if (highRes.contains("googleusercontent.com")) {
-            highRes.replace(Regex("=w\\d+-h\\d+[^&?]*"), "=w$boundedSize-h$boundedSize-l90-rj")
+            highRes.replace(THUMB_WH_REGEX, "=w$boundedSize-h$boundedSize-l90-rj")
         } else {
             highRes
         }

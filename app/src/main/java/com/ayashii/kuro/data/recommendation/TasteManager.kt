@@ -32,12 +32,21 @@ class TasteManager private constructor(context: Context) {
     @Volatile
     private var cachedTopArtists: Set<String>? = null
 
+    private var lastRecordedPlayId: String? = null
+    private var lastRecordedPlayTimestamp: Long = 0L
+
     init {
         loadDataFromPrefs()
     }
 
     @Synchronized
     fun recordTrackPlayed(track: Track) {
+        val now = System.currentTimeMillis()
+        if (track.id == lastRecordedPlayId && (now - lastRecordedPlayTimestamp) < 2500L) {
+            return
+        }
+        lastRecordedPlayId = track.id
+        lastRecordedPlayTimestamp = now
         updateTrackScore(track, deltaScore = 3, isPlay = true)
         addToRecents(track)
         refreshOnRepeat()

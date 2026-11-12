@@ -1,10 +1,13 @@
 package com.ayashii.kuro.ui.components
 
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -24,8 +27,10 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -45,17 +50,12 @@ import androidx.compose.material.icons.outlined.QueueMusic
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Speaker
 import androidx.compose.material.icons.outlined.Translate
-import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
-import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -69,6 +69,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -78,7 +79,6 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -86,9 +86,9 @@ import androidx.media3.common.Player
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.ayashii.kuro.R
+import com.ayashii.kuro.data.lyrics.LyricsData
 import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.ui.theme.KuroAppTheme
-import com.ayashii.kuro.ui.theme.PureBlack
 import com.ayashii.kuro.ui.theme.Typography
 import com.ayashii.kuro.ui.theme.rememberDynamicDominantColor
 import com.ayashii.kuro.viewmodel.MusicViewModel
@@ -116,7 +116,6 @@ fun FullPlayerSheet(
 
     val currentLyrics by viewModel.currentLyrics.collectAsState()
     val audioDeviceState by viewModel.audioDeviceState.collectAsState()
-    val currentPositionMs by viewModel.playbackPosition.collectAsState()
 
     var showAddToPlaylist by rememberSaveable { mutableStateOf(false) }
     var showSettingsDialog by rememberSaveable { mutableStateOf(false) }
@@ -124,6 +123,16 @@ fun FullPlayerSheet(
     var showQueueSheet by rememberSaveable { mutableStateOf(false) }
     var showFullScreenLyrics by rememberSaveable { mutableStateOf(false) }
     var showTranslationInPreview by rememberSaveable { mutableStateOf(true) }
+    var dragOffsetY by remember { mutableFloatStateOf(0f) }
+
+    val animatedDragY by animateFloatAsState(
+        targetValue = dragOffsetY,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "sheet_drag_offset"
+    )
 
     BackHandler(enabled = showFullScreenLyrics) {
         showFullScreenLyrics = false
@@ -131,53 +140,48 @@ fun FullPlayerSheet(
 
     val colors = KuroAppTheme.colors
     val dominantColor = rememberDynamicDominantColor(track.thumbnailUrlForDisplay(768))
-    val ambientGradient = remember(dominantColor) {
-        val topTint = androidx.compose.ui.graphics.lerp(PureBlack, dominantColor, 0.40f)
-        val midTint = androidx.compose.ui.graphics.lerp(PureBlack, dominantColor, 0.15f)
+    val baseBg = colors.background
+    val ambientGradient = remember(dominantColor, baseBg, colors.isDark) {
+        val topWeight = if (colors.isDark) 0.40f else 0.22f
+        val midWeight = if (colors.isDark) 0.15f else 0.08f
+        val topTint = androidx.compose.ui.graphics.lerp(baseBg, dominantColor, topWeight)
+        val midTint = androidx.compose.ui.graphics.lerp(baseBg, dominantColor, midWeight)
         Brush.verticalGradient(
             0.0f to topTint,
             0.35f to midTint,
-            0.65f to PureBlack,
-            1.0f to PureBlack
+            0.65f to baseBg,
+            1.0f to baseBg
         )
-    }
-
-    val activeLineText: String by remember(currentLyrics, currentPositionMs) {
-        derivedStateOf {
-            val lyrics = currentLyrics
-            if (lyrics != null && lyrics.lines.isNotEmpty()) {
-                val idx = lyrics.getCurrentLineIndex(currentPositionMs)
-                if (idx in lyrics.lines.indices) {
-                    val line = lyrics.lines[idx]
-                    val trans = line.translation
-                    if (!trans.isNullOrBlank()) trans else line.text
-                } else ""
-            } else ""
-        }
     }
 
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(PureBlack)
+            .graphicsLayer {
+                translationY = animatedDragY.coerceAtLeast(0f)
+            }
+            .background(baseBg)
             .background(ambientGradient)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .navigationBarsPadding()
                 .pointerInput(Unit) {
-                    var totalDragY = 0f
                     detectVerticalDragGestures(
-                        onDragStart = { totalDragY = 0f },
+                        onDragStart = { dragOffsetY = 0f },
                         onDragEnd = {
-                            if (totalDragY > 140f && scrollState.value == 0) {
+                            if (dragOffsetY > 140f && scrollState.value == 0) {
+                                dragOffsetY = 0f
                                 onDismiss()
+                            } else {
+                                dragOffsetY = 0f
                             }
                         },
-                        onDragCancel = { totalDragY = 0f },
+                        onDragCancel = { dragOffsetY = 0f },
                         onVerticalDrag = { change, dragAmount ->
-                            if (scrollState.value == 0 && dragAmount > 0) {
-                                totalDragY += dragAmount
+                            if (scrollState.value == 0 && (dragAmount > 0 || dragOffsetY > 0f)) {
+                                dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
                                 change.consume()
                             }
                         }
@@ -270,7 +274,7 @@ fun FullPlayerSheet(
                         AsyncImage(
                             model = ImageRequest.Builder(LocalContext.current)
                                 .data(animatedTrack.thumbnailUrlForDisplay(768))
-                                .crossfade(false)
+                                .crossfade(200)
                                 .build(),
                             contentDescription = animatedTrack.title,
                             modifier = Modifier.fillMaxSize(),
@@ -282,37 +286,11 @@ fun FullPlayerSheet(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            if (activeLineText.isNotBlank()) {
-                AnimatedContent(
-                    targetState = activeLineText,
-                    transitionSpec = {
-                        (slideInVertically(animationSpec = tween(320, easing = FastOutSlowInEasing)) { height -> height / 2 } + fadeIn(tween(260)))
-                            .togetherWith(
-                                slideOutVertically(animationSpec = tween(300, easing = FastOutSlowInEasing)) { height -> -height / 2 } + fadeOut(tween(220))
-                            )
-                    },
-                    label = "live_lyric_snippet",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp)
-                        .clickable { showFullScreenLyrics = true }
-                ) { snippet ->
-                    Text(
-                        text = snippet,
-                        style = Typography.titleMedium.copy(
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            lineHeight = 21.sp
-                        ),
-                        color = colors.textPrimary,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-            } else {
-                Spacer(modifier = Modifier.height(6.dp))
-            }
+            LiveLyricSnippet(
+                lyricsData = currentLyrics,
+                viewModel = viewModel,
+                onClick = { showFullScreenLyrics = true }
+            )
 
             Row(
                 modifier = Modifier
@@ -368,7 +346,7 @@ fun FullPlayerSheet(
                     Icon(
                         imageVector = if (track.isFavorite) Icons.Default.CheckCircle else Icons.Outlined.AddCircleOutline,
                         contentDescription = "Save / Favorite",
-                        tint = if (track.isFavorite) colors.textPrimary else colors.textPrimary.copy(alpha = 0.85f),
+                        tint = if (track.isFavorite) Color(0xFFFF3B30) else colors.textPrimary.copy(alpha = 0.85f),
                         modifier = Modifier
                             .size(30.dp)
                             .graphicsLayer {
@@ -564,109 +542,14 @@ fun FullPlayerSheet(
                     currentLyrics!!.lines.none { it.text.trim().equals("null", ignoreCase = true) }
 
             if (hasLyrics) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(
-                                    androidx.compose.ui.graphics.lerp(colors.card, dominantColor, 0.28f),
-                                    colors.card
-                                )
-                            )
-                        )
-                        .border(1.dp, androidx.compose.ui.graphics.lerp(colors.border, dominantColor, 0.35f), RoundedCornerShape(20.dp))
-                        .padding(18.dp)
-                ) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = stringResource(R.string.player_lyrics_preview),
-                                style = Typography.titleMedium.copy(
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold
-                                ),
-                                color = colors.textPrimary
-                            )
-
-                            IconButton(
-                                onClick = { showTranslationInPreview = !showTranslationInPreview },
-                                modifier = Modifier.size(34.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Translate,
-                                    contentDescription = "Toggle Translation",
-                                    tint = if (showTranslationInPreview) colors.textPrimary else colors.textMuted,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        val lines = currentLyrics!!.lines
-                        val activeIdx = currentLyrics!!.getCurrentLineIndex(currentPositionMs)
-                        val previewStart = if (activeIdx >= 0) (activeIdx - 1).coerceAtLeast(0) else 0
-                        val previewLines = lines.drop(previewStart).take(4)
-
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            previewLines.forEachIndexed { idx, line ->
-                                val isCurLine = (previewStart + idx) == activeIdx
-                                Column(modifier = Modifier.fillMaxWidth()) {
-                                    Text(
-                                        text = line.text,
-                                        style = Typography.bodyLarge.copy(
-                                            fontSize = if (isCurLine) 17.sp else 15.sp,
-                                            fontWeight = if (isCurLine) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                            lineHeight = 22.sp
-                                        ),
-                                        color = if (isCurLine) colors.textPrimary else colors.textSecondary.copy(alpha = 0.5f)
-                                    )
-                                    if (showTranslationInPreview && !line.translation.isNullOrBlank()) {
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        Text(
-                                            text = line.translation!!,
-                                            style = Typography.bodySmall.copy(
-                                                fontSize = if (isCurLine) 13.sp else 12.sp,
-                                                fontWeight = FontWeight.Normal,
-                                                lineHeight = 16.sp
-                                            ),
-                                            color = if (isCurLine) colors.textSecondary else colors.textSecondary.copy(alpha = 0.4f)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(colors.textPrimary)
-                                .clickable { showFullScreenLyrics = true }
-                                .padding(horizontal = 18.dp, vertical = 9.dp)
-                        ) {
-                            Text(
-                                text = stringResource(R.string.player_show_lyrics),
-                                style = Typography.labelMedium.copy(
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold
-                                ),
-                                color = colors.background
-                            )
-                        }
-                    }
-                }
+                LyricsPreviewCard(
+                    lyricsData = currentLyrics!!,
+                    viewModel = viewModel,
+                    dominantColor = dominantColor,
+                    showTranslationInPreview = showTranslationInPreview,
+                    onToggleTranslation = { showTranslationInPreview = !showTranslationInPreview },
+                    onExpandLyrics = { showFullScreenLyrics = true }
+                )
                 Spacer(modifier = Modifier.height(36.dp))
             } else {
                 Spacer(modifier = Modifier.height(36.dp))
@@ -727,6 +610,182 @@ fun FullPlayerSheet(
         SettingsDialog(
             onDismiss = { showSettingsDialog = false }
         )
+    }
+}
+
+@Composable
+private fun LiveLyricSnippet(
+    lyricsData: LyricsData?,
+    viewModel: MusicViewModel,
+    onClick: () -> Unit
+) {
+    val colors = KuroAppTheme.colors
+    val currentPositionMs by viewModel.playbackPosition.collectAsState()
+
+    val activeLineText: String by remember(lyricsData) {
+        derivedStateOf {
+            if (lyricsData != null && lyricsData.lines.isNotEmpty()) {
+                val idx = lyricsData.getCurrentLineIndex(currentPositionMs)
+                if (idx in lyricsData.lines.indices) {
+                    val line = lyricsData.lines[idx]
+                    val trans = line.translation
+                    if (!trans.isNullOrBlank()) trans else line.text
+                } else ""
+            } else ""
+        }
+    }
+
+    if (activeLineText.isNotBlank()) {
+        AnimatedContent(
+            targetState = activeLineText,
+            transitionSpec = {
+                (slideInVertically(animationSpec = tween(320, easing = FastOutSlowInEasing)) { height -> height / 2 } + fadeIn(tween(260)))
+                    .togetherWith(
+                        slideOutVertically(animationSpec = tween(300, easing = FastOutSlowInEasing)) { height -> -height / 2 } + fadeOut(tween(220))
+                    )
+            },
+            label = "live_lyric_snippet",
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .clickable(onClick = onClick)
+        ) { snippet ->
+            Text(
+                text = snippet,
+                style = Typography.titleMedium.copy(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = 21.sp
+                ),
+                color = colors.textPrimary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+    } else {
+        Spacer(modifier = Modifier.height(6.dp))
+    }
+}
+
+@Composable
+private fun LyricsPreviewCard(
+    lyricsData: LyricsData,
+    viewModel: MusicViewModel,
+    dominantColor: Color,
+    showTranslationInPreview: Boolean,
+    onToggleTranslation: () -> Unit,
+    onExpandLyrics: () -> Unit
+) {
+    val colors = KuroAppTheme.colors
+    val currentPositionMs by viewModel.playbackPosition.collectAsState()
+    val activeIdx by remember(lyricsData) {
+        derivedStateOf {
+            lyricsData.getCurrentLineIndex(currentPositionMs)
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        androidx.compose.ui.graphics.lerp(colors.card, dominantColor, if (colors.isDark) 0.28f else 0.16f),
+                        colors.card
+                    )
+                )
+            )
+            .border(1.dp, androidx.compose.ui.graphics.lerp(colors.border, dominantColor, 0.35f), RoundedCornerShape(20.dp))
+            .padding(18.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.player_lyrics_preview),
+                    style = Typography.titleMedium.copy(
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = colors.textPrimary
+                )
+
+                IconButton(
+                    onClick = onToggleTranslation,
+                    modifier = Modifier.size(34.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Translate,
+                        contentDescription = "Toggle Translation",
+                        tint = if (showTranslationInPreview) colors.textPrimary else colors.textMuted,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            val lines = lyricsData.lines
+            val previewStart = if (activeIdx >= 0) (activeIdx - 1).coerceAtLeast(0) else 0
+            val previewLines = lines.drop(previewStart).take(4)
+
+            Column(
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                previewLines.forEachIndexed { idx, line ->
+                    val isCurLine = (previewStart + idx) == activeIdx
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = line.text,
+                            style = Typography.bodyLarge.copy(
+                                fontSize = if (isCurLine) 17.sp else 15.sp,
+                                fontWeight = if (isCurLine) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                lineHeight = 22.sp
+                            ),
+                            color = if (isCurLine) colors.textPrimary else colors.textSecondary.copy(alpha = 0.5f)
+                        )
+                        if (showTranslationInPreview && !line.translation.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = line.translation!!,
+                                style = Typography.bodySmall.copy(
+                                    fontSize = if (isCurLine) 13.sp else 12.sp,
+                                    fontWeight = FontWeight.Normal,
+                                    lineHeight = 16.sp
+                                ),
+                                color = if (isCurLine) colors.textSecondary else colors.textSecondary.copy(alpha = 0.4f)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(colors.textPrimary)
+                    .clickable(onClick = onExpandLyrics)
+                    .padding(horizontal = 18.dp, vertical = 9.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.player_show_lyrics),
+                    style = Typography.labelMedium.copy(
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = colors.background
+                )
+            }
+        }
     }
 }
 

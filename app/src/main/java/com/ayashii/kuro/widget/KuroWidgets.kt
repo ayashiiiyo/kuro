@@ -22,6 +22,7 @@ import coil.request.SuccessResult
 import com.ayashii.kuro.MainActivity
 import com.ayashii.kuro.R
 import com.ayashii.kuro.data.model.Track
+import com.ayashii.kuro.data.remote.MusicRepository
 import com.ayashii.kuro.service.PlaybackService
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.CoroutineScope
@@ -39,7 +40,7 @@ private const val KEY_POSITION = "position"
 private const val KEY_DURATION = "duration"
 
 private object WidgetRenderer {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     @Volatile private var artworkLoadedFor: String? = null
     @Volatile private var artworkLoadInProgressFor: String? = null
     @Volatile private var cachedArtworkBitmap: Bitmap? = null
@@ -271,6 +272,7 @@ class KuroWidgetActionReceiver : android.content.BroadcastReceiver() {
         val array = try { org.json.JSONArray(prefs.getString("fav_list", "[]")) } catch (_: Exception) { org.json.JSONArray() }
         val id = controller.currentMediaItem?.mediaId ?: return
         val match = (0 until array.length()).firstOrNull { array.optJSONObject(it)?.optString("id") == id }
+        val isNowLiked = match == null
         if (match != null) {
             val next = org.json.JSONArray()
             for (index in 0 until array.length()) if (index != match) next.put(array.getJSONObject(index))
@@ -288,6 +290,9 @@ class KuroWidgetActionReceiver : android.content.BroadcastReceiver() {
             prefs.edit().putString("fav_list", array.toString()).apply()
         }
         context.sendBroadcast(Intent(WIDGET_FAVORITES_CHANGED).setPackage(context.packageName))
+        WidgetRenderer.scope.launch(Dispatchers.IO) {
+            MusicRepository.getInstance().setTrackLikeStatus(id, isLiked = isNowLiked)
+        }
     }
 }
 

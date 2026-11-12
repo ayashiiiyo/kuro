@@ -10,12 +10,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.security.MessageDigest
-import java.util.concurrent.TimeUnit
 
 data class UserAccount(
     val name: String,
@@ -34,7 +32,9 @@ class AuthManager private constructor(private val context: Context) {
     val authState: StateFlow<UserAccount?> = _authState.asStateFlow()
 
     private fun loadStoredAccount(): UserAccount? {
-        val cookie = prefs.getString(KEY_COOKIE, null) ?: return null
+        val rawCookie = prefs.getString(KEY_COOKIE, null) ?: return null
+        val cookie = sanitizeCookieHeader(rawCookie)
+        if (cookie.isBlank()) return null
         var name = prefs.getString(KEY_NAME, "YouTube User") ?: "YouTube User"
         var email = prefs.getString(KEY_EMAIL, "") ?: ""
         var handle = prefs.getString(KEY_HANDLE, "") ?: ""
@@ -51,6 +51,10 @@ class AuthManager private constructor(private val context: Context) {
         }
 
         return UserAccount(name, email, handle, avatar, cookie)
+    }
+
+    private fun sanitizeCookieHeader(raw: String): String {
+        return raw.replace("\r", "").replace("\n", "").trim()
     }
 
     private fun parseRawJsonRuns(jsonStr: String): String {
@@ -96,6 +100,8 @@ class AuthManager private constructor(private val context: Context) {
     }
 
     fun handleLoginSuccess(cookie: String, initialName: String = "", initialAvatar: String = "") {
+        val cleanCookie = sanitizeCookieHeader(cookie)
+        if (cleanCookie.isBlank()) return
         val savedName = if (initialName.isNotBlank()) initialName else (prefs.getString(KEY_NAME, "YouTube User") ?: "YouTube User")
         val savedAvatar = if (initialAvatar.isNotBlank()) initialAvatar else (prefs.getString(KEY_AVATAR, "") ?: "")
 
@@ -104,10 +110,10 @@ class AuthManager private constructor(private val context: Context) {
             email = prefs.getString(KEY_EMAIL, "") ?: "",
             channelHandle = prefs.getString(KEY_HANDLE, "") ?: "",
             avatarUrl = savedAvatar,
-            cookie = cookie
+            cookie = cleanCookie
         )
         prefs.edit()
-            .putString(KEY_COOKIE, cookie)
+            .putString(KEY_COOKIE, cleanCookie)
             .apply {
                 if (initialName.isNotBlank()) putString(KEY_NAME, initialName)
                 if (initialAvatar.isNotBlank()) putString(KEY_AVATAR, initialAvatar)
@@ -117,7 +123,7 @@ class AuthManager private constructor(private val context: Context) {
         _authState.value = initialAccount
 
         CoroutineScope(Dispatchers.IO).launch {
-            fetchAccountInfo(cookie)
+            fetchAccountInfo(cleanCookie)
         }
     }
 
@@ -153,7 +159,7 @@ class AuthManager private constructor(private val context: Context) {
             val origin = if (isMusic) "https://music.youtube.com" else "https://www.youtube.com"
             val clientName = if (isMusic) "WEB_REMIX" else "WEB"
             val clientNum = if (isMusic) "67" else "1"
-            val clientVer = if (isMusic) "1.20240101.01.00" else "2.20240101.01.00"
+            val clientVer = if (isMusic) "1.20241028.01.00" else "2.20241028.01.00"
             val sapisidHash = getSapisidHash(origin)
 
             val jsonBody = JSONObject().apply {
@@ -170,63 +176,68 @@ class AuthManager private constructor(private val context: Context) {
             val reqBuilder = Request.Builder()
                 .url("$origin/youtubei/v1/account/account_menu")
                 .header("Content-Type", "application/json")
-                .header("Cookie", cookie)
+                .header("Cookie", sanitizeCookieHeader(cookie))
                 .header("Origin", origin)
                 .header("Referer", "$origin/")
                 .header("X-Origin", origin)
+                .header("X-Goog-AuthUser", "0")
                 .header("X-YouTube-Client-Name", clientNum)
                 .header("X-YouTube-Client-Version", clientVer)
-                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
                 .post(jsonBody.toString().toRequestBody("application/json".toMediaType()))
 
             if (sapisidHash != null) {
                 reqBuilder.header("Authorization", sapisidHash)
             }
 
-            val resp = httpClient.newCall(reqBuilder.build()).execute()
-            val respString = resp.body?.string().orEmpty()
-            if (resp.isSuccessful && respString.isNotBlank()) {
-                val json = JSONObject(respString)
-                val actions = json.optJSONArray("actions")
-                val openPopup = actions?.optJSONObject(0)?.optJSONObject("openPopupAction")
-                val multiPage = openPopup?.optJSONObject("popup")?.optJSONObject("multiPageMenuRenderer")
-                val activeAccount = multiPage?.optJSONObject("header")?.optJSONObject("activeAccountHeaderRenderer")
+            httpClient.newCall(reqBuilder.build()).execute().use { resp ->
+                val respString = resp.body?.string().orEmpty()
+                if (resp.isSuccessful && respString.isNotBlank()) {
+                    val json = JSONObject(respString)
+                    val actions = json.optJSONArray("actions")
+                    val openPopup = actions?.optJSONObject(0)?.optJSONObject("openPopupAction")
+                    val multiPage = openPopup?.optJSONObject("popup")?.optJSONObject("multiPageMenuRenderer")
+                    val activeAccount = multiPage?.optJSONObject("header")?.optJSONObject("activeAccountHeaderRenderer")
 
-                if (activeAccount != null) {
-                    val nameObj = activeAccount.opt("accountName")
-                    val name = when (nameObj) {
-                        is JSONObject -> nameObj.optJSONArray("runs")?.optJSONObject(0)?.optString("text", "")
-                            ?: nameObj.optString("simpleText", "")
-                        is String -> nameObj
-                        else -> ""
-                    }
+                    if (activeAccount != null) {
+                        val nameObj = activeAccount.opt("accountName")
+                        val name = when (nameObj) {
+                            is JSONObject -> nameObj.optJSONArray("runs")?.optJSONObject(0)?.optString("text", "")
+                                ?: nameObj.optString("simpleText", "")
+                            is String -> nameObj
+                            else -> ""
+                        }
 
-                    val emailObj = activeAccount.opt("email")
-                    val email = when (emailObj) {
-                        is JSONObject -> emailObj.optJSONArray("runs")?.optJSONObject(0)?.optString("text", "")
-                            ?: emailObj.optString("simpleText", "")
-                        is String -> emailObj
-                        else -> ""
-                    }
+                        val emailObj = activeAccount.opt("email")
+                        val email = when (emailObj) {
+                            is JSONObject -> emailObj.optJSONArray("runs")?.optJSONObject(0)?.optString("text", "")
+                                ?: emailObj.optString("simpleText", "")
+                            is String -> emailObj
+                            else -> ""
+                        }
 
-                    val handleObj = activeAccount.opt("channelHandle")
-                    val handle = when (handleObj) {
-                        is JSONObject -> handleObj.optJSONArray("runs")?.optJSONObject(0)?.optString("text", "")
-                            ?: handleObj.optString("simpleText", "")
-                        is String -> handleObj
-                        else -> ""
-                    }
+                        val handleObj = activeAccount.opt("channelHandle")
+                        val handle = when (handleObj) {
+                            is JSONObject -> handleObj.optJSONArray("runs")?.optJSONObject(0)?.optString("text", "")
+                                ?: handleObj.optString("simpleText", "")
+                            is String -> handleObj
+                            else -> ""
+                        }
 
-                    var avatarUrl = ""
-                    val accountPhoto = activeAccount.optJSONObject("accountPhoto")
-                    val thumbs = accountPhoto?.optJSONArray("thumbnails")
-                    if (thumbs != null && thumbs.length() > 0) {
-                        avatarUrl = thumbs.optJSONObject(thumbs.length() - 1)?.optString("url") ?: ""
-                    }
+                        var avatarUrl = ""
+                        val accountPhoto = activeAccount.optJSONObject("accountPhoto")
+                        val thumbs = accountPhoto?.optJSONArray("thumbnails")
+                        if (thumbs != null && thumbs.length() > 0) {
+                            avatarUrl = thumbs.optJSONObject(thumbs.length() - 1)?.optString("url") ?: ""
+                        }
 
-                    if (name.isNotBlank() || avatarUrl.isNotBlank()) {
-                        updateProfile(name, email, avatarUrl)
-                        return true
+                        if (name.isNotBlank() || avatarUrl.isNotBlank()) {
+                            if (handle.isNotBlank()) {
+                                prefs.edit().putString(KEY_HANDLE, handle).apply()
+                            }
+                            updateProfile(name, email, avatarUrl)
+                            return true
+                        }
                     }
                 }
             }

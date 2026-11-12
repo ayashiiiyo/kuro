@@ -41,6 +41,7 @@ object PlayerQueueManager : IPlayerQueueManager {
     private val queue = ArrayList<Track>()
     private val playbackHistory = ArrayDeque<Int>()
     private val shuffleDeck = ArrayList<Int>()
+    private var lastAutoAdvanceTimestamp = 0L
 
     private val _queueState = MutableStateFlow<List<Track>>(emptyList())
     override val queueState: StateFlow<List<Track>> = _queueState.asStateFlow()
@@ -248,6 +249,14 @@ object PlayerQueueManager : IPlayerQueueManager {
     override fun getNextTrack(userInitiated: Boolean, isErrorRecovery: Boolean): Track? {
         synchronized(lock) {
             if (queue.isEmpty()) return null
+
+            if (!userInitiated) {
+                val now = System.currentTimeMillis()
+                if (now - lastAutoAdvanceTimestamp < 900L) {
+                    return _currentTrack.value ?: queue.getOrNull(_currentIndex.value)
+                }
+                lastAutoAdvanceTimestamp = now
+            }
 
             if (_repeatMode.value == Player.REPEAT_MODE_ONE && !userInitiated && !isErrorRecovery) {
                 return _currentTrack.value ?: queue.getOrNull(_currentIndex.value)

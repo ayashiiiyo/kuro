@@ -45,6 +45,7 @@ class PlaybackService : MediaSessionService() {
     private var player: Player? = null
     private var mediaSession: MediaSession? = null
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val repository = MusicRepository.getInstance()
 
     @Volatile
     private var restoringSession = false
@@ -108,7 +109,7 @@ class PlaybackService : MediaSessionService() {
                 val current = PlayerQueueManager.currentTrack.value
                 if (current != null) {
                     try {
-                        MusicRepository().evictStreamUrl(current.url)
+                        repository.evictStreamUrl(current.url)
                     } catch (_: Throwable) {}
                 }
                 val failureCount = PlayerQueueManager.recordPlaybackFailure()
@@ -177,7 +178,7 @@ class PlaybackService : MediaSessionService() {
                     builder.add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
                 } else {
                     builder.remove(Player.COMMAND_SEEK_TO_PREVIOUS)
-                    builder.remove(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+                    builder.remove(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
                 }
                 return builder.build()
             }
@@ -258,7 +259,6 @@ class PlaybackService : MediaSessionService() {
         serviceScope.launch {
             try {
                 val quality = SettingsManager.getInstance().audioQuality.value
-                val repository = MusicRepository()
                 val resolved = withContext(Dispatchers.IO) {
                     runCatching { repository.getAudioStream(track.url, quality) }.getOrNull()
                 }
@@ -274,14 +274,9 @@ class PlaybackService : MediaSessionService() {
                     return@launch
                 }
 
-                val bestThumbnail = withContext(Dispatchers.IO) {
-                    runCatching { repository.resolveBestThumbnail(track) }.getOrDefault(track.thumbnailUrl)
-                }
-
                 val updatedTrack = track.copy(
                     streamUrl = resolved.url,
-                    mimeType = resolved.mimeType,
-                    thumbnailUrl = bestThumbnail
+                    mimeType = resolved.mimeType
                 )
                 PlayerQueueManager.updateCurrentTrack(updatedTrack)
                 PlayerQueueManager.recordPlaybackSuccess()
@@ -308,6 +303,13 @@ class PlaybackService : MediaSessionService() {
                     setMediaItem(builder.build())
                     prepare()
                     playWhenReady = true
+                }
+
+                launch(Dispatchers.IO) {
+                    val bestThumbnail = runCatching { repository.resolveBestThumbnail(track) }.getOrDefault(track.thumbnailUrl)
+                    if (bestThumbnail != track.thumbnailUrl && PlayerQueueManager.currentTrack.value?.id == track.id) {
+                        PlayerQueueManager.updateCurrentTrack(updatedTrack.copy(thumbnailUrl = bestThumbnail))
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error playing track: ${e.message}", e)
@@ -339,7 +341,7 @@ class PlaybackService : MediaSessionService() {
                 if (track.url.isBlank()) return@launch
                 val quality = SettingsManager.getInstance().audioQuality.value
                 val resolved = withContext(Dispatchers.IO) {
-                    runCatching { MusicRepository().getAudioStream(track.url, quality) }.getOrNull()
+                    runCatching { repository.getAudioStream(track.url, quality) }.getOrNull()
                 } ?: return@launch
 
                 val metadata = MediaMetadata.Builder()

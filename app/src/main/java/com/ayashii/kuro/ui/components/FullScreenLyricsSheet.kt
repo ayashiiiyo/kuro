@@ -1,13 +1,10 @@
 package com.ayashii.kuro.ui.components
 
 import android.content.Intent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -55,7 +52,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -69,7 +65,6 @@ import com.ayashii.kuro.R
 import com.ayashii.kuro.data.lyrics.LyricsData
 import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.ui.theme.KuroAppTheme
-import com.ayashii.kuro.ui.theme.PureBlack
 import com.ayashii.kuro.ui.theme.Typography
 import com.ayashii.kuro.ui.theme.rememberDynamicDominantColor
 import com.ayashii.kuro.viewmodel.MusicViewModel
@@ -88,18 +83,21 @@ fun FullScreenLyricsSheet(
     val context = LocalContext.current
     val colors = KuroAppTheme.colors
     val dominantColor = rememberDynamicDominantColor(track.thumbnailUrlForDisplay(768))
-    val lyricsGradient = remember(dominantColor) {
-        val topTint = androidx.compose.ui.graphics.lerp(PureBlack, dominantColor, 0.45f)
-        val midTint = androidx.compose.ui.graphics.lerp(PureBlack, dominantColor, 0.20f)
+    val baseBg = colors.background
+    val lyricsGradient = remember(dominantColor, baseBg, colors.isDark) {
+        val topWeight = if (colors.isDark) 0.45f else 0.24f
+        val midWeight = if (colors.isDark) 0.20f else 0.10f
+        val topTint = androidx.compose.ui.graphics.lerp(baseBg, dominantColor, topWeight)
+        val midTint = androidx.compose.ui.graphics.lerp(baseBg, dominantColor, midWeight)
         Brush.verticalGradient(
             0.0f to topTint,
             0.35f to midTint,
-            0.70f to PureBlack,
-            1.0f to PureBlack
+            0.70f to baseBg,
+            1.0f to baseBg
         )
     }
+
     val currentPositionMs by viewModel.playbackPosition.collectAsState()
-    val durationMs by viewModel.duration.collectAsState()
 
     var showTranslation by remember { mutableStateOf(true) }
     val listState = rememberLazyListState()
@@ -114,7 +112,7 @@ fun FullScreenLyricsSheet(
         }
     }
 
-    val activeIndex by remember(lyricsData, currentPositionMs) {
+    val activeIndex by remember(lyricsData) {
         derivedStateOf {
             lyricsData?.getCurrentLineIndex(currentPositionMs) ?: -1
         }
@@ -130,7 +128,7 @@ fun FullScreenLyricsSheet(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(PureBlack)
+            .background(baseBg)
             .background(lyricsGradient)
     ) {
         Column(
@@ -344,94 +342,115 @@ fun FullScreenLyricsSheet(
                 }
             }
 
-            val effectiveDuration = if (durationMs > 0) durationMs else (track.durationSeconds * 1000L).coerceAtLeast(1L)
-            val progress = (currentPositionMs.toFloat() / effectiveDuration.toFloat()).coerceIn(0f, 1f)
+            LyricsBottomControls(
+                track = track,
+                viewModel = viewModel,
+                isPlaying = isPlaying,
+                isLoadingTrack = isLoadingTrack,
+                onPlayPauseClick = onPlayPauseClick
+            )
+        }
+    }
+}
 
-            var isDragging by remember { mutableStateOf(false) }
-            var dragProgress by remember { mutableFloatStateOf(0f) }
+@Composable
+private fun LyricsBottomControls(
+    track: Track,
+    viewModel: MusicViewModel,
+    isPlaying: Boolean,
+    isLoadingTrack: Boolean,
+    onPlayPauseClick: () -> Unit
+) {
+    val colors = KuroAppTheme.colors
+    val currentPositionMs by viewModel.playbackPosition.collectAsState()
+    val durationMs by viewModel.duration.collectAsState()
 
-            val displayProgress = if (isDragging) dragProgress else progress
-            val displayCurrentMs = if (isDragging) (dragProgress * effectiveDuration).toLong() else currentPositionMs
+    val effectiveDuration = if (durationMs > 0) durationMs else (track.durationSeconds * 1000L).coerceAtLeast(1L)
+    val progress = (currentPositionMs.toFloat() / effectiveDuration.toFloat()).coerceIn(0f, 1f)
 
-            Column(
+    var isDragging by remember { mutableStateOf(false) }
+    var dragProgress by remember { mutableFloatStateOf(0f) }
+
+    val displayProgress = if (isDragging) dragProgress else progress
+    val displayCurrentMs = if (isDragging) (dragProgress * effectiveDuration).toLong() else currentPositionMs
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(bottom = 20.dp)
+    ) {
+        Slider(
+            value = displayProgress,
+            onValueChange = { newProgress ->
+                isDragging = true
+                dragProgress = newProgress
+            },
+            onValueChangeFinished = {
+                viewModel.seekTo((dragProgress * effectiveDuration).toLong())
+                isDragging = false
+            },
+            colors = SliderDefaults.colors(
+                thumbColor = colors.textPrimary,
+                activeTrackColor = colors.textPrimary,
+                inactiveTrackColor = colors.border
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = formatMs(displayCurrentMs),
+                style = Typography.bodySmall,
+                color = colors.textMuted
+            )
+            Text(
+                text = formatMs(effectiveDuration),
+                style = Typography.bodySmall,
+                color = colors.textMuted
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(bottom = 20.dp)
+                    .size(64.dp)
+                    .clip(CircleShape)
+                    .background(colors.textPrimary),
+                contentAlignment = Alignment.Center
             ) {
-                Slider(
-                    value = displayProgress,
-                    onValueChange = { newProgress ->
-                        isDragging = true
-                        dragProgress = newProgress
-                    },
-                    onValueChangeFinished = {
-                        viewModel.seekTo((dragProgress * effectiveDuration).toLong())
-                        isDragging = false
-                    },
-                    colors = SliderDefaults.colors(
-                        thumbColor = colors.textPrimary,
-                        activeTrackColor = colors.textPrimary,
-                        inactiveTrackColor = colors.border
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = formatMs(displayCurrentMs),
-                        style = Typography.bodySmall,
-                        color = colors.textMuted
+                if (isLoadingTrack) {
+                    CircularProgressIndicator(
+                        color = colors.background,
+                        strokeWidth = 3.dp,
+                        modifier = Modifier.size(28.dp)
                     )
-                    Text(
-                        text = formatMs(effectiveDuration),
-                        style = Typography.bodySmall,
-                        color = colors.textMuted
+                } else {
+                    val playScale by animateFloatAsState(
+                        targetValue = if (isPlaying) 0.94f else 1f,
+                        animationSpec = tween(durationMillis = 140),
+                        label = "lyrics_play_scale"
                     )
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Box(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(64.dp)
-                            .clip(CircleShape)
-                            .background(colors.textPrimary),
-                        contentAlignment = Alignment.Center
+                    IconButton(
+                        onClick = onPlayPauseClick,
+                        modifier = Modifier.size(64.dp)
                     ) {
-                        if (isLoadingTrack) {
-                            CircularProgressIndicator(
-                                color = colors.background,
-                                strokeWidth = 3.dp,
-                                modifier = Modifier.size(28.dp)
-                            )
-                        } else {
-                            val playScale by animateFloatAsState(
-                                targetValue = if (isPlaying) 0.94f else 1f,
-                                animationSpec = tween(durationMillis = 140),
-                                label = "lyrics_play_scale"
-                            )
-                            IconButton(
-                                onClick = onPlayPauseClick,
-                                modifier = Modifier.size(64.dp)
-                            ) {
-                                Icon(
-                                    painter = if (isPlaying) painterResource(R.drawable.ic_kuro_pause) else painterResource(R.drawable.ic_kuro_play),
-                                    contentDescription = if (isPlaying) "Pause" else "Play",
-                                    tint = colors.background,
-                                    modifier = Modifier.size(30.dp).graphicsLayer { scaleX = playScale; scaleY = playScale }
-                                )
-                            }
-                        }
+                        Icon(
+                            painter = if (isPlaying) painterResource(R.drawable.ic_kuro_pause) else painterResource(R.drawable.ic_kuro_play),
+                            contentDescription = if (isPlaying) "Pause" else "Play",
+                            tint = colors.background,
+                            modifier = Modifier.size(30.dp).graphicsLayer { scaleX = playScale; scaleY = playScale }
+                        )
                     }
                 }
             }

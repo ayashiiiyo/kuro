@@ -8,6 +8,9 @@ import org.json.JSONObject
 object KuroNativeCore {
 
     private const val TAG = "KuroNativeCore"
+    private val CLEAN_NOISE_REGEX = Regex("""(?i)\s*[\(\[](?:official\s*(?:music\s*)?video|official\s*audio|music\s*video|lyric\s*video|lyrics|audio|visualizer|remastered|remaster|4k|hd|hq|mv|clip\s*officiel|video\s*oficial)[\)\]]""")
+    private val CLEAN_PIPE_REGEX = Regex("""(?i)\s*\|\s*(?:official\s*(?:music\s*)?video|official\s*audio|visualizer).*""")
+    private val LRC_TAG_REGEX = Regex("""\[(\d{1,2}):(\d{2}(?:\.\d{1,3})?)\]""")
 
     val isLoaded: Boolean = try {
         System.loadLibrary("kuro_core")
@@ -173,8 +176,8 @@ object KuroNativeCore {
 
     private fun fallbackCleanTitle(raw: String): String {
         return raw
-            .replace(Regex("""(?i)\s*[\(\[](?:official\s*(?:music\s*)?video|official\s*audio|music\s*video|lyric\s*video|lyrics|audio|visualizer|remastered|remaster|4k|hd|hq|mv|clip\s*officiel|video\s*oficial)[\)\]]"""), "")
-            .replace(Regex("""(?i)\s*\|\s*(?:official\s*(?:music\s*)?video|official\s*audio|visualizer).*"""), "")
+            .replace(CLEAN_NOISE_REGEX, "")
+            .replace(CLEAN_PIPE_REGEX, "")
             .trim()
     }
 
@@ -190,6 +193,24 @@ object KuroNativeCore {
             if (track.artist.lowercase() in topSet) s += 5
             s
         }
+    }
+
+    private fun isJunkLyricLine(text: String): Boolean {
+        val t = text.trim()
+        if (t.isEmpty()) return true
+        val lower = t.lowercase()
+        if (lower.startsWith("——") || lower.startsWith("···")) return true
+        if (lower.contains("纯音乐") || lower.contains("translation provided") || lower.contains("版权所有")) return true
+        return lower.startsWith("written by") ||
+            lower.startsWith("produced by") ||
+            lower.startsWith("composed by") ||
+            lower.startsWith("lyrics by") ||
+            lower.startsWith("作词") ||
+            lower.startsWith("作曲") ||
+            lower.startsWith("编曲") ||
+            lower.startsWith("词曲") ||
+            lower.startsWith("和声") ||
+            lower.startsWith("混音")
     }
 
     fun parseLiriqo(
@@ -290,42 +311,45 @@ object KuroNativeCore {
             resultObj.put("provider", chosen.optString("provider", "liriqo"))
             resultObj.put("is_synced", true)
 
-            val linesArr = JSONArray()
+            val parsedItems = mutableListOf<JSONObject>()
             if (timed != null && timed.length() > 0) {
                 for (i in 0 until timed.length()) {
                     val line = timed.optJSONObject(i) ?: continue
                     val text = line.optString("text", "").trim()
                     val start = line.optLong("start", -1L)
                     val end = line.optLong("end", -1L)
-                    if (text.isEmpty() || start < 0 || end <= start) continue
+                    if (text.isEmpty() || isJunkLyricLine(text) || start < 0 || end <= start) continue
                     if (durationMs > 0 && start > durationMs + 10000) continue
 
                     val item = JSONObject()
                     item.put("time_ms", start)
                     item.put("text", text)
                     item.put("end_time_ms", end)
-                    linesArr.put(item)
+                    parsedItems.add(item)
                 }
             } else {
                 val lrc = chosen.optString("lrc", "")
                 if (lrc.isNotBlank()) {
-                    val tagRegex = Regex("""\[(\d{1,2}):(\d{2}(?:\.\d{1,3})?)\]""")
                     for (rawLine in lrc.lines()) {
                         val trimmed = rawLine.trim()
-                        val match = tagRegex.find(trimmed) ?: continue
+                        val match = LRC_TAG_REGEX.find(trimmed) ?: continue
                         val min = match.groupValues[1].toLongOrNull() ?: continue
                         val secFloat = match.groupValues[2].toDoubleOrNull() ?: continue
                         val timeMs = (min * 60_000L + (secFloat * 1000L).toLong())
                         val text = trimmed.substring(match.range.last + 1).trim()
-                        if (text.isEmpty()) continue
+                        if (text.isEmpty() || isJunkLyricLine(text)) continue
                         if (durationMs > 0 && timeMs > durationMs + 10000) continue
                         val item = JSONObject()
                         item.put("time_ms", timeMs)
                         item.put("text", text)
-                        linesArr.put(item)
+                        parsedItems.add(item)
                     }
                 }
             }
+
+            parsedItems.sortBy { it.optLong("time_ms", 0L) }
+            val linesArr = JSONArray()
+            parsedItems.forEach { linesArr.put(it) }
 
             if (linesArr.length() == 0) {
                 val plain = chosen.optString("plain", "")
@@ -333,7 +357,7 @@ object KuroNativeCore {
                     resultObj.put("is_synced", false)
                     for (line in plain.lines()) {
                         val text = line.trim()
-                        if (text.isEmpty()) continue
+                        if (text.isEmpty() || isJunkLyricLine(text)) continue
                         val item = JSONObject()
                         item.put("time_ms", 0L)
                         item.put("text", text)

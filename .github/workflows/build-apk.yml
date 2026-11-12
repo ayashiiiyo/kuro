@@ -86,30 +86,25 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.8.4 — LiriQo Rust Multi-Provider Lyrics Engine & Smooth Lyrics UI Animation
+          ## Kuro v3.8.5 — Comprehensive UI/UX Polish, Lyrics Cleanup & Player Stability
 
-          - **Smooth Lyrics UI Animation & Elimination of Flickering**:
-            - Repaired lyrics animation regression: restored smooth downward auto-scrolling with `FastOutSlowInEasing` and `animateScrollToItem`.
-            - Fixed line dimming/flickering bug ("redup cerah"): phrasing gaps (1–3s) between lines no longer deactivate the active line; line remains active until next line begins.
-            - Preserved true instrumental solo deactivation for extended interlude breaks (> 5000ms).
-            - Added user scroll gesture interaction tracking (`collectIsDraggedAsState`) to pause auto-scrolling smoothly during manual touch gestures.
-          - **LiriQo Rust Multi-Provider Lyrics Engine**:
-            - Ported core backend of LiriQo (`AlFarrizi-Studio/Liriqo`) to native Rust (`kuro-core/src/liriqo.rs`) with JNI bridge in `KuroNativeCore`.
-            - Direct studio-synchronized timestamps across 8 top-tier providers: Apple Music, Musixmatch, Unison, NetEase, KuGou Legato, QQ Portato, LRCLIB, and YouTube Music.
-            - Dynamic provider quality ranking prioritizing studio syllable/word synchronization.
-            - Integrated junk metadata and watermark filtering.
-            - Dual query fallback: primary query by video ID (`?v={videoId}`), fallback by song title, artist, and duration.
-          - **Disk Cache Upgrade**:
-            - Upgraded lyrics disk cache to `lyrics_cache_v7` with automatic purging of older cache versions (`v4`, `v5`, `v6`).
-            - Added `lyrics_cache_v7` support across Settings cache size calculation and cache clearing routines.
+          - **Lyrics Cleanup & Noise Filtering**:
+            - Added native junk line filtering to suppress noise (watermarks, copyright tags, production credits, pure music markers).
+            - Cached regex matchers and chronological sort order for parsed timed lyric items.
+          - **Player & Lyrics UI Refinements**:
+            - Enhanced insets and padding for full-screen lyrics and full player sheets.
+            - Spring animation transitions and responsive back handling.
+            - Widget layout adjustments for improved scaling.
+          - **Authentication & Media Stability**:
+            - Sanitized cookie headers on login and storage to prevent header injection or corruption.
+            - Enhanced error recovery and queue lifecycle management.
           - **Codebase Hygiene**:
-            - Enforced strict zero single-line `//` and `///` comments across the entire project.
-          - Published signed release and debug APKs.
+            - Strict zero single-line `//` and `///` comments across all source files.
           EOF
           gh release create "$RELEASE_TAG" \
             "${{ steps.apk.outputs.release_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (LiriQo Rust Engine & Smooth Lyrics Animation)" \
+            --title "Kuro $RELEASE_TAG (UI/UX Polish & Player Stability)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 
