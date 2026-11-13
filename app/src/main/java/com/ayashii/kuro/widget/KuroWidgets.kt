@@ -50,8 +50,7 @@ private object WidgetRenderer {
     @Volatile private var artworkLoadInProgressFor: String? = null
     @Volatile private var artworkJob: Job? = null
     @Volatile private var cachedArtworkBitmap: Bitmap? = null
-    @Volatile private var cachedCompactBackdrop: Bitmap? = null
-    @Volatile private var cachedSquareBackdrop: Bitmap? = null
+    @Volatile private var cachedAccentColor: Int = Color.parseColor("#1E1F24")
 
     fun update(context: Context) {
         try {
@@ -69,6 +68,10 @@ private object WidgetRenderer {
 
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val track = prefs.getString(KEY_TRACK, null)?.let(::decodeTrack)
+        if (track != null && artworkLoadedFor != track.id) {
+            cachedArtworkBitmap = null
+            cachedAccentColor = Color.parseColor("#1E1F24")
+        }
         compactIds.forEach { id ->
             render(context, manager, id, false, track, prefs.getBoolean(KEY_PLAYING, false), prefs.getLong(KEY_POSITION, 0), prefs.getLong(KEY_DURATION, 0))
         }
@@ -76,16 +79,29 @@ private object WidgetRenderer {
             render(context, manager, id, true, track, prefs.getBoolean(KEY_PLAYING, false), prefs.getLong(KEY_POSITION, 0), prefs.getLong(KEY_DURATION, 0))
         }
         track?.let {
-            if (artworkLoadedFor != it.id) {
-                cachedArtworkBitmap = null
-                cachedCompactBackdrop = null
-                cachedSquareBackdrop = null
-            }
             if (artworkLoadedFor != it.id && artworkLoadInProgressFor != it.id) {
                 artworkLoadInProgressFor = it.id
                 loadArtwork(context, manager, compact, square, it)
             }
         }
+    }
+
+    private fun resolveWidgetDimensions(context: Context, manager: AppWidgetManager, id: Int, square: Boolean): Triple<Int, Int, Float> {
+        val options = try { manager.getAppWidgetOptions(id) } catch (_: Exception) { null }
+        val defaultW = if (square) 320 else 340
+        val defaultH = if (square) 156 else 92
+        val minW = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0)?.takeIf { it > 0 } ?: defaultW
+        val maxW = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH, 0)?.takeIf { it > 0 } ?: minW
+        val minH = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0)?.takeIf { it > 0 } ?: defaultH
+        val maxH = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0)?.takeIf { it > 0 } ?: minH
+        val widthDp = ((minW + maxW) / 2f).coerceIn(140f, 520f)
+        val heightDp = ((minH + maxH) / 2f).coerceIn(64f, 420f)
+        val rawDensity = context.resources.displayMetrics.density.coerceIn(1.5f, 3.0f)
+        val scale = rawDensity.coerceAtMost(2.25f)
+        val widthPx = (widthDp * scale).toInt().coerceAtLeast(220)
+        val heightPx = (heightDp * scale).toInt().coerceAtLeast(110)
+        val cornerRadiusPx = 24f * scale
+        return Triple(widthPx, heightPx, cornerRadiusPx)
     }
 
     private fun render(context: Context, manager: AppWidgetManager, id: Int, square: Boolean, track: Track?, playing: Boolean, position: Long, duration: Long) {
@@ -100,15 +116,17 @@ private object WidgetRenderer {
         views.setTextViewText(R.id.widget_title, title)
         views.setTextViewText(R.id.widget_artist, artist)
         val currentCached = cachedArtworkBitmap
+        val (wPx, hPx, radiusPx) = resolveWidgetDimensions(context, manager, id, square)
         if (currentCached != null && artworkLoadedFor == track?.id) {
+            views.setInt(R.id.widget_art, "setBackgroundResource", 0)
             views.setImageViewBitmap(R.id.widget_art, currentCached)
-            val backdrop = if (square) cachedSquareBackdrop else cachedCompactBackdrop
-            if (backdrop != null) {
-                views.setImageViewBitmap(R.id.widget_bg_art, backdrop)
-            }
+            val backdrop = renderGradientBackdrop(wPx, hPx, radiusPx, cachedAccentColor)
+            views.setImageViewBitmap(R.id.widget_bg_art, backdrop)
         } else {
+            views.setInt(R.id.widget_art, "setBackgroundResource", R.drawable.widget_art_background)
             views.setImageViewResource(R.id.widget_art, R.drawable.widget_art_background)
-            views.setImageViewBitmap(R.id.widget_bg_art, null)
+            val defaultBackdrop = renderGradientBackdrop(wPx, hPx, radiusPx, Color.parseColor("#18181D"))
+            views.setImageViewBitmap(R.id.widget_bg_art, defaultBackdrop)
         }
         views.setImageViewResource(R.id.widget_play, if (playing) R.drawable.ic_kuro_pause else R.drawable.ic_kuro_play)
         views.setContentDescription(R.id.widget_play, context.getString(R.string.widget_play_desc))
@@ -170,20 +188,19 @@ private object WidgetRenderer {
                 }
                 val rounded = roundedBitmap(bitmap)
                 val accentColor = extractWidgetAccentColor(bitmap)
-                val compactBg = renderGradientBackdrop(360, 96, accentColor)
-                val squareBg = renderGradientBackdrop(220, 220, accentColor)
                 cachedArtworkBitmap = rounded
-                cachedCompactBackdrop = compactBg
-                cachedSquareBackdrop = squareBg
+                cachedAccentColor = accentColor
                 artworkLoadedFor = track.id
                 val compactIds = manager.getAppWidgetIds(compact)
                 val squareIds = manager.getAppWidgetIds(square)
                 (compactIds + squareIds).forEach { id ->
                     if (context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_TRACK, null)?.let(::decodeTrack)?.id != track.id) return@forEach
                     val isSquare = id in squareIds
+                    val (wPx, hPx, radiusPx) = resolveWidgetDimensions(context, manager, id, isSquare)
                     val views = RemoteViews(context.packageName, if (isSquare) R.layout.widget_kuro_square else R.layout.widget_kuro_compact)
+                    views.setInt(R.id.widget_art, "setBackgroundResource", 0)
                     views.setImageViewBitmap(R.id.widget_art, rounded)
-                    views.setImageViewBitmap(R.id.widget_bg_art, if (isSquare) squareBg else compactBg)
+                    views.setImageViewBitmap(R.id.widget_bg_art, renderGradientBackdrop(wPx, hPx, radiusPx, accentColor))
                     manager.partiallyUpdateAppWidget(id, views)
                 }
                 if (artworkLoadInProgressFor == track.id) artworkLoadInProgressFor = null
@@ -205,51 +222,68 @@ private object WidgetRenderer {
         }
     }
 
-    private fun renderGradientBackdrop(width: Int, height: Int, accentRgb: Int): Bitmap {
+    private fun renderGradientBackdrop(width: Int, height: Int, cornerRadius: Float, accentRgb: Int): Bitmap {
         val output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(output)
-        val r = (Color.red(accentRgb) * 0.42f).toInt().coerceIn(10, 110)
-        val g = (Color.green(accentRgb) * 0.42f).toInt().coerceIn(10, 110)
-        val b = (Color.blue(accentRgb) * 0.42f).toInt().coerceIn(12, 120)
-        val startColor = Color.argb(242, r, g, b)
-        val endColor = Color.argb(248, 10, 10, 13)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        val r = (Color.red(accentRgb) * 0.44f).toInt().coerceIn(12, 115)
+        val g = (Color.green(accentRgb) * 0.44f).toInt().coerceIn(12, 115)
+        val b = (Color.blue(accentRgb) * 0.44f).toInt().coerceIn(14, 125)
+        val startColor = Color.argb(248, r, g, b)
+        val midColor = Color.argb(250, (r * 0.45f).toInt().coerceAtLeast(10), (g * 0.45f).toInt().coerceAtLeast(10), (b * 0.45f).toInt().coerceAtLeast(13))
+        val endColor = Color.argb(252, 10, 10, 13)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.DITHER_FLAG).apply {
             shader = LinearGradient(
                 0f,
                 0f,
                 width.toFloat(),
                 height.toFloat(),
-                startColor,
-                endColor,
+                intArrayOf(startColor, midColor, endColor),
+                floatArrayOf(0f, 0.55f, 1f),
                 Shader.TileMode.CLAMP
             )
         }
-        val radius = 34f
-        canvas.drawRoundRect(RectF(0f, 0f, width.toFloat(), height.toFloat()), radius, radius, paint)
+        val rect = RectF(0f, 0f, width.toFloat(), height.toFloat())
+        canvas.drawRoundRect(rect, cornerRadius, cornerRadius, paint)
+        val strokeWidthPx = 2.2f
+        val inset = strokeWidthPx * 0.5f
         val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
-            strokeWidth = 2f
-            color = Color.argb(55, (r + 90).coerceAtMost(255), (g + 90).coerceAtMost(255), (b + 90).coerceAtMost(255))
+            strokeWidth = strokeWidthPx
+            color = Color.argb(46, (r + 95).coerceAtMost(255), (g + 95).coerceAtMost(255), (b + 95).coerceAtMost(255))
         }
-        canvas.drawRoundRect(RectF(1f, 1f, width - 1f, height - 1f), radius, radius, strokePaint)
+        canvas.drawRoundRect(
+            RectF(inset, inset, width - inset, height - inset),
+            (cornerRadius - inset).coerceAtLeast(0f),
+            (cornerRadius - inset).coerceAtLeast(0f),
+            strokePaint
+        )
         return output
     }
 
     private fun roundedBitmap(source: Bitmap): Bitmap {
-        val output = Bitmap.createBitmap(160, 160, Bitmap.Config.ARGB_8888)
+        val size = 192
+        val radius = 38f
+        val output = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(output)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
         val shader = android.graphics.BitmapShader(source, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP)
-        val scale = maxOf(160f / source.width, 160f / source.height)
-        val dx = (160f - source.width * scale) * 0.5f
-        val dy = (160f - source.height * scale) * 0.5f
+        val scale = maxOf(size.toFloat() / source.width, size.toFloat() / source.height)
+        val dx = (size.toFloat() - source.width * scale) * 0.5f
+        val dy = (size.toFloat() - source.height * scale) * 0.5f
         val matrix = android.graphics.Matrix().apply {
             setScale(scale, scale)
             postTranslate(dx, dy)
         }
         shader.setLocalMatrix(matrix)
         paint.shader = shader
-        canvas.drawRoundRect(RectF(0f, 0f, 160f, 160f), 28f, 28f, paint)
+        val rect = RectF(0f, 0f, size.toFloat(), size.toFloat())
+        canvas.drawRoundRect(rect, radius, radius, paint)
+        val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 1.5f
+            color = Color.argb(38, 255, 255, 255)
+        }
+        canvas.drawRoundRect(RectF(0.75f, 0.75f, size - 0.75f, size - 0.75f), radius - 0.75f, radius - 0.75f, borderPaint)
         return output
     }
 }

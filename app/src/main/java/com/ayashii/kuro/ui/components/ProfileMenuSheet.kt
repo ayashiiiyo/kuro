@@ -33,6 +33,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.ayashii.kuro.R
+import com.ayashii.kuro.data.auth.AuthManager
 import com.ayashii.kuro.data.auth.UserAccount
 import com.ayashii.kuro.ui.theme.KuroAppTheme
 import com.ayashii.kuro.ui.theme.Typography
@@ -68,8 +70,15 @@ fun ProfileMenuSheet(
     val colors = KuroAppTheme.colors
     var showStatsDialog by remember { mutableStateOf(false) }
     var showRecentsDialog by remember { mutableStateOf(false) }
+    var avatarError by remember(account?.avatarUrl) { mutableStateOf(false) }
 
     val recentlyPlayed by viewModel.recentlyPlayed.collectAsState()
+
+    LaunchedEffect(account?.cookie) {
+        if (account != null && (account.avatarUrl.isBlank() || account.name.isBlank() || account.name == "YouTube User")) {
+            AuthManager.getInstance().refreshAccountInfoIfNeeded(force = true)
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -106,14 +115,17 @@ fun ProfileMenuSheet(
                             if (account == null) {
                                 onLoginClick()
                                 onDismiss()
+                            } else {
+                                AuthManager.getInstance().refreshAccountInfoIfNeeded(force = true)
                             }
                         },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (account?.avatarUrl != null && account.avatarUrl.isNotBlank()) {
+                    if (account?.avatarUrl != null && account.avatarUrl.isNotBlank() && !avatarError) {
                         AsyncImage(
                             model = account.avatarUrl,
                             contentDescription = account.name,
+                            onError = { avatarError = true },
                             modifier = Modifier
                                 .size(54.dp)
                                 .clip(CircleShape)
@@ -139,9 +151,23 @@ fun ProfileMenuSheet(
 
                     Spacer(modifier = Modifier.width(16.dp))
 
+                    val displayName = account?.name
+                        ?.takeIf { it.isNotBlank() && it != "YouTube User" }
+                        ?: account?.channelHandle?.removePrefix("@")?.takeIf { it.isNotBlank() }
+                        ?: account?.email?.substringBefore("@")?.takeIf { it.isNotBlank() }
+                        ?: if (account != null) "YouTube Music User" else stringResource(R.string.profile_default_name)
+
+                    val displaySub = if (account != null) {
+                        account.email.ifBlank {
+                            account.channelHandle.ifBlank { stringResource(R.string.profile_google_connected) }
+                        }
+                    } else {
+                        stringResource(R.string.profile_tap_to_login)
+                    }
+
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = account?.name ?: stringResource(R.string.profile_default_name),
+                            text = displayName,
                             style = Typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                             color = colors.textPrimary,
                             maxLines = 1,
@@ -149,11 +175,7 @@ fun ProfileMenuSheet(
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = if (account != null) {
-                                account.email.ifBlank { stringResource(R.string.profile_google_connected) }
-                            } else {
-                                stringResource(R.string.profile_tap_to_login)
-                            },
+                            text = displaySub,
                             style = Typography.bodyMedium,
                             color = colors.textMuted,
                             maxLines = 1,

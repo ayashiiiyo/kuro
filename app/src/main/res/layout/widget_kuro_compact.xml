@@ -1,8 +1,11 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_background">
+    android:background="@drawable/widget_background"
+    android:clipToOutline="true"
+    tools:targetApi="s">
 
     <ImageView
         android:id="@+id/widget_bg_art"
@@ -16,9 +19,9 @@
         android:layout_height="match_parent"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="12dp"
+        android:paddingStart="14dp"
         android:paddingTop="10dp"
-        android:paddingEnd="12dp"
+        android:paddingEnd="14dp"
         android:paddingBottom="10dp">
 
         <ImageView
@@ -26,14 +29,16 @@
             android:layout_width="50dp"
             android:layout_height="50dp"
             android:background="@drawable/widget_art_background"
+            android:clipToOutline="true"
             android:contentDescription="@string/widget_artwork_desc"
-            android:scaleType="centerCrop" />
+            android:scaleType="centerCrop"
+            tools:targetApi="s" />
 
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="12dp"
-            android:layout_marginEnd="6dp"
+            android:layout_marginEnd="8dp"
             android:layout_weight="1"
             android:orientation="vertical">
 

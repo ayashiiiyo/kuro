@@ -1,8 +1,11 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_background">
+    android:background="@drawable/widget_background"
+    android:clipToOutline="true"
+    tools:targetApi="s">
 
     <ImageView
         android:id="@+id/widget_bg_art"
@@ -15,7 +18,10 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical"
-        android:padding="14dp">
+        android:paddingStart="15dp"
+        android:paddingTop="14dp"
+        android:paddingEnd="15dp"
+        android:paddingBottom="14dp">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -28,8 +34,10 @@
                 android:layout_width="58dp"
                 android:layout_height="58dp"
                 android:background="@drawable/widget_art_background"
+                android:clipToOutline="true"
                 android:contentDescription="@string/widget_artwork_desc"
-                android:scaleType="centerCrop" />
+                android:scaleType="centerCrop"
+                tools:targetApi="s" />
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -38,19 +46,35 @@
                 android:layout_weight="1"
                 android:orientation="vertical">
 
-                <TextView
+                <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:background="@drawable/widget_chip_background"
-                    android:letterSpacing="0.08"
-                    android:paddingStart="7dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingStart="6dp"
                     android:paddingTop="2dp"
-                    android:paddingEnd="7dp"
-                    android:paddingBottom="2dp"
-                    android:text="KURO STUDIO"
-                    android:textColor="#D4D4D8"
-                    android:textSize="9sp"
-                    android:textStyle="bold" />
+                    android:paddingEnd="8dp"
+                    android:paddingBottom="2dp">
+
+                    <ImageView
+                        android:layout_width="11dp"
+                        android:layout_height="11dp"
+                        android:importantForAccessibility="no"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_notification"
+                        android:tint="#F4F4F5" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:letterSpacing="0.08"
+                        android:text="KURO STUDIO"
+                        android:textColor="#E4E4E7"
+                        android:textSize="9sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
 
                 <TextView
                     android:id="@+id/widget_title"

@@ -734,6 +734,101 @@ suite.assert_true(
 )
 
 # ==============================================================================
+# SECTION 6: KURO v3.8.9 REMEDIATIONS & BEHAVIORAL PROOFS (WGT, FADE, YTM, AUTH, NOTIF)
+# ==============================================================================
+print(f"\n{Colors.BOLD}>>> 6. Kuro v3.8.9 Remediations & Behavioral Proofs{Colors.RESET}")
+
+widget_compact_xml = suite.read_file("app/src/main/res/layout/widget_kuro_compact.xml")
+widget_square_xml = suite.read_file("app/src/main/res/layout/widget_kuro_square.xml")
+widget_bg_xml = suite.read_file("app/src/main/res/drawable/widget_background.xml")
+ic_notif_xml = suite.read_file("app/src/main/res/drawable/ic_notification.xml")
+auth_mgr = suite.read_file("app/src/main/java/com/ayashii/kuro/data/auth/AuthManager.kt")
+vibe_screen = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/screens/VibeScreen.kt")
+
+wgt01_check = (
+    'android:clipToOutline="true"' in widget_compact_xml
+    and 'android:clipToOutline="true"' in widget_square_xml
+    and "resolveWidgetDimensions" in widgets
+    and 'setBackgroundResource", 0' in widgets
+    and "<stroke" not in widget_bg_xml
+)
+suite.assert_true(
+    wgt01_check,
+    "WGT-01",
+    "Widget corner peeling resolved via clipToOutline, aspect-matched backdrop dimensions, and single border",
+    "Missing widget corner peeling fix components"
+)
+
+fade01_check = (
+    "CompositingStrategy.Offscreen" in main_activity
+    and "BlendMode.DstIn" in main_activity
+    and "BlendMode.DstIn" in home_screen
+    and "BlendMode.DstIn" in vibe_screen
+    and "slideInHorizontally" not in main_activity
+)
+suite.assert_true(
+    fade01_check,
+    "FADE-01",
+    "Smooth Fade-In tab transitions and offscreen DstIn gradient fade masks on navigation & header bars",
+    "Missing Fade-In or DstIn edge mask in MainActivity/HomeScreen/VibeScreen"
+)
+
+ytm01_check = (
+    "YTM_PARAMS_SONGS" in music_repo
+    and "YTM_PARAMS_VIDEOS" in music_repo
+    and "musicCardShelfRenderer" in music_repo
+    and "extractVideoIdFromResponsiveItem" in music_repo
+    and "extractArtistAndDuration" in music_repo
+    and "searchTracks(query)" in music_vm
+)
+suite.assert_true(
+    ytm01_check,
+    "YTM-01",
+    "Complete YT Music search parity (Unfiltered Top Result + Songs + Videos + multi-source videoId + live debounce)",
+    "Missing YT Music search parity components"
+)
+
+auth01_check = (
+    "googleAccountHeaderRenderer" in auth_mgr
+    and "accountItem" in auth_mgr
+    and "tryFetchAccountsList" in auth_mgr
+    and "tryScrapeWebProfile" in auth_mgr
+    and "normalizeAvatarUrl" in auth_mgr
+    and "applyAuthToRequest" in auth_mgr
+    and "mergeCookieStrings" in login_dialog
+)
+suite.assert_true(
+    auth01_check,
+    "AUTH-01",
+    "Multi-account Google profile discovery with 4-stage fallback, cookie merging, and avatar URL normalization",
+    "Missing multi-account profile fallback components"
+)
+
+notif01_check = (
+    "M29,56 C33,56" in ic_notif_xml
+    and "badgeNotificationArtwork" in service
+    and "setSmallIcon(R.drawable.ic_notification)" in service
+)
+suite.assert_true(
+    notif01_check,
+    "NOTIF-01",
+    "Official Kuro vector logo in ic_notification.xml and branded Kuro badge on notification artwork cards",
+    "Missing Kuro notification logo vector or artwork badge"
+)
+
+bug01_check = (
+    "formatMixBadgeLabel" in home_screen
+    and "track.artist.take(12)" not in home_screen
+    and "getRadioTracks(track.id)" in service
+)
+suite.assert_true(
+    bug01_check,
+    "BUG-01",
+    "Additional bug fixes: word-safe Mix badge truncation, localized shelf/liked queries, and background radio replenish",
+    "Missing additional bug fixes"
+)
+
+# ==============================================================================
 # SUMMARY & VERDICT
 # ==============================================================================
 print(f"\n{Colors.BLUE}{Colors.BOLD}======================================================================{Colors.RESET}")

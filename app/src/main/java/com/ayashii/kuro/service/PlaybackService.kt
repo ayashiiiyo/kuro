@@ -7,6 +7,11 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.RectF
 import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.os.Build
@@ -71,7 +76,7 @@ private class KuroNotificationBitmapLoader(
             try {
                 val bmp = BitmapFactory.decodeByteArray(data, 0, data.size)
                 if (bmp != null) {
-                    future.set(bmp)
+                    future.set(badgeNotificationArtwork(bmp))
                 } else {
                     future.setException(IllegalArgumentException("Failed to decode bitmap bytes"))
                 }
@@ -101,10 +106,11 @@ private class KuroNotificationBitmapLoader(
             try {
                 val loaded = fetchBitmapWithFallback(url)
                 if (loaded != null) {
+                    val badged = badgeNotificationArtwork(loaded)
                     synchronized(bitmapCache) {
-                        bitmapCache.put(url, loaded)
+                        bitmapCache.put(url, badged)
                     }
-                    future.set(loaded)
+                    future.set(badged)
                 } else {
                     future.setException(IllegalStateException("Artwork load returned null for $url"))
                 }
@@ -142,6 +148,101 @@ private class KuroNotificationBitmapLoader(
             } catch (_: Throwable) {}
         }
         return null
+    }
+
+    /**
+     * Composites a sleek Kuro logo badge onto the notification artwork thumbnail
+     * (similar to Spotify's branded badge on media notification cards).
+     */
+    private fun badgeNotificationArtwork(source: Bitmap): Bitmap {
+        return try {
+            val size = 512
+            val out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(out)
+            val imgPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+
+            val scale = maxOf(size.toFloat() / source.width, size.toFloat() / source.height)
+            val dx = (size.toFloat() - source.width * scale) * 0.5f
+            val dy = (size.toFloat() - source.height * scale) * 0.5f
+            val matrix = android.graphics.Matrix().apply {
+                setScale(scale, scale)
+                postTranslate(dx, dy)
+            }
+            canvas.drawBitmap(source, matrix, imgPaint)
+
+            val badgeRadius = 38f
+            val cx = size - 54f
+            val cy = size - 54f
+
+            val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.FILL
+                color = Color.argb(222, 9, 9, 11)
+            }
+            canvas.drawCircle(cx, cy, badgeRadius, bgPaint)
+
+            val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = 2.2f
+                color = Color.argb(95, 255, 255, 255)
+            }
+            canvas.drawCircle(cx, cy, badgeRadius - 1.1f, ringPaint)
+
+            canvas.save()
+            val logoScale = (badgeRadius * 1.48f) / 68f
+            canvas.translate(cx - 34f * logoScale, cy - 34f * logoScale)
+            canvas.scale(logoScale, logoScale)
+            canvas.translate(-21f, -20f)
+
+            val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = 3.2f
+                strokeCap = Paint.Cap.ROUND
+                color = Color.argb(185, 212, 212, 216)
+            }
+            canvas.drawArc(RectF(30f, 28f, 82f, 80f), -90f, 180f, false, arcPaint)
+
+            val wavePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = 5.4f
+                strokeCap = Paint.Cap.ROUND
+                strokeJoin = Paint.Join.ROUND
+                color = Color.argb(240, 228, 228, 231)
+            }
+            val wavePath = Path().apply {
+                moveTo(29f, 56f)
+                cubicTo(33f, 56f, 35f, 48f, 39f, 48f)
+                cubicTo(43f, 48f, 44f, 64f, 48f, 64f)
+                cubicTo(51f, 64f, 53f, 54f, 57f, 54f)
+                lineTo(71f, 69f)
+            }
+            canvas.drawPath(wavePath, wavePaint)
+
+            val kPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = 5.8f
+                strokeCap = Paint.Cap.ROUND
+                strokeJoin = Paint.Join.ROUND
+                color = Color.WHITE
+            }
+            val kPath = Path().apply {
+                moveTo(48f, 37f)
+                lineTo(48f, 71f)
+                moveTo(52f, 55f)
+                cubicTo(57f, 49f, 63f, 43f, 71f, 38f)
+            }
+            canvas.drawPath(kPath, kPaint)
+
+            val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.FILL
+                color = Color.WHITE
+            }
+            canvas.drawCircle(71f, 38f, 3.0f, dotPaint)
+            canvas.restore()
+
+            out
+        } catch (_: Throwable) {
+            source
+        }
     }
 }
 
@@ -463,6 +564,28 @@ class PlaybackService : MediaSessionService() {
                             }
                         }
                     }
+                }
+
+                launch(Dispatchers.IO) {
+                    try {
+                        val queueSnapshot = PlayerQueueManager.queueState.value
+                        val curIdx = PlayerQueueManager.currentIndex.value
+                        val remaining = queueSnapshot.size - curIdx
+                        if (queueSnapshot.size <= 2 || remaining <= 3) {
+                            val radioTracks = repository.getRadioTracks(track.id)
+                            if (radioTracks.isNotEmpty()) {
+                                val existingIds = PlayerQueueManager.queueState.value.mapTo(HashSet()) { it.id }
+                                val ranked = TasteManager.getInstance(this@PlaybackService)
+                                    .rankRadioTracks(radioTracks.filter { it.id !in existingIds })
+                                ranked.forEach { PlayerQueueManager.addToQueue(it) }
+                            }
+                        }
+                        val updatedQueue = PlayerQueueManager.queueState.value
+                        val nextIdx = PlayerQueueManager.currentIndex.value + 1
+                        if (nextIdx in updatedQueue.indices) {
+                            repository.getAudioStreamUrl(updatedQueue[nextIdx].url, quality)
+                        }
+                    } catch (_: Exception) {}
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error playing track: ${e.message}", e)

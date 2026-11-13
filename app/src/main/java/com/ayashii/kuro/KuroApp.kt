@@ -11,7 +11,9 @@ import coil.memory.MemoryCache
 import coil.request.CachePolicy
 import com.ayashii.kuro.data.auth.AuthManager
 import com.ayashii.kuro.data.remote.KuroDownloader
+import okhttp3.OkHttpClient
 import org.schabi.newpipe.extractor.NewPipe
+import java.util.concurrent.TimeUnit
 
 class KuroApp : Application(), ImageLoaderFactory {
 
@@ -33,6 +35,9 @@ class KuroApp : Application(), ImageLoaderFactory {
             val downloader = KuroDownloader.init(this)
             NewPipe.init(downloader)
         } catch (_: Throwable) {}
+        try {
+            AuthManager.getInstance().refreshAccountInfoIfNeeded(force = false)
+        } catch (_: Throwable) {}
     }
 
     override fun newImageLoader(): ImageLoader {
@@ -42,7 +47,23 @@ class KuroApp : Application(), ImageLoaderFactory {
             false
         }
         val allowHardwareBitmaps = is64BitRuntime && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+        val imageHttpClient = OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .addInterceptor { chain ->
+                val req = chain.request().newBuilder()
+                    .header(
+                        "User-Agent",
+                        "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+                    )
+                    .build()
+                chain.proceed(req)
+            }
+            .build()
+
         return ImageLoader.Builder(this)
+            .okHttpClient(imageHttpClient)
             .memoryCache {
                 MemoryCache.Builder(this)
                     .maxSizePercent(if (is64BitRuntime) 0.08 else 0.06)

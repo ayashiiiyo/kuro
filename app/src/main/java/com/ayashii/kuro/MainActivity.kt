@@ -12,24 +12,31 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,11 +48,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -143,10 +159,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private fun routeIndex(route: String?): Int {
-    return Screen.bottomNavItems.indexOfFirst { it.route == route }.coerceAtLeast(0)
-}
-
 @Composable
 fun MainAppScreen(viewModel: MusicViewModel) {
     val navController = rememberNavController()
@@ -183,40 +195,94 @@ fun MainAppScreen(viewModel: MusicViewModel) {
         Scaffold(
             containerColor = colors.background,
             bottomBar = {
-                NavigationBar(
-                    containerColor = colors.background,
-                    tonalElevation = 0.dp
-                ) {
-                    Screen.bottomNavItems.forEach { screen ->
-                        val selected = currentRoute == screen.route
-                        NavigationBarItem(
-                            selected = selected,
-                            onClick = {
-                                if (currentRoute != screen.route) {
-                                    navController.navigate(screen.route) {
-                                        popUpTo(navController.graph.findStartDestination().id) {
-                                            saveState = true
-                                        }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                }
-                            },
-                            icon = {
-                                Icon(
-                                    imageVector = screen.icon,
-                                    contentDescription = stringResource(screen.titleRes)
-                                )
-                            },
-                            label = { Text(stringResource(screen.titleRes)) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = colors.textPrimary,
-                                selectedTextColor = colors.textPrimary,
-                                unselectedIconColor = colors.textMuted,
-                                unselectedTextColor = colors.textMuted,
-                                indicatorColor = colors.card
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                0.0f to Color.Transparent,
+                                0.35f to colors.background.copy(alpha = 0.84f),
+                                1.0f to colors.background
                             )
                         )
+                        .navigationBarsPadding()
+                        .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 10.dp)
+                ) {
+                    val pillShape = RoundedCornerShape(28.dp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(64.dp)
+                            .shadow(elevation = 14.dp, shape = pillShape, clip = false)
+                            .clip(pillShape)
+                            .background(colors.surface.copy(alpha = 0.94f))
+                            .border(1.dp, colors.border.copy(alpha = 0.65f), pillShape)
+                            .padding(horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Screen.bottomNavItems.forEach { screen ->
+                            val selected = currentRoute == screen.route
+                            val itemAlpha by animateFloatAsState(
+                                targetValue = if (selected) 1f else 0.56f,
+                                animationSpec = tween(durationMillis = 240, easing = KuroMotion.EmphasizedDecelerate),
+                                label = "nav_item_alpha"
+                            )
+                            val itemScale by animateFloatAsState(
+                                targetValue = if (selected) 1.04f else 0.96f,
+                                animationSpec = tween(durationMillis = 240, easing = KuroMotion.EmphasizedDecelerate),
+                                label = "nav_item_scale"
+                            )
+                            val interactionSource = remember { MutableInteractionSource() }
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(22.dp))
+                                    .background(if (selected) colors.card.copy(alpha = 0.9f) else Color.Transparent)
+                                    .clickable(
+                                        interactionSource = interactionSource,
+                                        indication = null
+                                    ) {
+                                        if (currentRoute != screen.route) {
+                                            navController.navigate(screen.route) {
+                                                popUpTo(navController.graph.findStartDestination().id) {
+                                                    saveState = true
+                                                }
+                                                launchSingleTop = true
+                                                restoreState = true
+                                            }
+                                        }
+                                    }
+                                    .padding(vertical = 7.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = screen.icon,
+                                    contentDescription = stringResource(screen.titleRes),
+                                    tint = if (selected) colors.textPrimary else colors.textMuted,
+                                    modifier = Modifier
+                                        .size(22.dp)
+                                        .graphicsLayer {
+                                            alpha = itemAlpha
+                                            scaleX = itemScale
+                                            scaleY = itemScale
+                                        }
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = stringResource(screen.titleRes),
+                                    fontSize = 11.sp,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (selected) colors.textPrimary else colors.textMuted,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.graphicsLayer {
+                                        alpha = itemAlpha
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -229,54 +295,51 @@ fun MainAppScreen(viewModel: MusicViewModel) {
                 NavHost(
                     navController = navController,
                     startDestination = Screen.Home.route,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            compositingStrategy = CompositingStrategy.Offscreen
+                        }
+                        .drawWithContent {
+                            drawContent()
+                            drawRect(
+                                brush = Brush.verticalGradient(
+                                    0.0f to Color.White,
+                                    0.95f to Color.White,
+                                    1.0f to Color.Transparent
+                                ),
+                                blendMode = BlendMode.DstIn
+                            )
+                        },
                     enterTransition = {
-                        val initialIdx = routeIndex(initialState.destination.route)
-                        val targetIdx = routeIndex(targetState.destination.route)
-                        val direction = if (targetIdx >= initialIdx) 1 else -1
-                        slideInHorizontally(
-                            animationSpec = tween(280, easing = KuroMotion.EmphasizedDecelerate),
-                            initialOffsetX = { fullWidth -> direction * (fullWidth / 7) }
-                        ) + fadeIn(
-                            animationSpec = tween(240, easing = KuroMotion.EmphasizedDecelerate)
+                        fadeIn(
+                            animationSpec = tween(300, easing = KuroMotion.EmphasizedDecelerate)
                         ) + scaleIn(
-                            initialScale = 0.97f,
-                            animationSpec = tween(280, easing = KuroMotion.EmphasizedDecelerate)
+                            initialScale = 0.988f,
+                            animationSpec = tween(300, easing = KuroMotion.EmphasizedDecelerate)
                         )
                     },
                     exitTransition = {
-                        val initialIdx = routeIndex(initialState.destination.route)
-                        val targetIdx = routeIndex(targetState.destination.route)
-                        val direction = if (targetIdx >= initialIdx) -1 else 1
-                        slideOutHorizontally(
-                            animationSpec = tween(220, easing = KuroMotion.EmphasizedAccelerate),
-                            targetOffsetX = { fullWidth -> direction * (fullWidth / 9) }
-                        ) + fadeOut(
+                        fadeOut(
+                            animationSpec = tween(180, easing = KuroMotion.EmphasizedAccelerate)
+                        ) + scaleOut(
+                            targetScale = 0.992f,
                             animationSpec = tween(180, easing = KuroMotion.EmphasizedAccelerate)
                         )
                     },
                     popEnterTransition = {
-                        val initialIdx = routeIndex(initialState.destination.route)
-                        val targetIdx = routeIndex(targetState.destination.route)
-                        val direction = if (targetIdx >= initialIdx) 1 else -1
-                        slideInHorizontally(
-                            animationSpec = tween(280, easing = KuroMotion.EmphasizedDecelerate),
-                            initialOffsetX = { fullWidth -> direction * (fullWidth / 7) }
-                        ) + fadeIn(
-                            animationSpec = tween(240, easing = KuroMotion.EmphasizedDecelerate)
+                        fadeIn(
+                            animationSpec = tween(300, easing = KuroMotion.EmphasizedDecelerate)
                         ) + scaleIn(
-                            initialScale = 0.97f,
-                            animationSpec = tween(280, easing = KuroMotion.EmphasizedDecelerate)
+                            initialScale = 0.988f,
+                            animationSpec = tween(300, easing = KuroMotion.EmphasizedDecelerate)
                         )
                     },
                     popExitTransition = {
-                        val initialIdx = routeIndex(initialState.destination.route)
-                        val targetIdx = routeIndex(targetState.destination.route)
-                        val direction = if (targetIdx >= initialIdx) -1 else 1
-                        slideOutHorizontally(
-                            animationSpec = tween(220, easing = KuroMotion.EmphasizedAccelerate),
-                            targetOffsetX = { fullWidth -> direction * (fullWidth / 9) }
-                        ) + fadeOut(
+                        fadeOut(
+                            animationSpec = tween(180, easing = KuroMotion.EmphasizedAccelerate)
+                        ) + scaleOut(
+                            targetScale = 0.992f,
                             animationSpec = tween(180, easing = KuroMotion.EmphasizedAccelerate)
                         )
                     }
@@ -311,16 +374,7 @@ fun MainAppScreen(viewModel: MusicViewModel) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(
-                                    Brush.verticalGradient(
-                                        colors = listOf(
-                                            Color.Transparent,
-                                            colors.background.copy(alpha = 0.94f),
-                                            colors.background
-                                        )
-                                    )
-                                )
-                                .padding(horizontal = 8.dp, vertical = 6.dp)
+                                .padding(horizontal = 12.dp, vertical = 10.dp)
                         ) {
                             MiniPlayerContainer(
                                 viewModel = viewModel,

@@ -63,6 +63,25 @@ private fun isTrustedGoogleAuthHost(url: String?): Boolean {
         host.endsWith(".googleusercontent.com")
 }
 
+private fun mergeCookieStrings(vararg cookieParts: String?): String {
+    val map = LinkedHashMap<String, String>()
+    for (part in cookieParts) {
+        if (part.isNullOrBlank()) continue
+        part.split(";").forEach { raw ->
+            val trimmed = raw.trim()
+            val idx = trimmed.indexOf("=")
+            if (idx > 0) {
+                val k = trimmed.substring(0, idx).trim()
+                val v = trimmed.substring(idx + 1).trim()
+                if (k.isNotEmpty() && v.isNotEmpty()) {
+                    map[k] = v
+                }
+            }
+        }
+    }
+    return map.entries.joinToString("; ") { "${it.key}=${it.value}" }
+}
+
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun LoginWebViewDialog(
@@ -72,6 +91,7 @@ fun LoginWebViewDialog(
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
     var pageProgress by remember { mutableFloatStateOf(0f) }
     var isLoading by remember { mutableStateOf(true) }
+    var hasCompletedLogin by remember { mutableStateOf(false) }
     val colors = KuroAppTheme.colors
 
     androidx.compose.runtime.DisposableEffect(Unit) {
@@ -186,6 +206,116 @@ fun LoginWebViewDialog(
                                 }
                             }, "KuroBridge")
 
+                            fun extractAndFinalizeLogin(view: WebView?, currentUrl: String) {
+                                if (hasCompletedLogin) return
+                                cookieManager.flush()
+                                val cookies = mergeCookieStrings(
+                                    cookieManager.getCookie("https://music.youtube.com"),
+                                    cookieManager.getCookie("https://www.youtube.com"),
+                                    cookieManager.getCookie("https://m.youtube.com"),
+                                    cookieManager.getCookie(currentUrl)
+                                )
+                                val hasAuth = cookies.contains("SAPISID") ||
+                                    cookies.contains("__Secure-3PAPISID") ||
+                                    cookies.contains("__Secure-1PAPISID") ||
+                                    cookies.contains("LOGIN_INFO")
+
+                                if (!hasAuth || (!currentUrl.contains("music.youtube.com") && !currentUrl.contains("youtube.com"))) {
+                                    return
+                                }
+
+                                view?.evaluateJavascript(
+                                    """
+                                    (() => {
+                                        try {
+                                            let avatar = '';
+                                            let name = '';
+                                            let email = '';
+                                            let authUser = '0';
+                                            let pageId = '';
+                                            const imgs = document.querySelectorAll("#avatar-btn img, ytmusic-settings-button img, img.yt-spec-avatar-shape__image, img.yt-img-shadow, img#img, img[src*='googleusercontent.com'], img[src*='ggpht.com']");
+                                            for (let i = 0; i < imgs.length; i++) {
+                                                const src = imgs[i].src || imgs[i].getAttribute('src') || '';
+                                                if (src && (src.includes('googleusercontent.com') || src.includes('ggpht.com'))) {
+                                                    avatar = src;
+                                                    break;
+                                                }
+                                            }
+                                            if (window.ytcfg && typeof window.ytcfg.get === 'function') {
+                                                name = window.ytcfg.get('USER_NAME') || window.ytcfg.get('ACCOUNT_NAME') || '';
+                                                const idx = window.ytcfg.get('SESSION_INDEX');
+                                                if (idx !== undefined && idx !== null && String(idx).length > 0) {
+                                                    authUser = String(idx);
+                                                }
+                                                pageId = window.ytcfg.get('DELEGATED_SESSION_ID') || '';
+                                            }
+                                            if (!name) {
+                                                const nameEl = document.querySelector("div[aria-label*='Google Account:'], button[aria-label*='Google Account:'], [aria-label*='Akun Google:']");
+                                                if (nameEl) {
+                                                    const rawLabel = (nameEl.getAttribute('aria-label') || '')
+                                                        .replace('Google Account:', '')
+                                                        .replace('Akun Google:', '')
+                                                        .trim();
+                                                    const parenIdx = rawLabel.indexOf('(');
+                                                    if (parenIdx > 0) {
+                                                        name = rawLabel.substring(0, parenIdx).trim();
+                                                        const closeIdx = rawLabel.indexOf(')', parenIdx);
+                                                        if (closeIdx > parenIdx) {
+                                                            email = rawLabel.substring(parenIdx + 1, closeIdx).trim();
+                                                        }
+                                                    } else {
+                                                        name = rawLabel;
+                                                    }
+                                                }
+                                            }
+                                            if (window.KuroBridge) {
+                                                window.KuroBridge.onUserData(name, email, avatar);
+                                            }
+                                            return JSON.stringify({
+                                                avatar: avatar || '',
+                                                name: name || '',
+                                                email: email || '',
+                                                authUser: authUser || '0',
+                                                pageId: pageId || ''
+                                            });
+                                        } catch(e) {
+                                            return '{}';
+                                        }
+                                    })()
+                                    """.trimIndent()
+                                ) { evalResult ->
+                                    if (hasCompletedLogin) return@evaluateJavascript
+                                    hasCompletedLogin = true
+                                    var extractedName = ""
+                                    var extractedAvatar = ""
+                                    var extractedEmail = ""
+                                    var extractedAuthUser = "0"
+                                    var extractedPageId = ""
+                                    try {
+                                        if (!evalResult.isNullOrBlank() && evalResult != "null") {
+                                            val unescaped = org.json.JSONTokener(evalResult).nextValue().toString()
+                                            val json = org.json.JSONObject(unescaped)
+                                            extractedName = json.optString("name", "")
+                                            extractedAvatar = json.optString("avatar", "")
+                                            extractedEmail = json.optString("email", "")
+                                            extractedAuthUser = json.optString("authUser", "0")
+                                            extractedPageId = json.optString("pageId", "")
+                                        }
+                                    } catch (_: Exception) {}
+
+                                    AuthManager.getInstance().handleLoginSuccess(
+                                        cookie = cookies,
+                                        initialName = extractedName,
+                                        initialAvatar = extractedAvatar,
+                                        initialEmail = extractedEmail,
+                                        authUser = extractedAuthUser,
+                                        pageId = extractedPageId
+                                    )
+                                    onLoginSuccess()
+                                    onDismiss()
+                                }
+                            }
+
                             webViewClient = object : WebViewClient() {
                                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                                     val targetUrl = request?.url?.toString()
@@ -200,78 +330,21 @@ fun LoginWebViewDialog(
                                 override fun onPageFinished(view: WebView?, url: String?) {
                                     super.onPageFinished(view, url)
                                     isLoading = false
-
                                     val currentUrl = url ?: ""
                                     if (!isTrustedGoogleAuthHost(currentUrl)) return
-
-                                    val cookies = cookieManager.getCookie("https://music.youtube.com")
-                                        ?: cookieManager.getCookie("https://www.youtube.com")
-                                        ?: cookieManager.getCookie(currentUrl)
-                                        ?: ""
-
-                                    val hasAuth = cookies.contains("SAPISID") ||
-                                            cookies.contains("LOGIN_INFO") ||
-                                            cookies.contains("__Secure-3PAPISID")
-
-                                    view?.evaluateJavascript(
-                                        """
-                                        (() => {
-                                            try {
-                                                let avatar = '';
-                                                let name = '';
-                                                let email = '';
-                                                const img = document.querySelector("#avatar-btn img, ytmusic-settings-button img, img.yt-img-shadow, img#img, img[src*='googleusercontent.com']");
-                                                if (img && img.src && img.src.startsWith('http')) {
-                                                    avatar = img.src;
-                                                }
-                                                if (window.ytcfg && typeof window.ytcfg.get === 'function') {
-                                                    name = window.ytcfg.get('USER_NAME') || window.ytcfg.get('ACCOUNT_NAME') || '';
-                                                }
-                                                if (!name) {
-                                                    const nameEl = document.querySelector("div[aria-label*='Google Account:']");
-                                                    if (nameEl) {
-                                                        name = (nameEl.getAttribute('aria-label') || '').replace('Google Account:', '').trim();
-                                                    }
-                                                }
-                                                if (window.KuroBridge) {
-                                                    window.KuroBridge.onUserData(name, email, avatar);
-                                                }
-                                                return JSON.stringify({ avatar: avatar, name: name });
-                                            } catch(e) {
-                                                return '{}';
-                                            }
-                                        })()
-                                        """.trimIndent()
-                                    ) { evalResult ->
-                                        var extractedName = ""
-                                        var extractedAvatar = ""
-                                        try {
-                                            if (!evalResult.isNullOrBlank() && evalResult != "null") {
-                                                val unescaped = org.json.JSONTokener(evalResult).nextValue().toString()
-                                                val json = org.json.JSONObject(unescaped)
-                                                extractedName = json.optString("name", "")
-                                                extractedAvatar = json.optString("avatar", "")
-                                            }
-                                        } catch (_: Exception) {}
-
-                                        if (hasAuth && (currentUrl.contains("music.youtube.com") || currentUrl.contains("youtube.com"))) {
-                                            AuthManager.getInstance().handleLoginSuccess(cookies, extractedName, extractedAvatar)
-                                            onLoginSuccess()
-                                            onDismiss()
-                                        }
-                                    }
+                                    extractAndFinalizeLogin(view, currentUrl)
                                 }
 
                                 override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
                                     super.doUpdateVisitedHistory(view, url, isReload)
                                     val currentUrl = url ?: ""
                                     if (!isTrustedGoogleAuthHost(currentUrl)) return
-                                    val cookies = cookieManager.getCookie(currentUrl) ?: ""
-                                    if ((cookies.contains("SAPISID") || cookies.contains("LOGIN_INFO")) &&
-                                        (currentUrl.contains("music.youtube.com") || currentUrl.contains("youtube.com"))) {
-                                        AuthManager.getInstance().handleLoginSuccess(cookies)
-                                        onLoginSuccess()
-                                        onDismiss()
+                                    if (currentUrl.contains("music.youtube.com")) {
+                                        view?.postDelayed({
+                                            if (!hasCompletedLogin) {
+                                                extractAndFinalizeLogin(view, currentUrl)
+                                            }
+                                        }, 650L)
                                     }
                                 }
                             }

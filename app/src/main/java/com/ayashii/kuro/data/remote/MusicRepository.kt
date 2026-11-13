@@ -32,11 +32,21 @@ class MusicRepository {
         private const val YTM_CLIENT_VERSION = "1.20241028.01.00"
         private const val YTM_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
+        private const val YTM_PARAMS_SONGS = "EgWKAQIIAWoKEAkQBRAKEAMQBA=="
+        private const val YTM_PARAMS_VIDEOS = "EgWKAQJQAWoKEAkQBRAKEAMQBA=="
+
         private val THUMB_WH_CHECK_REGEX = Regex("=w\\d+-h\\d+")
         private val THUMB_WH_REGEX = Regex("=w\\d+-h\\d+[^&?]*")
         private val THUMB_S_CHECK_REGEX = Regex("=s\\d+")
         private val THUMB_S_REGEX = Regex("=s\\d+[^&?]*")
         private val THUMB_EQ_REGEX = Regex("=[^=]*$")
+        private val DURATION_TEXT_REGEX = Regex("^\\d{1,2}:\\d{2}(?::\\d{2})?$")
+
+        private val METADATA_TYPE_LABELS = setOf(
+            "song", "video", "lagu", "video musik", "music video", "single",
+            "album", "ep", "episode", "podcast", "playlist", "artist", "artis",
+            "•", "·", "-", "|", "explicit", "e"
+        )
 
         private val streamUrlCache = LruCache<String, Pair<String, Long>>(60)
         private var homeCache: Pair<List<HomeSection>, Long>? = null
@@ -134,6 +144,7 @@ class MusicRepository {
     private fun parseDurationToSeconds(durationStr: String): Long {
         if (durationStr.isBlank()) return 0L
         val clean = durationStr.replace(".", ":").trim()
+        if (!DURATION_TEXT_REGEX.matches(clean)) return 0L
         val parts = clean.split(":")
         return try {
             when (parts.size) {
@@ -144,6 +155,132 @@ class MusicRepository {
         } catch (_: Exception) {
             0L
         }
+    }
+
+    private fun isMetadataNoiseToken(text: String): Boolean {
+        val lower = text.trim().lowercase()
+        if (lower.isEmpty()) return true
+        if (lower in METADATA_TYPE_LABELS) return true
+        if (DURATION_TEXT_REGEX.matches(lower.replace(".", ":"))) return true
+        if (lower.contains("views") || lower.contains("ditonton") || lower.contains("plays") || lower.contains("diputar") || lower.contains("rb x") || lower.contains("jt x")) {
+            return true
+        }
+        return false
+    }
+
+    private fun extractArtistAndDuration(cols: org.json.JSONArray?, fixedCols: org.json.JSONArray?): Pair<String, Long> {
+        var artist = ""
+        var fallbackArtist = ""
+        var durationSec = 0L
+
+        if (fixedCols != null) {
+            for (f in 0 until fixedCols.length()) {
+                val fRuns = fixedCols.optJSONObject(f)
+                    ?.optJSONObject("musicResponsiveListItemFixedColumnRenderer")
+                    ?.optJSONObject("text")
+                    ?.optJSONArray("runs") ?: continue
+                for (rIdx in 0 until fRuns.length()) {
+                    val txt = fRuns.optJSONObject(rIdx)?.optString("text", "")?.trim().orEmpty()
+                    val parsed = parseDurationToSeconds(txt)
+                    if (parsed > 0L) {
+                        durationSec = parsed
+                        break
+                    }
+                }
+            }
+        }
+
+        if (cols != null && cols.length() > 1) {
+            for (cIdx in 1 until cols.length()) {
+                val runs = cols.optJSONObject(cIdx)
+                    ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
+                    ?.optJSONObject("text")
+                    ?.optJSONArray("runs") ?: continue
+                for (rIdx in 0 until runs.length()) {
+                    val runObj = runs.optJSONObject(rIdx) ?: continue
+                    val txt = runObj.optString("text", "").trim()
+                    if (txt.isEmpty()) continue
+
+                    val parsedDur = parseDurationToSeconds(txt)
+                    if (parsedDur > 0L && durationSec <= 0L) {
+                        durationSec = parsedDur
+                        continue
+                    }
+
+                    if (isMetadataNoiseToken(txt)) continue
+
+                    val browseId = runObj.optJSONObject("navigationEndpoint")
+                        ?.optJSONObject("browseEndpoint")
+                        ?.optString("browseId", "")
+                        .orEmpty()
+                    if (browseId.startsWith("UC") || browseId.contains("artist", ignoreCase = true)) {
+                        if (artist.isBlank()) {
+                            artist = txt
+                        }
+                    } else if (fallbackArtist.isBlank()) {
+                        fallbackArtist = txt
+                    }
+                }
+            }
+        }
+
+        val finalArtist = artist.ifBlank { fallbackArtist }.ifBlank { "Unknown Artist" }
+            .replace(" - Topic", "")
+            .trim()
+        return Pair(finalArtist, durationSec)
+    }
+
+    private fun extractVideoIdFromResponsiveItem(r: org.json.JSONObject, cols: org.json.JSONArray?): String {
+        val fromPlaylistData = r.optJSONObject("playlistItemData")?.optString("videoId", "").orEmpty()
+        if (fromPlaylistData.isNotBlank()) return fromPlaylistData
+
+        if (cols != null) {
+            for (c in 0 until cols.length()) {
+                val runs = cols.optJSONObject(c)
+                    ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
+                    ?.optJSONObject("text")
+                    ?.optJSONArray("runs") ?: continue
+                for (k in 0 until runs.length()) {
+                    val vid = runs.optJSONObject(k)
+                        ?.optJSONObject("navigationEndpoint")
+                        ?.optJSONObject("watchEndpoint")
+                        ?.optString("videoId", "")
+                        .orEmpty()
+                    if (vid.isNotBlank()) return vid
+                }
+            }
+        }
+
+        val fromOverlay = r.optJSONObject("overlay")
+            ?.optJSONObject("musicItemThumbnailOverlayRenderer")
+            ?.optJSONObject("content")
+            ?.optJSONObject("musicPlayButtonRenderer")
+            ?.optJSONObject("playNavigationEndpoint")
+            ?.optJSONObject("watchEndpoint")
+            ?.optString("videoId", "")
+            .orEmpty()
+        if (fromOverlay.isNotBlank()) return fromOverlay
+
+        val fromDirectNav = r.optJSONObject("navigationEndpoint")
+            ?.optJSONObject("watchEndpoint")
+            ?.optString("videoId", "")
+            .orEmpty()
+        if (fromDirectNav.isNotBlank()) return fromDirectNav
+
+        val menuItems = r.optJSONObject("menu")?.optJSONObject("menuRenderer")?.optJSONArray("items")
+        if (menuItems != null) {
+            for (m in 0 until menuItems.length()) {
+                val navVid = menuItems.optJSONObject(m)
+                    ?.optJSONObject("menuNavigationItemRenderer")
+                    ?.optJSONObject("navigationEndpoint")
+                    ?.optJSONObject("watchEndpoint")
+                    ?.optString("videoId", "")
+                    .orEmpty()
+                if (navVid.isNotBlank()) return navVid
+            }
+        }
+
+        return ""
     }
 
     suspend fun searchTracks(query: String): List<Track> = withContext(Dispatchers.IO) {
@@ -158,13 +295,71 @@ class MusicRepository {
             }
         }
 
-        val ytmTracks = searchYouTubeMusic(query)
-        if (ytmTracks.isNotEmpty()) {
-            synchronized(searchCache) { searchCache.put(q, Pair(ytmTracks, now)) }
-            return@withContext ytmTracks
+        val ytmTracks = coroutineScope {
+            val generalDeferred = async { searchYouTubeMusicByParams(query, null) }
+            val songsDeferred = async { searchYouTubeMusicByParams(query, YTM_PARAMS_SONGS) }
+            val videosDeferred = async { searchYouTubeMusicByParams(query, YTM_PARAMS_VIDEOS) }
+
+            val generalList = generalDeferred.await()
+            val songsList = songsDeferred.await()
+            val videosList = videosDeferred.await()
+
+            val merged = LinkedHashMap<String, Track>()
+            for (t in generalList) {
+                if (t.id.isNotBlank() && !merged.containsKey(t.id)) {
+                    merged[t.id] = t
+                }
+            }
+            for (t in songsList) {
+                val existing = merged[t.id]
+                if (existing == null) {
+                    merged[t.id] = t
+                } else if (existing.durationSeconds <= 0L && t.durationSeconds > 0L) {
+                    merged[t.id] = existing.copy(durationSeconds = t.durationSeconds)
+                }
+            }
+            for (t in videosList) {
+                val existing = merged[t.id]
+                if (existing == null) {
+                    merged[t.id] = t
+                } else if (existing.durationSeconds <= 0L && t.durationSeconds > 0L) {
+                    merged[t.id] = existing.copy(durationSeconds = t.durationSeconds)
+                }
+            }
+            merged.values.toList()
         }
 
-        try {
+        val queryTokens = q.split(Regex("\\s+")).filter { it.length >= 2 }
+        val hasStrongMatch = ytmTracks.any { trk ->
+            val combined = "${trk.title} ${trk.artist}".lowercase()
+            queryTokens.all { tok -> combined.contains(tok) }
+        }
+
+        val fallbackTracks = if (ytmTracks.size < 6 || !hasStrongMatch) {
+            fetchNewPipeSearchTracks(query)
+        } else {
+            emptyList()
+        }
+
+        val combinedMap = LinkedHashMap<String, Track>()
+        for (t in ytmTracks) {
+            if (t.id.isNotBlank()) combinedMap[t.id] = t
+        }
+        for (t in fallbackTracks) {
+            if (t.id.isNotBlank() && !combinedMap.containsKey(t.id)) {
+                combinedMap[t.id] = t
+            }
+        }
+
+        val finalResults = combinedMap.values.toList()
+        if (finalResults.isNotEmpty()) {
+            synchronized(searchCache) { searchCache.put(q, Pair(finalResults, now)) }
+        }
+        finalResults
+    }
+
+    private fun fetchNewPipeSearchTracks(query: String): List<Track> {
+        return try {
             val searchExtractor = service.getSearchExtractor(
                 query,
                 listOf("videos"),
@@ -172,38 +367,34 @@ class MusicRepository {
             )
             searchExtractor.fetchPage()
             val page = searchExtractor.initialPage
-            val list = page.items
+            page.items
                 .filterIsInstance<StreamInfoItem>()
-                .map { item ->
+                .mapNotNull { item ->
+                    val vid = item.url.substringAfter("v=").substringBefore("&").trim()
+                    if (vid.isBlank()) return@mapNotNull null
                     val rawThumb = item.thumbnails.maxByOrNull { it.width * it.height }?.url
                         ?: item.thumbnails.lastOrNull()?.url
                         ?: item.thumbnails.firstOrNull()?.url
                         ?: ""
                     Track(
-                        id = item.url.substringAfter("v=").substringBefore("&"),
-                        url = item.url,
+                        id = vid,
+                        url = "https://www.youtube.com/watch?v=$vid",
                         title = cleanTrackTitle(item.name ?: "Unknown Title"),
-                        artist = item.uploaderName?.replace(" - Topic", "") ?: "Unknown Artist",
+                        artist = item.uploaderName?.replace(" - Topic", "")?.trim() ?: "Unknown Artist",
                         thumbnailUrl = upgradeThumbnailUrl(rawThumb),
-                        durationSeconds = item.duration
+                        durationSeconds = item.duration.coerceAtLeast(0L)
                     )
                 }
-            if (list.isNotEmpty()) {
-                synchronized(searchCache) { searchCache.put(q, Pair(list, now)) }
-            }
-            list
         } catch (e: Exception) {
-            Log.e("MusicRepository", "Search failed: ${e.message}", e)
+            Log.e("MusicRepository", "NewPipe search failed: ${e.message}")
             emptyList()
         }
     }
 
-    private fun searchYouTubeMusic(query: String): List<Track> {
+    private fun searchYouTubeMusicByParams(query: String, params: String?): List<Track> {
         return try {
             val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
             val origin = "https://music.youtube.com"
-            val cookie = auth.getCookie() ?: ""
-            val sapisidHash = auth.getSapisidHash(origin)
 
             val payload = org.json.JSONObject().apply {
                 put("context", org.json.JSONObject().apply {
@@ -216,11 +407,12 @@ class MusicRepository {
                     })
                 })
                 put("query", query)
-                put("params", "EgWKAQIIAWoKEAkQBRAKEAMQBA==")
+                if (!params.isNullOrBlank()) {
+                    put("params", params)
+                }
             }
 
             val client = HttpClientProvider.client
-            val reqBody = payload.toString().toRequestBody("application/json".toMediaType())
             val reqBuilder = okhttp3.Request.Builder()
                 .url("$origin/youtubei/v1/search")
                 .header("Content-Type", "application/json")
@@ -230,13 +422,11 @@ class MusicRepository {
                 .header("X-Origin", origin)
                 .header("X-YouTube-Client-Name", "67")
                 .header("X-YouTube-Client-Version", YTM_CLIENT_VERSION)
-                .post(reqBody)
 
-            if (cookie.isNotBlank()) reqBuilder.header("Cookie", cookie)
-            if (!sapisidHash.isNullOrBlank()) {
-                reqBuilder.header("Authorization", sapisidHash)
-                reqBuilder.header("X-Goog-AuthUser", "0")
-            }
+            auth.applyAuthToRequest(reqBuilder, payload, origin)
+
+            val reqBody = payload.toString().toRequestBody("application/json".toMediaType())
+            reqBuilder.post(reqBody)
 
             val response = client.newCall(reqBuilder.build()).execute()
             val jsonStr = response.use { it.body?.string() } ?: return emptyList()
@@ -247,67 +437,126 @@ class MusicRepository {
         }
     }
 
+    private fun parseCardShelfTrack(cardShelf: org.json.JSONObject): List<Track> {
+        val results = mutableListOf<Track>()
+        try {
+            val titleRuns = cardShelf.optJSONObject("title")?.optJSONArray("runs")
+            val title = titleRuns?.optJSONObject(0)?.optString("text", "").orEmpty()
+            var videoId = titleRuns?.optJSONObject(0)
+                ?.optJSONObject("navigationEndpoint")
+                ?.optJSONObject("watchEndpoint")
+                ?.optString("videoId", "")
+                .orEmpty()
+
+            if (videoId.isBlank()) {
+                videoId = cardShelf.optJSONObject("onTap")
+                    ?.optJSONObject("watchEndpoint")
+                    ?.optString("videoId", "")
+                    .orEmpty()
+            }
+            if (videoId.isBlank()) {
+                val buttons = cardShelf.optJSONArray("buttons")
+                if (buttons != null) {
+                    for (b in 0 until buttons.length()) {
+                        val bVid = buttons.optJSONObject(b)
+                            ?.optJSONObject("buttonRenderer")
+                            ?.optJSONObject("command")
+                            ?.optJSONObject("watchEndpoint")
+                            ?.optString("videoId", "")
+                            .orEmpty()
+                        if (bVid.isNotBlank()) {
+                            videoId = bVid
+                            break
+                        }
+                    }
+                }
+            }
+
+            if (videoId.isNotBlank() && title.isNotBlank()) {
+                val subRuns = cardShelf.optJSONObject("subtitle")?.optJSONArray("runs")
+                var artist = "Unknown Artist"
+                var durationSec = 0L
+                if (subRuns != null) {
+                    for (k in 0 until subRuns.length()) {
+                        val txt = subRuns.optJSONObject(k)?.optString("text", "")?.trim().orEmpty()
+                        if (txt.isEmpty()) continue
+                        val d = parseDurationToSeconds(txt)
+                        if (d > 0L && durationSec <= 0L) {
+                            durationSec = d
+                            continue
+                        }
+                        if (!isMetadataNoiseToken(txt) && artist == "Unknown Artist") {
+                            artist = txt.replace(" - Topic", "").trim()
+                        }
+                    }
+                }
+
+                val thumbs = cardShelf.optJSONObject("thumbnail")
+                    ?.optJSONObject("musicThumbnailRenderer")
+                    ?.optJSONObject("thumbnail")
+                    ?.optJSONArray("thumbnails")
+                val thumbUrl = if (thumbs != null && thumbs.length() > 0) {
+                    thumbs.optJSONObject(thumbs.length() - 1)?.optString("url", "").orEmpty()
+                } else ""
+
+                results.add(
+                    Track(
+                        id = videoId,
+                        url = "https://www.youtube.com/watch?v=$videoId",
+                        title = cleanTrackTitle(title),
+                        artist = artist,
+                        thumbnailUrl = upgradeThumbnailUrl(thumbUrl),
+                        durationSeconds = durationSec
+                    )
+                )
+            }
+
+            val subContents = cardShelf.optJSONArray("contents")
+            if (subContents != null) {
+                for (i in 0 until subContents.length()) {
+                    val itemObj = subContents.optJSONObject(i) ?: continue
+                    parseSingleTrackItem(itemObj)?.let { results.add(it) }
+                }
+            }
+        } catch (_: Exception) {}
+        return results
+    }
+
     private fun parseYtmSearchTracks(root: org.json.JSONObject): List<Track> {
         val list = mutableListOf<Track>()
+        val seenIds = HashSet<String>()
         try {
             val tabs = root.optJSONObject("contents")
                 ?.optJSONObject("tabbedSearchResultsRenderer")
                 ?.optJSONArray("tabs") ?: return emptyList()
-            val sections = tabs.optJSONObject(0)
-                ?.optJSONObject("tabRenderer")
-                ?.optJSONObject("content")
-                ?.optJSONObject("sectionListRenderer")
-                ?.optJSONArray("contents") ?: return emptyList()
 
-            for (s in 0 until sections.length()) {
-                val shelf = sections.optJSONObject(s)?.optJSONObject("musicShelfRenderer") ?: continue
-                val items = shelf.optJSONArray("contents") ?: continue
-                for (i in 0 until items.length()) {
-                    val r = items.optJSONObject(i)?.optJSONObject("musicResponsiveListItemRenderer") ?: continue
-                    val cols = r.optJSONArray("flexColumns") ?: continue
-                    if (cols.length() < 2) continue
+            for (tIdx in 0 until tabs.length()) {
+                val sections = tabs.optJSONObject(tIdx)
+                    ?.optJSONObject("tabRenderer")
+                    ?.optJSONObject("content")
+                    ?.optJSONObject("sectionListRenderer")
+                    ?.optJSONArray("contents") ?: continue
 
-                    val col0Runs = cols.optJSONObject(0)
-                        ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
-                        ?.optJSONObject("text")?.optJSONArray("runs") ?: continue
-                    if (col0Runs.length() == 0) continue
+                for (s in 0 until sections.length()) {
+                    val secObj = sections.optJSONObject(s) ?: continue
 
-                    val title = col0Runs.optJSONObject(0)?.optString("text", "") ?: ""
-                    val videoId = col0Runs.optJSONObject(0)
-                        ?.optJSONObject("navigationEndpoint")
-                        ?.optJSONObject("watchEndpoint")
-                        ?.optString("videoId", "") ?: ""
-                    if (videoId.isBlank()) continue
-
-                    val col1Runs = cols.optJSONObject(1)
-                        ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
-                        ?.optJSONObject("text")?.optJSONArray("runs")
-                    val artist = col1Runs?.optJSONObject(0)?.optString("text", "Unknown Artist") ?: "Unknown Artist"
-
-                    var durationSec = 0L
-                    if (col1Runs != null && col1Runs.length() > 0) {
-                        val lastRunText = col1Runs.optJSONObject(col1Runs.length() - 1)?.optString("text", "") ?: ""
-                        durationSec = parseDurationToSeconds(lastRunText)
+                    secObj.optJSONObject("musicCardShelfRenderer")?.let { cardShelf ->
+                        for (trk in parseCardShelfTrack(cardShelf)) {
+                            if (trk.id.isNotBlank() && seenIds.add(trk.id)) {
+                                list.add(trk)
+                            }
+                        }
                     }
 
-                    var thumbUrl = ""
-                    val thumbs = r.optJSONObject("thumbnail")
-                        ?.optJSONObject("musicThumbnailRenderer")
-                        ?.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
-                    if (thumbs != null && thumbs.length() > 0) {
-                        thumbUrl = thumbs.optJSONObject(thumbs.length() - 1)?.optString("url", "") ?: ""
+                    val shelf = secObj.optJSONObject("musicShelfRenderer") ?: continue
+                    val items = shelf.optJSONArray("contents") ?: continue
+                    for (i in 0 until items.length()) {
+                        val itemObj = items.optJSONObject(i) ?: continue
+                        val parsed = parseSingleTrackItem(itemObj)
+                        if (parsed != null && parsed.id.isNotBlank() && seenIds.add(parsed.id)) {
+                            list.add(parsed)
+                        }
                     }
-
-                    list.add(
-                        Track(
-                            id = videoId,
-                            url = "https://www.youtube.com/watch?v=$videoId",
-                            title = cleanTrackTitle(title),
-                            artist = artist.replace(" - Topic", ""),
-                            thumbnailUrl = upgradeThumbnailUrl(thumbUrl),
-                            durationSeconds = durationSec
-                        )
-                    )
                 }
             }
         } catch (e: Exception) {
@@ -379,8 +628,6 @@ class MusicRepository {
         try {
             val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
             val origin = "https://music.youtube.com"
-            val cookie = auth.getCookie() ?: ""
-            val sapisidHash = auth.getSapisidHash(origin)
 
             val payload = org.json.JSONObject().apply {
                 put("context", org.json.JSONObject().apply {
@@ -400,7 +647,6 @@ class MusicRepository {
             }
 
             val client = HttpClientProvider.client
-            val reqBody = payload.toString().toRequestBody("application/json".toMediaType())
             val reqBuilder = okhttp3.Request.Builder()
                 .url("$origin/youtubei/v1/next")
                 .header("Content-Type", "application/json")
@@ -410,13 +656,11 @@ class MusicRepository {
                 .header("X-Origin", origin)
                 .header("X-YouTube-Client-Name", "67")
                 .header("X-YouTube-Client-Version", YTM_CLIENT_VERSION)
-                .post(reqBody)
 
-            if (cookie.isNotBlank()) reqBuilder.header("Cookie", cookie)
-            if (!sapisidHash.isNullOrBlank()) {
-                reqBuilder.header("Authorization", sapisidHash)
-                reqBuilder.header("X-Goog-AuthUser", "0")
-            }
+            auth.applyAuthToRequest(reqBuilder, payload, origin)
+
+            val reqBody = payload.toString().toRequestBody("application/json".toMediaType())
+            reqBuilder.post(reqBody)
 
             val jsonStr = client.newCall(reqBuilder.build()).execute().use { resp ->
                 if (!resp.isSuccessful) return@withContext emptyList()
@@ -496,9 +740,8 @@ class MusicRepository {
         try {
             val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
             val origin = "https://music.youtube.com"
-            val cookie = auth.getCookie() ?: ""
-            val sapisidHash = auth.getSapisidHash(origin)
             val client = HttpClientProvider.client
+            val (hlCode, glCode) = resolveHlGl()
 
             fun fetchBrowse(browseId: String): org.json.JSONObject? {
                 val payload = org.json.JSONObject().apply {
@@ -506,8 +749,8 @@ class MusicRepository {
                         put("client", org.json.JSONObject().apply {
                             put("clientName", YTM_CLIENT_NAME)
                             put("clientVersion", YTM_CLIENT_VERSION)
-                            put("hl", "id")
-                            put("gl", "ID")
+                            put("hl", hlCode)
+                            put("gl", glCode)
                         })
                     })
                     put("browseId", browseId)
@@ -521,13 +764,9 @@ class MusicRepository {
                     .header("X-Origin", origin)
                     .header("X-YouTube-Client-Name", "67")
                     .header("X-YouTube-Client-Version", YTM_CLIENT_VERSION)
-                    .post(payload.toString().toRequestBody("application/json".toMediaType()))
 
-                if (cookie.isNotBlank()) reqBuilder.header("Cookie", cookie)
-                if (!sapisidHash.isNullOrBlank()) {
-                    reqBuilder.header("Authorization", sapisidHash)
-                    reqBuilder.header("X-Goog-AuthUser", "0")
-                }
+                auth.applyAuthToRequest(reqBuilder, payload, origin)
+                reqBuilder.post(payload.toString().toRequestBody("application/json".toMediaType()))
 
                 client.newCall(reqBuilder.build()).execute().use { resp ->
                     if (resp.isSuccessful) {
@@ -619,7 +858,7 @@ class MusicRepository {
             if (it.has("musicResponsiveListItemRenderer")) {
                 val r = it.getJSONObject("musicResponsiveListItemRenderer")
                 val cols = r.optJSONArray("flexColumns") ?: return null
-                if (cols.length() < 2) return null
+                if (cols.length() < 1) return null
 
                 val col0Runs = cols.optJSONObject(0)
                     ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
@@ -627,22 +866,13 @@ class MusicRepository {
                 if (col0Runs.length() == 0) return null
 
                 val title = col0Runs.optJSONObject(0)?.optString("text", "") ?: ""
-                val videoId = col0Runs.optJSONObject(0)
-                    ?.optJSONObject("navigationEndpoint")
-                    ?.optJSONObject("watchEndpoint")
-                    ?.optString("videoId", "") ?: ""
+                if (title.isBlank()) return null
+
+                val videoId = extractVideoIdFromResponsiveItem(r, cols)
                 if (videoId.isBlank()) return null
 
-                val col1Runs = cols.optJSONObject(1)
-                    ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
-                    ?.optJSONObject("text")?.optJSONArray("runs")
-                val artist = col1Runs?.optJSONObject(0)?.optString("text", "Unknown Artist") ?: "Unknown Artist"
-
-                var durationSec = 0L
-                if (col1Runs != null && col1Runs.length() > 0) {
-                    val lastRunText = col1Runs.optJSONObject(col1Runs.length() - 1)?.optString("text", "") ?: ""
-                    durationSec = parseDurationToSeconds(lastRunText)
-                }
+                val fixedCols = r.optJSONArray("fixedColumns")
+                val (artist, durationSec) = extractArtistAndDuration(cols, fixedCols)
 
                 var thumbUrl = ""
                 val thumbs = r.optJSONObject("thumbnail")
@@ -656,7 +886,7 @@ class MusicRepository {
                     id = videoId,
                     url = "https://www.youtube.com/watch?v=$videoId",
                     title = cleanTrackTitle(title),
-                    artist = artist.replace(" - Topic", ""),
+                    artist = artist,
                     thumbnailUrl = upgradeThumbnailUrl(thumbUrl),
                     durationSeconds = durationSec
                 )
@@ -666,13 +896,32 @@ class MusicRepository {
                 if (titleRuns.length() == 0) return null
 
                 val title = titleRuns.optJSONObject(0)?.optString("text", "") ?: ""
-                val videoId = r.optJSONObject("navigationEndpoint")
+                var videoId = r.optJSONObject("navigationEndpoint")
                     ?.optJSONObject("watchEndpoint")
                     ?.optString("videoId", "") ?: ""
+                if (videoId.isBlank()) {
+                    videoId = r.optJSONObject("thumbnailOverlay")
+                        ?.optJSONObject("musicItemThumbnailOverlayRenderer")
+                        ?.optJSONObject("content")
+                        ?.optJSONObject("musicPlayButtonRenderer")
+                        ?.optJSONObject("playNavigationEndpoint")
+                        ?.optJSONObject("watchEndpoint")
+                        ?.optString("videoId", "")
+                        .orEmpty()
+                }
                 if (videoId.isBlank()) return null
 
                 val subtitleRuns = r.optJSONObject("subtitle")?.optJSONArray("runs")
-                val artist = subtitleRuns?.optJSONObject(0)?.optString("text", "Unknown Artist") ?: "Unknown Artist"
+                var artist = "Unknown Artist"
+                if (subtitleRuns != null) {
+                    for (k in 0 until subtitleRuns.length()) {
+                        val txt = subtitleRuns.optJSONObject(k)?.optString("text", "")?.trim().orEmpty()
+                        if (!isMetadataNoiseToken(txt)) {
+                            artist = txt.replace(" - Topic", "").trim()
+                            break
+                        }
+                    }
+                }
 
                 var thumbUrl = ""
                 val thumbs = r.optJSONObject("thumbnailRenderer")
@@ -686,7 +935,7 @@ class MusicRepository {
                     id = videoId,
                     url = "https://www.youtube.com/watch?v=$videoId",
                     title = cleanTrackTitle(title),
-                    artist = artist.replace(" - Topic", ""),
+                    artist = artist,
                     thumbnailUrl = upgradeThumbnailUrl(thumbUrl),
                     durationSeconds = 0L
                 )
@@ -809,7 +1058,6 @@ class MusicRepository {
 
         try {
             val origin = "https://music.youtube.com"
-            val sapisidHash = auth.getSapisidHash(origin) ?: return@withContext false
             val endpoint = if (isLiked) "like/like" else "like/removelike"
 
             val payload = org.json.JSONObject().apply {
@@ -827,21 +1075,19 @@ class MusicRepository {
                 })
             }
 
-            val reqBody = payload.toString().toRequestBody("application/json".toMediaType())
-            val req = okhttp3.Request.Builder()
+            val reqBuilder = okhttp3.Request.Builder()
                 .url("$origin/youtubei/v1/$endpoint")
                 .header("Content-Type", "application/json")
                 .header("User-Agent", YTM_USER_AGENT)
                 .header("Origin", origin)
                 .header("Referer", "$origin/")
                 .header("X-Origin", origin)
-                .header("X-Goog-AuthUser", "0")
                 .header("X-YouTube-Client-Name", "67")
                 .header("X-YouTube-Client-Version", YTM_CLIENT_VERSION)
-                .header("Cookie", cookie)
-                .header("Authorization", sapisidHash)
-                .post(reqBody)
-                .build()
+
+            auth.applyAuthToRequest(reqBuilder, payload, origin)
+            val reqBody = payload.toString().toRequestBody("application/json".toMediaType())
+            val req = reqBuilder.post(reqBody).build()
 
             HttpClientProvider.client.newCall(req).execute().use { resp ->
                 resp.isSuccessful
@@ -859,22 +1105,21 @@ class MusicRepository {
 
         try {
             val origin = "https://music.youtube.com"
-            val sapisidHash = auth.getSapisidHash(origin)
+            val (hlCode, glCode) = resolveHlGl()
 
             val payload = org.json.JSONObject().apply {
                 put("context", org.json.JSONObject().apply {
                     put("client", org.json.JSONObject().apply {
                         put("clientName", YTM_CLIENT_NAME)
                         put("clientVersion", YTM_CLIENT_VERSION)
-                        put("hl", "en")
-                        put("gl", "US")
+                        put("hl", hlCode)
+                        put("gl", glCode)
                     })
                 })
                 put("browseId", "FEmusic_liked_videos")
             }
 
             val client = HttpClientProvider.client
-            val reqBody = payload.toString().toRequestBody("application/json".toMediaType())
             val reqBuilder = okhttp3.Request.Builder()
                 .url("$origin/youtubei/v1/browse")
                 .header("Content-Type", "application/json")
@@ -882,15 +1127,12 @@ class MusicRepository {
                 .header("Origin", origin)
                 .header("Referer", "$origin/")
                 .header("X-Origin", origin)
-                .header("X-Goog-AuthUser", "0")
                 .header("X-YouTube-Client-Name", "67")
                 .header("X-YouTube-Client-Version", YTM_CLIENT_VERSION)
-                .header("Cookie", cookie)
-                .post(reqBody)
 
-            if (sapisidHash != null) {
-                reqBuilder.header("Authorization", sapisidHash)
-            }
+            auth.applyAuthToRequest(reqBuilder, payload, origin)
+            val reqBody = payload.toString().toRequestBody("application/json".toMediaType())
+            reqBuilder.post(reqBody)
 
             val resp = client.newCall(reqBuilder.build()).execute()
             val respBody = try {
@@ -911,69 +1153,14 @@ class MusicRepository {
 
                 val trackList = mutableListOf<Track>()
                 val musicShelf = contents?.optJSONObject(0)?.optJSONObject("musicShelfRenderer")
+                    ?: contents?.optJSONObject(0)?.optJSONObject("musicPlaylistShelfRenderer")
                 val items = musicShelf?.optJSONArray("contents")
                 if (items != null) {
                     for (i in 0 until items.length()) {
-                        val row = items.optJSONObject(i)?.optJSONObject("musicResponsiveListItemRenderer")
-                        if (row != null) {
-                            val cols = row.optJSONArray("flexColumns")
-                            val col0Runs = cols?.optJSONObject(0)
-                                ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
-                                ?.optJSONObject("text")
-                                ?.optJSONArray("runs")
-
-                            val title = col0Runs?.optJSONObject(0)?.optString("text") ?: ""
-
-                            var videoId = col0Runs?.optJSONObject(0)
-                                ?.optJSONObject("navigationEndpoint")
-                                ?.optJSONObject("watchEndpoint")
-                                ?.optString("videoId") ?: ""
-                            if (videoId.isBlank()) {
-                                videoId = row.optJSONObject("playlistItemData")?.optString("videoId") ?: ""
-                            }
-
-                            val col1Runs = cols?.optJSONObject(1)
-                                ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
-                                ?.optJSONObject("text")
-                                ?.optJSONArray("runs")
-
-                            val artist = col1Runs?.optJSONObject(0)?.optString("text") ?: "YouTube Music"
-
-                            var durationSec = 0L
-                            val fixedCols = row.optJSONArray("fixedColumns")
-                            if (fixedCols != null && fixedCols.length() > 0) {
-                                val durText = fixedCols.optJSONObject(0)
-                                    ?.optJSONObject("musicResponsiveListItemFixedColumnRenderer")
-                                    ?.optJSONObject("text")
-                                    ?.optJSONArray("runs")
-                                    ?.optJSONObject(0)
-                                    ?.optString("text", "") ?: ""
-                                durationSec = parseDurationToSeconds(durText)
-                            }
-                            if (durationSec <= 0L && col1Runs != null && col1Runs.length() > 0) {
-                                val lastRun = col1Runs.optJSONObject(col1Runs.length() - 1)?.optString("text", "") ?: ""
-                                durationSec = parseDurationToSeconds(lastRun)
-                            }
-
-                            val thumb = row.optJSONObject("thumbnail")
-                                ?.optJSONObject("musicThumbnailRenderer")
-                                ?.optJSONObject("thumbnail")
-                                ?.optJSONArray("thumbnails")
-                                ?.let { it.optJSONObject(it.length() - 1)?.optString("url") } ?: ""
-
-                            if (videoId.isNotBlank() && title.isNotBlank()) {
-                                trackList.add(
-                                    Track(
-                                        id = videoId,
-                                        url = "https://www.youtube.com/watch?v=$videoId",
-                                        title = cleanTrackTitle(title),
-                                        artist = artist.replace(" - Topic", ""),
-                                        thumbnailUrl = upgradeThumbnailUrl(thumb),
-                                        durationSeconds = durationSec,
-                                        isFavorite = true
-                                    )
-                                )
-                            }
+                        val itemObj = items.optJSONObject(i) ?: continue
+                        val parsed = parseSingleTrackItem(itemObj)
+                        if (parsed != null && parsed.id.isNotBlank()) {
+                            trackList.add(parsed.copy(isFavorite = true))
                         }
                     }
                 }

@@ -87,27 +87,25 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.8.8 — Multi-Language UI, Lyrics Target Language & Notification Fixes
+          ## Kuro v3.8.9 — Widget Corner Polish, Fade-In UI, Full YT Music Search, Multi-Account Profile & Branded Media Notification
 
-          - **Multi-Language Support**:
-            - Added full UI translations for Japanese, Korean, Chinese, Spanish, French, German, Portuguese, Russian, and Arabic.
-            - InnerTube requests now resolve `hl`/`gl` dynamically from the selected app language.
-          - **Lyrics Translation**:
-            - Added lyrics target-language picker with per-language memory and disk caches.
-            - Lyrics are translated to the selected language instead of always Indonesian.
-          - **Notification & Widget Fixes**:
-            - Media notification artwork now loads through a Coil-backed Media3 `BitmapLoader` with thumbnail fallback.
-            - Notification and home-screen widgets stay in sync on playback, media item, and play-state changes.
-          - **Playback Fixes**:
-            - Sleep timer end-of-track now pauses playback via `PlayerQueueManager` without auto-advancing.
-            - Restored the sleep timer dialog removed in v3.8.7 that broke the build.
-          - Published signed release and debug APKs.
+          - **Widget Corner & Backdrop Fix**:
+            - Eliminated double-stroke corner peeling by rendering widget backdrops at exact launcher cell aspect ratios and 24dp density-matched radii with `clipToOutline`.
+            - Cleared gray placeholder bleed behind rounded album thumbnails and added the Kuro logo to the `KURO STUDIO` badge.
+          - **Smooth Fade-In Navigation & Edge Masking**:
+            - Replaced hard-cut screen edges above the bottom navigation bar (`Home`, `Search`, `Vibe`, `Library`) and top genre chips with offscreen `BlendMode.DstIn` gradient fade masks and smooth `fadeIn` transitions.
+          - **Complete YouTube Music Search Parity**:
+            - Combined unfiltered YT Music search (`musicCardShelfRenderer` Top Result), Songs, and Videos/Montage streams with `playlistItemData`/`overlay` videoId extraction and live debounced search as you type.
+          - **Multi-Account Google Profile Reliability**:
+            - Fixed premature WebView login dismissal and added 4-stage account discovery (`account_menu`, `googleAccountHeaderRenderer`, `accountItem`, `accounts_list`, and `ytcfg`/HTML fallback) with `X-Goog-AuthUser` & `X-Goog-PageId` support.
+          - **Branded Kuro Media Notification**:
+            - Replaced generic music note icon with the official Kuro acoustic-wave K vector logo and added a sleek Kuro logo badge on media notification artwork cards.
           EOF
           gh release delete "$RELEASE_TAG" --yes --cleanup-tag 2>/dev/null || true
           gh release create "$RELEASE_TAG" \
             "${{ steps.apk.outputs.release_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (32-Bit Fix, Two-Way YTM Sync & Compressed APK)" \
+            --title "Kuro $RELEASE_TAG (Widget Fix, Fade-In UI, Full YTM Search & Kuro Notification Logo)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 

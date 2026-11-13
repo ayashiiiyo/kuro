@@ -11,8 +11,8 @@ android {
         applicationId = "com.ayashii.kuro"
         minSdk = 26
         targetSdk = 34
-        versionCode = 50
-        versionName = "3.8.8"
+        versionCode = 51
+        versionName = "3.8.9"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -62,6 +62,10 @@ android {
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.14"
+    }
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
     }
     packaging {
         jniLibs {

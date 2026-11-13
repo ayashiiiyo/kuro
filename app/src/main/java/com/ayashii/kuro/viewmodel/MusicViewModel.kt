@@ -422,10 +422,19 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+        var lastCookie: String? = null
         viewModelScope.launch {
             authState.collect { account ->
-                if (account != null) {
+                val curCookie = account?.cookie
+                if (account != null && curCookie != lastCookie) {
+                    lastCookie = curCookie
+                    repository.invalidateHomeCache()
+                    loadTrending()
                     syncLikedSongs()
+                } else if (account == null && lastCookie != null) {
+                    lastCookie = null
+                    repository.invalidateHomeCache()
+                    loadTrending()
                 }
             }
         }
@@ -813,22 +822,34 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun loadSuggestions(query: String) {
         suggestJob?.cancel()
+        searchJob?.cancel()
         if (query.isBlank()) {
             _suggestions.value = emptyList()
+            _searchResults.value = emptyList()
+            _isSearching.value = false
             return
         }
         suggestJob = viewModelScope.launch {
-            delay(200)
+            delay(180)
             val list = repository.getSuggestions(query)
             _suggestions.value = list
+        }
+        searchJob = viewModelScope.launch {
+            delay(360)
+            _isSearching.value = true
+            val results = repository.searchTracks(query)
+            _searchResults.value = results
+            _isSearching.value = false
         }
     }
 
     fun search(query: String) {
+        suggestJob?.cancel()
         searchJob?.cancel()
         _suggestions.value = emptyList()
         if (query.isBlank()) {
             _searchResults.value = emptyList()
+            _isSearching.value = false
             return
         }
         searchJob = viewModelScope.launch {
@@ -1122,7 +1143,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         if (exists) {
             currentFavs.removeAll { it.id == track.id }
         } else {
-            currentFavs.add(track.copy(isFavorite = true))
+            currentFavs.add(0, track.copy(isFavorite = true))
             tasteManager.recordTrackLiked(track)
         }
         _favorites.value = currentFavs
@@ -1152,23 +1173,26 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             val liked = repository.getLikedTracks()
             if (liked.isNotEmpty()) {
                 val currentFavs = _favorites.value.toMutableList()
-                val existingIndexById = currentFavs.mapIndexed { idx, t -> t.id to idx }.toMap().toMutableMap()
-                liked.forEach { track ->
-                    val existingIdx = existingIndexById[track.id]
-                    if (existingIdx == null) {
-                        currentFavs.add(track.copy(isFavorite = true))
-                    } else if (currentFavs[existingIdx].durationSeconds <= 0L && track.durationSeconds > 0L) {
-                        currentFavs[existingIdx] = currentFavs[existingIdx].copy(
-                            durationSeconds = track.durationSeconds,
-                            isFavorite = true
-                        )
+                val existingById = currentFavs.associateBy { it.id }.toMutableMap()
+                val merged = mutableListOf<Track>()
+                val seen = HashSet<String>()
+                for (track in liked) {
+                    if (seen.add(track.id)) {
+                        val existing = existingById[track.id]
+                        val dur = if (track.durationSeconds > 0L) track.durationSeconds else (existing?.durationSeconds ?: 0L)
+                        merged.add(track.copy(durationSeconds = dur, isFavorite = true))
                     }
                 }
-                _favorites.value = currentFavs
-                saveStoredFavorites(currentFavs)
+                for (localTrack in currentFavs) {
+                    if (seen.add(localTrack.id)) {
+                        merged.add(localTrack.copy(isFavorite = true))
+                    }
+                }
+                _favorites.value = merged
+                saveStoredFavorites(merged)
                 val cur = _currentTrack.value
                 if (cur != null) {
-                    val isFav = currentFavs.any { it.id == cur.id }
+                    val isFav = merged.any { it.id == cur.id }
                     if (cur.isFavorite != isFav) {
                         val updated = cur.copy(isFavorite = isFav)
                         _currentTrack.value = updated

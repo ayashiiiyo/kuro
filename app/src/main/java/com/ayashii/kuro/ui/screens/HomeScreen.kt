@@ -29,6 +29,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -51,7 +52,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -75,6 +81,18 @@ import com.ayashii.kuro.ui.theme.PureBlack
 import com.ayashii.kuro.ui.theme.PureWhite
 import com.ayashii.kuro.ui.theme.Typography
 import com.ayashii.kuro.viewmodel.MusicViewModel
+
+private fun formatMixBadgeLabel(artist: String): String {
+    val clean = artist.trim().ifBlank { "Kuro" }
+    val primary = clean.split(",", "&", " feat.", " ft.", " x ", " X ").firstOrNull()?.trim().orEmpty().ifBlank { clean }
+    return if (primary.length <= 16) {
+        "$primary Mix"
+    } else {
+        val cutAtSpace = primary.take(15).substringBeforeLast(' ', "")
+        val base = if (cutAtSpace.length >= 4) cutAtSpace else primary.take(14).trim()
+        "$base Mix"
+    }
+}
 
 @Composable
 fun HomeScreen(
@@ -104,6 +122,9 @@ fun HomeScreen(
 
     var selectedGenre by rememberSaveable { mutableStateOf("Semua") }
     val genres = listOf("Semua", "Pop", "Lo-Fi", "Rock", "Acoustic", "Anime", "Hip-Hop", "R&B", "Top Global")
+    val genreRowState = rememberLazyListState()
+    val canScrollGenreBack by remember { derivedStateOf { genreRowState.canScrollBackward } }
+    val canScrollGenreForward by remember { derivedStateOf { genreRowState.canScrollForward } }
 
     BackHandler(enabled = selectedGenre != "Semua") {
         selectedGenre = "Semua"
@@ -126,7 +147,7 @@ fun HomeScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 6.dp),
+                    .padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 AccountTopButton(
@@ -135,8 +156,30 @@ fun HomeScreen(
                 )
                 Spacer(modifier = Modifier.width(10.dp))
                 LazyRow(
+                    state = genreRowState,
+                    contentPadding = PaddingValues(start = 2.dp, end = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            compositingStrategy = CompositingStrategy.Offscreen
+                        }
+                        .drawWithContent {
+                            drawContent()
+                            val leftStop = if (canScrollGenreBack) 0.04f else 0.0f
+                            val rightStop = if (canScrollGenreForward) 0.94f else 1.0f
+                            if (leftStop > 0f || rightStop < 1f) {
+                                drawRect(
+                                    brush = Brush.horizontalGradient(
+                                        0.0f to if (leftStop > 0f) Color.Transparent else Color.White,
+                                        leftStop to Color.White,
+                                        rightStop to Color.White,
+                                        1.0f to if (rightStop < 1f) Color.Transparent else Color.White
+                                    ),
+                                    blendMode = BlendMode.DstIn
+                                )
+                            }
+                        }
                 ) {
                     items(genres) { genre ->
                         val isSelected = selectedGenre == genre
@@ -145,10 +188,9 @@ fun HomeScreen(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(20.dp))
                                 .background(chipBg)
-                                .border(
-                                    1.dp,
-                                    if (isSelected) colors.accent else colors.border,
-                                    RoundedCornerShape(20.dp)
+                                .then(
+                                    if (isSelected) Modifier
+                                    else Modifier.border(1.dp, colors.border.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
                                 )
                                 .clickable {
                                     selectedGenre = genre
@@ -173,14 +215,14 @@ fun HomeScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
         AnimatedContent(
             targetState = selectedGenre,
             transitionSpec = {
-                (fadeIn(tween(240, easing = KuroMotion.EmphasizedDecelerate)) +
-                    slideInVertically(animationSpec = tween(240, easing = KuroMotion.EmphasizedDecelerate)) { it / 18 })
-                    .togetherWith(fadeOut(tween(160, easing = KuroMotion.EmphasizedAccelerate)))
+                (fadeIn(tween(260, easing = KuroMotion.EmphasizedDecelerate)) +
+                    slideInVertically(animationSpec = tween(260, easing = KuroMotion.EmphasizedDecelerate)) { it / 18 })
+                    .togetherWith(fadeOut(tween(180, easing = KuroMotion.EmphasizedAccelerate)))
             },
             label = "home_genre_transition",
             modifier = Modifier.fillMaxSize()
@@ -205,7 +247,10 @@ fun HomeScreen(
                     )
                 }
             } else {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(top = 6.dp)
+                ) {
                     items(genreTracks, key = { it.id }, contentType = { "track" }) { track ->
                         val isFav = track.id in favoriteIds
                         TrackItem(
@@ -231,9 +276,10 @@ fun HomeScreen(
             }
         } else if (homeSections.isNotEmpty() || trendingTracks.isNotEmpty()) {
             LazyColumn(
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(top = 6.dp)
             ) {
-                val homeTracks = trendingTracks.ifEmpty { homeSections.flatMap { it.tracks } }
+                val homeTracks = trendingTracks.ifEmpty { homeSections.flatMap { it.tracks } }.distinctBy { it.id }
 
                 val startListeningTracks = (recentlyPlayed.ifEmpty { homeTracks }).distinctBy { it.id }.take(3)
                 if (startListeningTracks.isNotEmpty()) {
@@ -307,14 +353,15 @@ fun HomeScreen(
                     }
                 }
 
-                val mixTracks = homeTracks.drop(3).take(8)
+                val startIds = startListeningTracks.mapTo(HashSet()) { it.id }
+                val mixTracks = homeTracks.filter { it.id !in startIds }.take(8).ifEmpty { homeTracks.drop(3).take(8) }
                 if (mixTracks.isNotEmpty()) {
                     item(key = "to_get_you_started_header") {
                         Text(
                             text = stringResource(R.string.home_to_get_you_started),
                             style = Typography.headlineMedium.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold),
                             color = colors.textPrimary,
-                            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 12.dp)
+                            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 12.dp)
                         )
                     }
                     item(key = "to_get_you_started_carousel") {
@@ -332,7 +379,7 @@ fun HomeScreen(
                                     Box(
                                         modifier = Modifier
                                             .size(152.dp)
-                                            .clip(RoundedCornerShape(12.dp))
+                                            .clip(RoundedCornerShape(14.dp))
                                             .background(colors.card)
                                     ) {
                                         AsyncImage(
@@ -343,21 +390,29 @@ fun HomeScreen(
                                         )
                                         Box(
                                             modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(64.dp)
+                                                .align(Alignment.BottomCenter)
+                                                .background(
+                                                    Brush.verticalGradient(
+                                                        listOf(
+                                                            Color.Transparent,
+                                                            PureBlack.copy(alpha = 0.82f)
+                                                        )
+                                                    )
+                                                )
+                                        )
+                                        Text(
+                                            text = formatMixBadgeLabel(track.artist),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = PureWhite,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier
                                                 .align(Alignment.BottomStart)
-                                                .padding(8.dp)
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(PureBlack.copy(alpha = 0.78f))
-                                                .border(1.dp, PureWhite.copy(alpha = 0.18f), RoundedCornerShape(6.dp))
-                                                .padding(horizontal = 7.dp, vertical = 3.dp)
-                                        ) {
-                                            Text(
-                                                text = "${track.artist.take(12)} Mix",
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = PureWhite,
-                                                maxLines = 1
-                                            )
-                                        }
+                                                .padding(horizontal = 10.dp, vertical = 9.dp)
+                                        )
                                     }
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Text(
@@ -379,7 +434,7 @@ fun HomeScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 10.dp),
+                                .padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
@@ -398,18 +453,17 @@ fun HomeScreen(
                     item(key = "quick_picks_grid") {
                         Column(
                             modifier = Modifier.padding(horizontal = 20.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             quickPicks.chunked(2).forEach { rowTracks ->
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                     rowTracks.forEach { track ->
                                         Row(
                                             modifier = Modifier
                                                 .weight(1f)
                                                 .height(62.dp)
-                                                .clip(RoundedCornerShape(10.dp))
+                                                .clip(RoundedCornerShape(12.dp))
                                                 .background(colors.card)
-                                                .border(1.dp, colors.border, RoundedCornerShape(10.dp))
                                                 .clickable { viewModel.playTrack(track, quickPicks) },
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
@@ -417,7 +471,9 @@ fun HomeScreen(
                                                 model = track.thumbnailUrlForDisplay(192),
                                                 contentDescription = null,
                                                 contentScale = ContentScale.Crop,
-                                                modifier = Modifier.size(62.dp)
+                                                modifier = Modifier
+                                                    .size(62.dp)
+                                                    .clip(RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp))
                                             )
                                             Text(
                                                 text = track.title,
@@ -426,7 +482,7 @@ fun HomeScreen(
                                                 color = colors.textPrimary,
                                                 maxLines = 2,
                                                 overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.padding(horizontal = 9.dp)
+                                                modifier = Modifier.padding(horizontal = 10.dp)
                                             )
                                         }
                                     }
@@ -434,11 +490,16 @@ fun HomeScreen(
                                 }
                             }
                         }
-                        Spacer(Modifier.height(22.dp))
+                        Spacer(Modifier.height(24.dp))
                     }
                 }
 
-                val featuredTrack = homeSections.firstNotNullOfOrNull { it.tracks.firstOrNull() } ?: homeTracks.firstOrNull()
+                val usedIds = (startIds + mixTracks.map { it.id } + quickPicks.map { it.id }).toHashSet()
+                val featuredTrack = homeSections.firstNotNullOfOrNull { sec ->
+                    sec.tracks.firstOrNull { it.id !in usedIds }
+                } ?: homeTracks.firstOrNull { it.id !in usedIds }
+                    ?: homeSections.firstNotNullOfOrNull { it.tracks.firstOrNull() }
+                    ?: homeTracks.firstOrNull()
                 if (featuredTrack != null) {
                     item(key = "featured_title") {
                         Text(
@@ -495,7 +556,7 @@ fun HomeScreen(
                                 )
                             }
                         }
-                        Spacer(Modifier.height(22.dp))
+                        Spacer(Modifier.height(24.dp))
                     }
                 }
 
@@ -539,17 +600,18 @@ fun HomeScreen(
                                 )
                             }
                         }
-                        Spacer(modifier = Modifier.height(22.dp))
+                        Spacer(modifier = Modifier.height(24.dp))
                     }
                 }
 
                 item {
-                    Spacer(modifier = Modifier.height(130.dp))
+                    Spacer(modifier = Modifier.height(140.dp))
                 }
             }
         } else {
             LazyColumn(
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(top = 6.dp)
             ) {
                 items(trendingTracks, key = { it.id }, contentType = { "track" }) { track ->
                     val isFav = track.id in favoriteIds
@@ -559,11 +621,11 @@ fun HomeScreen(
                         isLoading = isLoadingTrack && currentTrack?.id == track.id,
                         onClick = { viewModel.playTrack(track, trendingTracks) },
                         onFavoriteClick = { viewModel.toggleFavorite(track) },
-                        onMoreClick = { trackForPlaylist = track }
+                        onMoreClick = { trackForOptions = track }
                     )
                 }
                 item {
-                    Spacer(modifier = Modifier.height(130.dp))
+                    Spacer(modifier = Modifier.height(140.dp))
                 }
             }
         }
@@ -726,27 +788,36 @@ fun AccountTopButton(
     onClick: () -> Unit
 ) {
     val colors = KuroAppTheme.colors
+    var avatarLoadFailed by remember(account?.avatarUrl) { mutableStateOf(false) }
+    val showPhoto = account != null && account.avatarUrl.isNotBlank() && !avatarLoadFailed
+    val initial = account?.name
+        ?.takeIf { it.isNotBlank() && it != "YouTube User" }
+        ?.trim()
+        ?.take(1)
+        ?.uppercase()
+        ?: account?.email?.trim()?.take(1)?.uppercase()
+        ?: "K"
 
     Box(
         modifier = Modifier
             .size(36.dp)
             .clip(CircleShape)
-            .background(if (account?.avatarUrl.isNullOrBlank()) colors.accent else colors.card)
+            .background(if (!showPhoto) colors.accent else colors.card)
             .border(1.dp, colors.border, CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        if (account != null && account.avatarUrl.isNotBlank()) {
+        if (showPhoto) {
             AsyncImage(
-                model = account.avatarUrl,
+                model = account!!.avatarUrl,
                 contentDescription = "Account Profile",
                 contentScale = ContentScale.Crop,
+                onError = { avatarLoadFailed = true },
                 modifier = Modifier
                     .fillMaxSize()
                     .clip(CircleShape)
             )
         } else {
-            val initial = account?.name?.take(1)?.uppercase() ?: "K"
             Text(
                 text = initial,
                 style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontSize = 15.sp),
