@@ -3,10 +3,16 @@ package com.ayashii.kuro.service
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.util.Log
+import android.util.LruCache
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -14,6 +20,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.util.BitmapLoader
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -22,6 +29,10 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import coil.Coil
+import coil.request.CachePolicy
+import coil.request.ImageRequest
+import coil.request.SuccessResult
 import com.ayashii.kuro.MainActivity
 import com.ayashii.kuro.R
 import com.ayashii.kuro.data.model.Track
@@ -31,6 +42,10 @@ import com.ayashii.kuro.data.remote.MusicRepository
 import com.ayashii.kuro.data.settings.SettingsManager
 import com.ayashii.kuro.widget.WIDGET_SOURCE_URL_KEY
 import com.ayashii.kuro.widget.loadPersistedTrack
+import com.ayashii.kuro.widget.persist
+import com.ayashii.kuro.widget.updateKuroWidgets
+import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.SettableFuture
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -39,6 +54,96 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+@OptIn(UnstableApi::class)
+private class KuroNotificationBitmapLoader(
+    private val context: Context,
+    private val scope: CoroutineScope
+) : BitmapLoader {
+
+    private val bitmapCache = LruCache<String, Bitmap>(24)
+
+    override fun supportsMimeType(mimeType: String): Boolean = true
+
+    override fun decodeBitmap(data: ByteArray): ListenableFuture<Bitmap> {
+        val future = SettableFuture.create<Bitmap>()
+        scope.launch(Dispatchers.IO) {
+            try {
+                val bmp = BitmapFactory.decodeByteArray(data, 0, data.size)
+                if (bmp != null) {
+                    future.set(bmp)
+                } else {
+                    future.setException(IllegalArgumentException("Failed to decode bitmap bytes"))
+                }
+            } catch (t: Throwable) {
+                future.setException(t)
+            }
+        }
+        return future
+    }
+
+    override fun loadBitmap(uri: Uri): ListenableFuture<Bitmap> {
+        val future = SettableFuture.create<Bitmap>()
+        val url = uri.toString()
+        if (url.isBlank()) {
+            future.setException(IllegalArgumentException("Empty artwork URI"))
+            return future
+        }
+        synchronized(bitmapCache) {
+            bitmapCache.get(url)?.let { cached ->
+                if (!cached.isRecycled) {
+                    future.set(cached)
+                    return future
+                }
+            }
+        }
+        scope.launch(Dispatchers.IO) {
+            try {
+                val loaded = fetchBitmapWithFallback(url)
+                if (loaded != null) {
+                    synchronized(bitmapCache) {
+                        bitmapCache.put(url, loaded)
+                    }
+                    future.set(loaded)
+                } else {
+                    future.setException(IllegalStateException("Artwork load returned null for $url"))
+                }
+            } catch (t: Throwable) {
+                future.setException(t)
+            }
+        }
+        return future
+    }
+
+    private suspend fun fetchBitmapWithFallback(primaryUrl: String): Bitmap? {
+        val loader = Coil.imageLoader(context)
+        val candidates = mutableListOf(primaryUrl)
+        if (primaryUrl.contains("maxresdefault")) {
+            candidates.add(primaryUrl.replace("maxresdefault.jpg", "hqdefault.jpg").replace("maxresdefault.webp", "hqdefault.jpg"))
+        } else if (primaryUrl.contains("=w1080-h1080")) {
+            candidates.add(primaryUrl.replace("=w1080-h1080", "=w512-h512"))
+        }
+
+        for (candidate in candidates.distinct()) {
+            try {
+                val req = ImageRequest.Builder(context)
+                    .data(candidate)
+                    .size(512, 512)
+                    .allowHardware(false)
+                    .bitmapConfig(Bitmap.Config.ARGB_8888)
+                    .memoryCachePolicy(CachePolicy.ENABLED)
+                    .diskCachePolicy(CachePolicy.ENABLED)
+                    .build()
+                val res = loader.execute(req)
+                val bmp = (res as? SuccessResult)?.let { (it.drawable as? BitmapDrawable)?.bitmap }
+                if (bmp != null && !bmp.isRecycled) {
+                    return bmp
+                }
+            } catch (_: Throwable) {}
+        }
+        return null
+    }
+}
 
 class PlaybackService : MediaSessionService() {
 
@@ -50,6 +155,7 @@ class PlaybackService : MediaSessionService() {
     @Volatile
     private var restoringSession = false
     private var pauseTimeoutJob: Job? = null
+    private var servicePlayJob: Job? = null
 
     companion object {
         private const val TAG = "KuroPlaybackService"
@@ -124,10 +230,17 @@ class PlaybackService : MediaSessionService() {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_READY) {
                     PlayerQueueManager.recordPlaybackSuccess()
+                    syncNotificationAndWidgets()
                 } else if (playbackState == Player.STATE_ENDED) {
                     val current = PlayerQueueManager.currentTrack.value
                     if (current != null) {
                         TasteManager.getInstance(this@PlaybackService).recordTrackPlayed(current)
+                    }
+                    if (PlayerQueueManager.consumeSleepTimerEndOfTrack()) {
+                        exoPlayer.pause()
+                        syncNotificationAndWidgets()
+                        updatePauseTimeout(exoPlayer)
+                        return
                     }
                     val nextTrack = PlayerQueueManager.getNextTrack(userInitiated = false)
                     if (nextTrack != null) {
@@ -138,7 +251,12 @@ class PlaybackService : MediaSessionService() {
             }
 
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                syncNotificationAndWidgets()
                 updatePauseTimeout(exoPlayer)
+            }
+
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                syncNotificationAndWidgets()
             }
         })
 
@@ -178,7 +296,7 @@ class PlaybackService : MediaSessionService() {
                     builder.add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
                 } else {
                     builder.remove(Player.COMMAND_SEEK_TO_PREVIOUS)
-                    builder.remove(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+                    builder.remove(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
                 }
                 return builder.build()
             }
@@ -230,6 +348,30 @@ class PlaybackService : MediaSessionService() {
 
         mediaSession = MediaSession.Builder(this, forwardingPlayer)
             .setSessionActivity(pendingIntent)
+            .setBitmapLoader(KuroNotificationBitmapLoader(this, serviceScope))
+            .build()
+    }
+
+    private fun syncNotificationAndWidgets() {
+        val activePlayer = player ?: return
+        persist(this@PlaybackService, activePlayer)
+        serviceScope.launch(Dispatchers.IO) {
+            updateKuroWidgets(this@PlaybackService)
+        }
+    }
+
+    private fun buildTrackMediaMetadata(track: Track): MediaMetadata {
+        val artworkUrl = track.thumbnailUrlForDisplay(512).ifBlank { track.highResThumbnailUrl }
+        return MediaMetadata.Builder()
+            .setTitle(track.title)
+            .setArtist(track.artist)
+            .setAlbumTitle(track.artist)
+            .setArtworkUri(if (artworkUrl.isNotBlank()) Uri.parse(artworkUrl) else null)
+            .setDisplayTitle(track.title)
+            .setExtras(Bundle().apply {
+                putString(WIDGET_SOURCE_URL_KEY, track.url)
+                putString("track_id", track.id)
+            })
             .build()
     }
 
@@ -256,7 +398,9 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun playTrack(track: Track) {
-        serviceScope.launch {
+        servicePlayJob?.cancel()
+        PlayerQueueManager.updateCurrentTrack(track)
+        servicePlayJob = serviceScope.launch {
             try {
                 val quality = SettingsManager.getInstance().audioQuality.value
                 val resolved = withContext(Dispatchers.IO) {
@@ -274,6 +418,10 @@ class PlaybackService : MediaSessionService() {
                     return@launch
                 }
 
+                if (PlayerQueueManager.currentTrack.value?.id != track.id) {
+                    return@launch
+                }
+
                 val updatedTrack = track.copy(
                     streamUrl = resolved.url,
                     mimeType = resolved.mimeType
@@ -281,15 +429,7 @@ class PlaybackService : MediaSessionService() {
                 PlayerQueueManager.updateCurrentTrack(updatedTrack)
                 PlayerQueueManager.recordPlaybackSuccess()
 
-                val metadata = MediaMetadata.Builder()
-                    .setTitle(updatedTrack.title)
-                    .setArtist(updatedTrack.artist)
-                    .setArtworkUri(Uri.parse(updatedTrack.highResThumbnailUrl))
-                    .setDisplayTitle(updatedTrack.title)
-                    .setExtras(android.os.Bundle().apply {
-                        putString(WIDGET_SOURCE_URL_KEY, updatedTrack.url)
-                    })
-                    .build()
+                val metadata = buildTrackMediaMetadata(updatedTrack)
 
                 val builder = MediaItem.Builder()
                     .setMediaId(updatedTrack.id)
@@ -304,11 +444,24 @@ class PlaybackService : MediaSessionService() {
                     prepare()
                     playWhenReady = true
                 }
+                syncNotificationAndWidgets()
 
                 launch(Dispatchers.IO) {
                     val bestThumbnail = runCatching { repository.resolveBestThumbnail(track) }.getOrDefault(track.thumbnailUrl)
                     if (bestThumbnail != track.thumbnailUrl && PlayerQueueManager.currentTrack.value?.id == track.id) {
-                        PlayerQueueManager.updateCurrentTrack(updatedTrack.copy(thumbnailUrl = bestThumbnail))
+                        val upgradedTrack = updatedTrack.copy(thumbnailUrl = bestThumbnail)
+                        PlayerQueueManager.updateCurrentTrack(upgradedTrack)
+                        withContext(Dispatchers.Main) {
+                            val p = player
+                            val curItem = p?.currentMediaItem
+                            if (p != null && curItem != null && curItem.mediaId == track.id && p.mediaItemCount > 0) {
+                                val newItem = curItem.buildUpon()
+                                    .setMediaMetadata(buildTrackMediaMetadata(upgradedTrack))
+                                    .build()
+                                p.replaceMediaItem(p.currentMediaItemIndex, newItem)
+                                syncNotificationAndWidgets()
+                            }
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -344,15 +497,7 @@ class PlaybackService : MediaSessionService() {
                     runCatching { repository.getAudioStream(track.url, quality) }.getOrNull()
                 } ?: return@launch
 
-                val metadata = MediaMetadata.Builder()
-                    .setTitle(track.title)
-                    .setArtist(track.artist)
-                    .setArtworkUri(Uri.parse(track.highResThumbnailUrl))
-                    .setDisplayTitle(track.title)
-                    .setExtras(android.os.Bundle().apply {
-                        putString(WIDGET_SOURCE_URL_KEY, track.url)
-                    })
-                    .build()
+                val metadata = buildTrackMediaMetadata(track)
 
                 val builder = MediaItem.Builder()
                     .setMediaId(track.id)
@@ -367,6 +512,7 @@ class PlaybackService : MediaSessionService() {
                     prepare()
                     playWhenReady = true
                 }
+                syncNotificationAndWidgets()
             } catch (e: Exception) {
                 Log.e(TAG, "Unable to restore last session: ${e.message}")
             } finally {
@@ -394,6 +540,8 @@ class PlaybackService : MediaSessionService() {
     override fun onDestroy() {
         pauseTimeoutJob?.cancel()
         pauseTimeoutJob = null
+        servicePlayJob?.cancel()
+        servicePlayJob = null
         serviceScope.cancel()
         mediaSession?.run {
             player.release()

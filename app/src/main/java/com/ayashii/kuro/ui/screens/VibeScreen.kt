@@ -232,7 +232,7 @@ fun VibeScreen(
                                 modifier = Modifier.size(14.dp)
                             )
                             Text(
-                                text = "RUST ENGINE · ON-DEVICE",
+                                text = stringResource(R.string.vibe_engine_badge),
                                 style = Typography.labelSmall.copy(fontSize = 10.sp),
                                 color = colors.textPrimary
                             )
@@ -291,7 +291,7 @@ fun VibeScreen(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "${candidatePool.size} Tracks Ready",
+                            text = stringResource(R.string.vibe_tracks_ready, candidatePool.size),
                             style = Typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                             color = colors.background
                         )

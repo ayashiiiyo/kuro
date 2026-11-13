@@ -54,6 +54,28 @@ class MusicRepository {
         }
     }
 
+    fun invalidateHomeCache() {
+        synchronized(homeCacheLock) {
+            homeCache = null
+        }
+    }
+
+    private fun resolveHlGl(): Pair<String, String> {
+        return try {
+            com.ayashii.kuro.data.settings.SettingsManager.getInstance().getEffectiveHlAndGl()
+        } catch (_: Throwable) {
+            Pair("en", "US")
+        }
+    }
+
+    private fun getLocString(resId: Int, fallback: String): String {
+        return try {
+            com.ayashii.kuro.data.settings.SettingsManager.getInstance().getLocalizedString(resId)
+        } catch (_: Throwable) {
+            fallback
+        }
+    }
+
     private fun cleanTrackTitle(raw: String): String {
         return com.ayashii.kuro.data.native.KuroNativeCore.sanitizeTitle(raw)
     }
@@ -188,8 +210,9 @@ class MusicRepository {
                     put("client", org.json.JSONObject().apply {
                         put("clientName", YTM_CLIENT_NAME)
                         put("clientVersion", YTM_CLIENT_VERSION)
-                        put("hl", "id")
-                        put("gl", "ID")
+                        val (hlCode, glCode) = resolveHlGl()
+                        put("hl", hlCode)
+                        put("gl", glCode)
                     })
                 })
                 put("query", query)
@@ -322,8 +345,16 @@ class MusicRepository {
         val defaultTracks = searchTracks("Top Global Hits 2026")
         if (defaultTracks.isNotEmpty()) {
             listOf(
-                HomeSection(title = "Pilihan Cepat", subtitle = "Dengarkan musik favoritmu", tracks = defaultTracks.take(10)),
-                HomeSection(title = "Lagu Trending", subtitle = "Paling banyak diputar", tracks = defaultTracks.drop(10))
+                HomeSection(
+                    title = getLocString(com.ayashii.kuro.R.string.home_quick_picks_title, "Quick Picks"),
+                    subtitle = getLocString(com.ayashii.kuro.R.string.home_quick_picks_sub, "Listen to your favorite music"),
+                    tracks = defaultTracks.take(10)
+                ),
+                HomeSection(
+                    title = getLocString(com.ayashii.kuro.R.string.home_trending_shelf_title, "Trending Songs"),
+                    subtitle = getLocString(com.ayashii.kuro.R.string.home_trending_shelf_sub, "Most played right now"),
+                    tracks = defaultTracks.drop(10)
+                )
             )
         } else {
             emptyList()
@@ -356,8 +387,9 @@ class MusicRepository {
                     put("client", org.json.JSONObject().apply {
                         put("clientName", YTM_CLIENT_NAME)
                         put("clientVersion", YTM_CLIENT_VERSION)
-                        put("hl", "id")
-                        put("gl", "ID")
+                        val (hlCode, glCode) = resolveHlGl()
+                        put("hl", hlCode)
+                        put("gl", glCode)
                     })
                 })
                 put("videoId", videoId)
@@ -513,10 +545,10 @@ class MusicRepository {
                 val exploreJson = exploreDeferred.await()
 
                 if (homeJson != null) {
-                    result.addAll(parseYtmSections(homeJson, "Pilihan Cepat"))
+                    result.addAll(parseYtmSections(homeJson, getLocString(com.ayashii.kuro.R.string.home_quick_picks_title, "Quick Picks")))
                 }
                 if (exploreJson != null) {
-                    result.addAll(parseYtmSections(exploreJson, "Lagu Trending"))
+                    result.addAll(parseYtmSections(exploreJson, getLocString(com.ayashii.kuro.R.string.home_trending_shelf_title, "Trending Songs")))
                 }
             }
         } catch (e: Exception) {
@@ -785,8 +817,9 @@ class MusicRepository {
                     put("client", org.json.JSONObject().apply {
                         put("clientName", YTM_CLIENT_NAME)
                         put("clientVersion", YTM_CLIENT_VERSION)
-                        put("hl", "id")
-                        put("gl", "ID")
+                        val (hlCode, glCode) = resolveHlGl()
+                        put("hl", hlCode)
+                        put("gl", glCode)
                     })
                 })
                 put("target", org.json.JSONObject().apply {

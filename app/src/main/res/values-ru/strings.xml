@@ -1,0 +1,29 @@
+<resources>
+    <string name="tab_home">Главная</string>
+    <string name="tab_search">Поиск</string>
+    <string name="tab_vibe">Vibe</string>
+    <string name="tab_library">Медиатека</string>
+    <string name="action_close">Закрыть</string>
+    <string name="common_selected">Выбрано</string>
+    <string name="common_song_count">%1$d треков</string>
+    <string name="home_genre_all">Все</string>
+    <string name="home_start_listening">Начать слушать</string>
+    <string name="home_to_get_you_started">Для начала</string>
+    <string name="home_play_again">Послушать снова</string>
+    <string name="home_view_all">Все ›</string>
+    <string name="home_picks_for_you">Подборка для вас</string>
+    <string name="lib_playlist_title">Медиатека</string>
+    <string name="lib_tab_favorites">Любимые треки</string>
+    <string name="lib_tab_my_playlists">Мои плейлисты (%1$d)</string>
+    <string name="lib_create_playlist">Создать плейлист</string>
+    <string name="lib_songs_count">%1$d треков</string>
+    <string name="search_title">Поиск</string>
+    <string name="search_what_do_you_want_to_listen_to">Что хотите послушать?</string>
+    <string name="search_explore_categories">Категории</string>
+    <string name="search_recents_title">Недавние</string>
+    <string name="settings_title">Настройки</string>
+    <string name="settings_language">Язык приложения</string>
+    <string name="lang_system">Системный по умолчанию</string>
+    <string name="settings_lyrics_trans">Перевод текста песен</string>
+    <string name="settings_lyrics_target_lang">Язык перевода (DeepL)</string>
+</resources>

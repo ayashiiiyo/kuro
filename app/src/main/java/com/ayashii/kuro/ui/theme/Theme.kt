@@ -1,5 +1,6 @@
 package com.ayashii.kuro.ui.theme
 
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
@@ -7,9 +8,20 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import com.ayashii.kuro.data.settings.SettingsManager
 import com.ayashii.kuro.data.settings.ThemeMode
+
+object KuroMotion {
+    val EmphasizedDecelerate = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
+    val EmphasizedAccelerate = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)
+    val StandardEasing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)
+}
 
 @Immutable
 data class KuroColors(
@@ -99,10 +111,26 @@ fun KuroTheme(
         ThemeMode.LIGHT -> false
     }
 
+    val baseContext = LocalContext.current
+    val settingsManager = remember {
+        try {
+            SettingsManager.getInstance()
+        } catch (_: Throwable) {
+            SettingsManager.init(baseContext)
+        }
+    }
+    val currentLanguage by settingsManager.language.collectAsState()
+    val localizedContext = remember(baseContext, currentLanguage) {
+        settingsManager.createLocalizedContext(baseContext, currentLanguage)
+    }
+
     val colorScheme = if (isDark) DarkColorScheme else LightColorScheme
     val kuroColors = if (isDark) DarkKuroColors else LightKuroColors
 
-    CompositionLocalProvider(LocalKuroColors provides kuroColors) {
+    CompositionLocalProvider(
+        LocalKuroColors provides kuroColors,
+        LocalContext provides localizedContext
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,

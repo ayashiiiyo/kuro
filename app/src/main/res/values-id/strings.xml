@@ -1,0 +1,233 @@
+<resources>
+    <string name="app_name">Kuro</string>
+    <string name="tab_home">Beranda</string>
+    <string name="tab_search">Cari</string>
+    <string name="tab_vibe">Vibe</string>
+    <string name="tab_library">Koleksi</string>
+    <string name="search_placeholder">Cari lagu, artis, album…</string>
+    <string name="trending_title">Lagu Populer</string>
+    <string name="library_title">Koleksi Anda</string>
+    <string name="widget_compact_description">Pemutar musik Kuro ringkas</string>
+    <string name="widget_square_description">Pemutar musik Kuro mini</string>
+    <string name="widget_compact_name">Kuro · Pemutar Ringkas</string>
+    <string name="widget_square_name">Kuro · Pemutar Mini</string>
+    <string name="widget_placeholder_title">Buka Kuro untuk memutar</string>
+    <string name="widget_placeholder_artist">Musikmu, selalu dekat</string>
+    <string name="widget_artwork_desc">Gambar album</string>
+    <string name="widget_play_desc">Putar atau jeda</string>
+    <string name="widget_previous_desc">Lagu sebelumnya</string>
+    <string name="widget_next_desc">Lagu berikutnya</string>
+    <string name="widget_favorite_desc">Lagu favorit</string>
+
+    <!-- Common actions -->
+    <string name="action_close">Tutup</string>
+    <string name="common_selected">Dipilih</string>
+    <string name="common_calculating">Menghitung…</string>
+    <string name="common_song_count">%1$d lagu</string>
+    <string name="playback_channel_desc">Kontrol pemutaran media</string>
+
+    <!-- Greetings -->
+    <string name="greeting_morning">Selamat pagi</string>
+    <string name="greeting_afternoon">Selamat siang</string>
+    <string name="greeting_evening">Selamat sore</string>
+    <string name="greeting_night">Selamat malam</string>
+    <string name="greeting_subtitle">Musik yang pas untuk sekarang.</string>
+
+    <!-- Home Screen -->
+    <string name="home_genre_all">Semua</string>
+    <string name="home_start_listening">Mulai mendengarkan</string>
+    <string name="home_start_listening_sub">Putar sesi berdasarkan selera musikmu</string>
+    <string name="home_to_get_you_started">Untuk memulai harimu</string>
+    <string name="home_play_again">Putar kembali</string>
+    <string name="home_view_all">Lihat semua ›</string>
+    <string name="home_picks_for_you">Pilihan untukmu</string>
+    <string name="home_mix_personal">MIX PERSONAL</string>
+    <string name="home_no_songs_genre">Tidak ada lagu ditemukan untuk %1$s</string>
+    <string name="home_recently_played">Terakhir Diputar</string>
+    <string name="home_no_history">Belum ada riwayat lagu yang diputar.</string>
+    <string name="home_on_repeat_title">Lagi Sering Kamu Putar</string>
+    <string name="home_on_repeat_sub">Berdasarkan selera musikmu</string>
+    <string name="home_quick_picks_title">Pilihan Cepat</string>
+    <string name="home_quick_picks_sub">Dengarkan musik favoritmu</string>
+    <string name="home_trending_shelf_title">Lagu Trending</string>
+    <string name="home_trending_shelf_sub">Paling banyak diputar saat ini</string>
+
+    <!-- Vibe Screen -->
+    <string name="vibe_title">Vibe Radar</string>
+    <string name="vibe_subtitle">Frekuensi pintar di perangkat &amp; radio instan</string>
+    <string name="vibe_start_mix">Mulai Vibe Mix Instan</string>
+    <string name="vibe_start_mix_sub">Diurutkan secara lokal dari artis favorit &amp; skor selera musikmu</string>
+    <string name="vibe_mood_all">Semua Vibe</string>
+    <string name="vibe_mood_chill">Malam Santai</string>
+    <string name="vibe_mood_focus">Fokus Penuh</string>
+    <string name="vibe_mood_energy">Energi Tinggi</string>
+    <string name="vibe_mood_repeat">Sering Diputar</string>
+    <string name="vibe_heavy_rotation">Rotasi Favoritmu</string>
+    <string name="vibe_tracks_ready">%1$d Lagu Siap</string>
+    <string name="vibe_engine_badge">RUST ENGINE · ON-DEVICE</string>
+
+    <!-- Library Screen -->
+    <string name="lib_playlist_title">Koleksi</string>
+    <string name="lib_tab_favorites">Lagu Favorit</string>
+    <string name="lib_tab_my_playlists">Playlist Saya (%1$d)</string>
+    <string name="lib_fav_count">%1$d Lagu Favorit</string>
+    <string name="lib_playlist_count">%1$d Playlist</string>
+    <string name="lib_fav_empty">Belum ada lagu favorit</string>
+    <string name="lib_fav_empty_sub">Lagu yang kamu beri tanda hati akan muncul di sini</string>
+    <string name="lib_create_playlist">Buat Playlist Baru</string>
+    <string name="lib_create_playlist_sub">Kumpulkan lagu sesuai suasana hatimu</string>
+    <string name="lib_no_playlists">Belum Ada Playlist</string>
+    <string name="lib_no_playlists_sub">Tekan tombol di atas untuk membuat playlist</string>
+    <string name="lib_songs_count">%1$d lagu</string>
+    <string name="lib_enter_name">Beri Nama Playlist</string>
+    <string name="lib_playlist_name_hint">Contoh: Galau Malam, Workout…</string>
+    <string name="lib_delete_title">Hapus Playlist?</string>
+    <string name="lib_delete_confirm">Playlist "%1$s" beserta %2$d lagu di dalamnya akan dihapus secara permanen.</string>
+    <string name="lib_playlist_empty">Playlist ini masih kosong. Tambahkan lagu dari pencarian atau beranda!</string>
+    <string name="lib_cancel">Batal</string>
+    <string name="lib_delete">Hapus</string>
+    <string name="lib_create">Buat</string>
+    <string name="lib_create_and_add">Buat &amp; Tambahkan</string>
+    <string name="lib_select_playlist">Pilih Playlist</string>
+    <string name="lib_play_all">Putar Semua</string>
+    <string name="lib_shuffle">Acak</string>
+    <string name="lib_remove_from_playlist">Hapus dari playlist</string>
+    <string name="lib_sync_yt">Sync YT</string>
+
+    <!-- Search Screen -->
+    <string name="search_title">Cari</string>
+    <string name="search_hint">Lagu, artis, atau genre…</string>
+    <string name="search_what_do_you_want_to_listen_to">Apa yang ingin kamu dengarkan?</string>
+    <string name="search_suggestions">Saran Pencarian</string>
+    <string name="search_explore_categories">Jelajahi Kategori</string>
+    <string name="search_not_found">Lagu tidak ditemukan</string>
+    <string name="search_not_found_sub">Coba gunakan kata kunci artis, judul lagu lain, atau periksa ejaanmu.</string>
+    <string name="search_results">Hasil Pencarian</string>
+    <string name="search_recents_title">Pencarian Terakhir</string>
+    <string name="search_clear_recents">Hapus riwayat pencarian</string>
+    <string name="search_empty_prompt">Cari artis, lagu, atau podcast favoritmu</string>
+    <string name="search_discover_new">Temukan musik baru</string>
+    <string name="search_song_subtitle">Lagu • %1$s</string>
+    <string name="search_cat_music">Musik</string>
+    <string name="search_cat_podcasts">Podcast</string>
+    <string name="search_cat_live">Konser Live</string>
+    <string name="search_cat_kpop">K-Pop ON!
+(온) Hub</string>
+    <string name="search_cat_made_for_you">Dibuat
+Untukmu</string>
+    <string name="search_cat_indie">Indie &amp; Alt</string>
+    <string name="search_cat_charts">Tangga Lagu</string>
+    <string name="search_cat_discover">Eksplorasi</string>
+
+    <!-- Player Sheet & Sleep Timer -->
+    <string name="player_now_playing">SEDANG DIPUTAR</string>
+    <string name="player_playing_from">Memutar dari</string>
+    <string name="player_lyrics_preview">Pratinjau lirik</string>
+    <string name="player_show_lyrics">Tampilkan lirik</string>
+    <string name="player_share">Bagikan</string>
+    <string name="player_indonesian">Indonesia</string>
+    <string name="player_translate_lyrics">Terjemahan</string>
+    <string name="player_select_lyrics_lang">Bahasa Terjemahan Lirik</string>
+    <string name="player_queue">Antrean</string>
+    <string name="player_queue_empty">Antrean kosong</string>
+    <string name="player_queue_up_next">BERIKUTNYA DALAM ANTREAN</string>
+    <string name="player_queue_clear">Hapus Antrean</string>
+    <string name="player_queue_auto_radio">Lagu berikutnya akan dipilih secara otomatis (Radio Mix).</string>
+    <string name="player_remove_watch_later">Hapus dari Putar Nanti</string>
+    <string name="player_save_watch_later">Simpan ke Putar Nanti</string>
+    <string name="player_add_to_playlist">Tambah ke playlist</string>
+    <string name="player_liked_saved">Disukai (Tersimpan)</string>
+    <string name="player_add_liked">Tambah ke Lagu Disukai</string>
+    <string name="player_add_to_queue">Tambah ke Antrean</string>
+    <string name="player_go_to_queue">Lihat Antrean</string>
+    <string name="player_share_song">Bagikan lagu</string>
+    <string name="player_audio_settings">Pengaturan audio</string>
+    <string name="player_lyrics">Lirik</string>
+    <string name="player_lyrics_loading">Memuat lirik…</string>
+    <string name="player_lyrics_unavailable">Lirik tersinkron belum tersedia</string>
+    <string name="player_share_text">Dengarkan %1$s oleh %2$s: %3$s</string>
+    <string name="player_share_via">Bagikan via</string>
+    <string name="sleep_timer_title">Pengatur Waktu Tidur</string>
+    <string name="sleep_timer_off">Matikan Timer</string>
+    <string name="sleep_timer_end_track">Akhir lagu saat ini</string>
+    <string name="sleep_timer_minutes">%1$d menit</string>
+    <string name="sleep_timer_active">Timer Tidur · %1$s</string>
+
+    <!-- Profile & Statistics Menu -->
+    <string name="profile_default_name">Pecinta Musik Kuro</string>
+    <string name="profile_google_connected">Akun Google Terhubung</string>
+    <string name="profile_tap_to_login">Ketuk untuk Login Google</string>
+    <string name="profile_switch_account">Ganti / Keluar Akun</string>
+    <string name="profile_connect_google">Hubungkan Akun Google</string>
+    <string name="profile_stats">Statistik Mendengarkan</string>
+    <string name="profile_stats_sub">Analisis selera &amp; artis favoritmu</string>
+    <string name="profile_recents_sub">%1$d lagu baru saja diputar</string>
+    <string name="profile_settings_privacy">Pengaturan &amp; Privasi</string>
+    <string name="profile_settings_sub">Kualitas audio, tema, bahasa, cache &amp; preferensi</string>
+    <string name="profile_total_plays">Total Putar</string>
+    <string name="profile_total_plays_val">%1$d kali</string>
+    <string name="profile_artists_heard">Artis Didengar</string>
+    <string name="profile_artists_heard_val">%1$d artis</string>
+    <string name="profile_stats_not_enough">Belum cukup data. Putar lebih banyak lagu untuk melihat diagram!</string>
+    <string name="profile_chart_title">DIAGRAM FREKUENSI ARTIS</string>
+    <string name="profile_top_artists">Top %1$d</string>
+    <string name="profile_top_ranking">Peringkat Artis Teratas</string>
+    <string name="login_youtube_title">Login ke YouTube Music</string>
+    <string name="login_youtube_sub">Masuk melalui akun Google resmi</string>
+
+    <!-- Settings Dialog -->
+    <string name="settings_title">Pengaturan</string>
+    <string name="settings_language">Bahasa Aplikasi</string>
+    <string name="settings_language_desc">Pilih bahasa tampilan Kuro sesuai keinginanmu</string>
+    <string name="settings_choose_language">Pilih Bahasa Aplikasi</string>
+    <string name="lang_system">Ikuti Sistem HP</string>
+    <string name="lang_id">Bahasa Indonesia</string>
+    <string name="lang_en">English</string>
+    <string name="settings_audio_quality">Kualitas Audio Streaming</string>
+    <string name="settings_quality_high_title">Kualitas Tinggi (M4A / 256 kbps)</string>
+    <string name="settings_quality_high_desc">Suara jernih, detail audio terbaik</string>
+    <string name="settings_quality_med_title">Kualitas Normal (128 kbps)</string>
+    <string name="settings_quality_med_desc">Seimbang antara kecepatan &amp; kuota data</string>
+    <string name="settings_quality_low_title">Hemat Kuota (64 kbps)</string>
+    <string name="settings_quality_low_desc">Buffer paling cepat, hemat penggunaan data</string>
+    <string name="settings_theme">Tema Tampilan</string>
+    <string name="settings_theme_system">Ikuti Sistem HP</string>
+    <string name="settings_theme_dark">Gelap (OLED Hitam)</string>
+    <string name="settings_theme_light">Terang</string>
+    <string name="settings_theme_system_desc">Sesuai tema mode HP kamu</string>
+    <string name="settings_theme_dark_desc">Hitam OLED hemat baterai</string>
+    <string name="settings_theme_light_desc">Putih monokrom bersih</string>
+    <string name="settings_lyrics_trans">Terjemahan Lirik Otomatis</string>
+    <string name="settings_lyrics_trans_desc">Tampilkan terjemahan arti lirik via DeepL</string>
+    <string name="settings_lyrics_target_lang">Bahasa Terjemahan Lirik</string>
+    <string name="settings_lyrics_target_lang_desc">Pilih bahasa target untuk terjemahan lirik DeepL</string>
+    <string name="settings_cache">Penyimpanan &amp; Cache</string>
+    <string name="settings_cache_size">Ukuran Cache: %1$s</string>
+    <string name="settings_cache_clear">Bersihkan</string>
+    <string name="settings_cache_cleared">Cache dibersihkan</string>
+    <string name="settings_update">Pembaruan Aplikasi</string>
+    <string name="settings_update_check">Cek Update</string>
+    <string name="settings_update_checking">Memeriksa GitHub…</string>
+    <string name="settings_update_latest">Kuro sudah versi terbaru!</string>
+    <string name="settings_update_found">Versi baru ditemukan: v%1$s</string>
+    <string name="settings_about_desc">Open source, tanpa iklan &amp; super ringan</string>
+
+    <!-- Update Dialog -->
+    <string name="update_available">Pembaruan Tersedia</string>
+    <string name="update_whats_new">Apa yang baru:</string>
+    <string name="update_later">Nanti</string>
+    <string name="update_now">Perbarui</string>
+
+    <!-- Update notifications -->
+    <string name="update_channel_name">Pembaruan Kuro</string>
+    <string name="update_channel_desc">Pemberitahuan tentang pembaruan aplikasi Kuro</string>
+    <string name="update_download_title">Kuro v%1$s</string>
+    <string name="update_download_desc">Mengunduh pembaruan aplikasi…</string>
+    <string name="update_ready_title">Pembaruan Siap Dipasang!</string>
+    <string name="update_ready_text">Kuro v%1$s berhasil diunduh. Ketuk untuk memasang.</string>
+    <string name="update_ready_bigtext">Kuro v%1$s telah selesai diunduh. Ketuk di sini untuk segera memasang pembaruan.</string>
+    <string name="update_install_now">Pasang Sekarang</string>
+    <string name="update_permission_title">Izinkan pemasangan aplikasi</string>
+    <string name="update_permission_text">Izinkan Kuro memasang aplikasi dari sumber tidak dikenal, lalu ketuk notifikasi pembaruan lagi.</string>
+    <string name="update_download_failed">Unduhan pembaruan gagal. Silakan coba lagi.</string>
+</resources>

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.AddCircleOutline
 import androidx.compose.material.icons.outlined.Bedtime
@@ -52,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.ayashii.kuro.R
 import com.ayashii.kuro.data.model.Track
+import com.ayashii.kuro.data.settings.SettingsManager
 import com.ayashii.kuro.ui.theme.KuroAppTheme
 import com.ayashii.kuro.ui.theme.Typography
 import com.ayashii.kuro.viewmodel.MusicViewModel
@@ -65,12 +67,14 @@ fun TrackOptionsBottomSheet(
     onOpenLyrics: () -> Unit = {},
     onOpenQueue: () -> Unit = {},
     onAddToPlaylist: () -> Unit = {},
-    onOpenSettings: () -> Unit = {}
+    onOpenSettings: () -> Unit = {},
+    onRemoveFromPlaylist: (() -> Unit)? = null
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val colors = KuroAppTheme.colors
     val context = LocalContext.current
     val playlists by viewModel.playlists.collectAsState()
+    val lyricsLang by remember { SettingsManager.getInstance().lyricsLanguage }.collectAsState()
     val isInWatchLater = remember(playlists, track.id) {
         viewModel.isTrackInWatchLater(track.id)
     }
@@ -153,7 +157,7 @@ fun TrackOptionsBottomSheet(
 
             TrackOptionItem(
                 icon = Icons.Outlined.Translate,
-                title = "Lyrics • " + stringResource(R.string.player_indonesian),
+                title = stringResource(R.string.player_lyrics) + " • " + lyricsLang.displayName.substringBefore(" ("),
                 onClick = {
                     onDismiss()
                     onOpenLyrics()
@@ -162,7 +166,7 @@ fun TrackOptionsBottomSheet(
 
             TrackOptionItem(
                 icon = if (track.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
-                title = if (track.isFavorite) "Disukai (Tersimpan)" else "Add to Liked Songs",
+                title = if (track.isFavorite) stringResource(R.string.player_liked_saved) else stringResource(R.string.player_add_liked),
                 iconTint = if (track.isFavorite) Color(0xFFFF3B30) else colors.textPrimary,
                 onClick = {
                     viewModel.toggleFavorite(track)
@@ -189,9 +193,20 @@ fun TrackOptionsBottomSheet(
                 }
             )
 
+            if (onRemoveFromPlaylist != null) {
+                TrackOptionItem(
+                    icon = Icons.Default.DeleteOutline,
+                    title = stringResource(R.string.lib_remove_from_playlist),
+                    iconTint = Color(0xFFFF3B30),
+                    onClick = {
+                        onRemoveFromPlaylist()
+                    }
+                )
+            }
+
             TrackOptionItem(
                 icon = Icons.Outlined.QueueMusic,
-                title = "Add to Queue",
+                title = stringResource(R.string.player_add_to_queue),
                 onClick = {
                     viewModel.addToQueue(track)
                     onDismiss()
@@ -200,7 +215,7 @@ fun TrackOptionsBottomSheet(
 
             TrackOptionItem(
                 icon = Icons.Outlined.FormatListBulleted,
-                title = "Go to Queue",
+                title = stringResource(R.string.player_go_to_queue),
                 onClick = {
                     onDismiss()
                     onOpenQueue()

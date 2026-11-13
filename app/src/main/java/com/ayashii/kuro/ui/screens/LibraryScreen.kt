@@ -1,8 +1,13 @@
 package com.ayashii.kuro.ui.screens
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.runtime.saveable.rememberSaveable
-
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,7 +16,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,7 +33,6 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material.icons.outlined.LibraryMusic
 import androidx.compose.material.icons.outlined.QueueMusic
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -38,30 +41,36 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.ui.res.stringResource
-import com.ayashii.kuro.R
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.ayashii.kuro.R
 import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.data.playlist.Playlist
 import com.ayashii.kuro.ui.components.AddToPlaylistDialog
+import com.ayashii.kuro.ui.components.QueueBottomSheet
+import com.ayashii.kuro.ui.components.SettingsDialog
 import com.ayashii.kuro.ui.components.TrackItem
+import com.ayashii.kuro.ui.components.TrackOptionsBottomSheet
 import com.ayashii.kuro.ui.theme.KuroAppTheme
+import com.ayashii.kuro.ui.theme.KuroMotion
 import com.ayashii.kuro.ui.theme.Typography
 import com.ayashii.kuro.viewmodel.MusicViewModel
 
@@ -75,10 +84,14 @@ fun LibraryScreen(
     val isLoadingTrack by viewModel.isLoadingTrack.collectAsState()
     val currentTrack by viewModel.currentTrack.collectAsState()
     val currentAccount by viewModel.authState.collectAsState()
+    val favoriteIds by remember(favorites) { derivedStateOf { favorites.mapTo(HashSet()) { it.id } } }
 
     var selectedTab by rememberSaveable { mutableStateOf(0) }
     var selectedPlaylistId by rememberSaveable { mutableStateOf<String?>(null) }
     var trackForPlaylist by remember { mutableStateOf<Track?>(null) }
+    var trackForOptions by remember { mutableStateOf<Track?>(null) }
+    var showQueueSheet by rememberSaveable { mutableStateOf(false) }
+    var showSettingsDialog by rememberSaveable { mutableStateOf(false) }
     var showCreateDialog by rememberSaveable { mutableStateOf(false) }
     var playlistToDelete by remember { mutableStateOf<Playlist?>(null) }
     var newPlaylistName by rememberSaveable { mutableStateOf("") }
@@ -96,269 +109,305 @@ fun LibraryScreen(
             .background(colors.background)
             .padding(top = 16.dp)
     ) {
-        if (selectedPlaylist != null) {
-            PlaylistDetailView(
-                playlist = selectedPlaylist,
-                viewModel = viewModel,
-                currentTrack = currentTrack,
-                isLoadingTrack = isLoadingTrack,
-                onBack = { selectedPlaylistId = null },
-                onAddTrackClick = { trackForPlaylist = it }
-            )
-        } else {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = stringResource(R.string.lib_playlist_title),
-                        style = Typography.headlineLarge,
-                        color = colors.textPrimary
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = if (selectedTab == 0) stringResource(R.string.lib_fav_count, favorites.size) else stringResource(R.string.lib_playlist_count, playlists.size),
-                        style = Typography.bodyMedium,
-                        color = colors.textMuted
-                    )
+        AnimatedContent(
+            targetState = selectedPlaylist,
+            transitionSpec = {
+                if (targetState != null) {
+                    (slideInHorizontally(tween(260, easing = KuroMotion.EmphasizedDecelerate)) { it / 5 } +
+                        fadeIn(tween(220, easing = KuroMotion.EmphasizedDecelerate)))
+                        .togetherWith(
+                            slideOutHorizontally(tween(200, easing = KuroMotion.EmphasizedAccelerate)) { -it / 6 } +
+                                fadeOut(tween(160, easing = KuroMotion.EmphasizedAccelerate))
+                        )
+                } else {
+                    (slideInHorizontally(tween(260, easing = KuroMotion.EmphasizedDecelerate)) { -it / 5 } +
+                        fadeIn(tween(220, easing = KuroMotion.EmphasizedDecelerate)))
+                        .togetherWith(
+                            slideOutHorizontally(tween(200, easing = KuroMotion.EmphasizedAccelerate)) { it / 6 } +
+                                fadeOut(tween(160, easing = KuroMotion.EmphasizedAccelerate))
+                        )
                 }
-
-                if (selectedTab == 0 && currentAccount != null) {
+            },
+            label = "library_detail_transition",
+            modifier = Modifier.fillMaxSize()
+        ) { activePlaylist ->
+            if (activePlaylist != null) {
+                PlaylistDetailView(
+                    playlist = activePlaylist,
+                    viewModel = viewModel,
+                    currentTrack = currentTrack,
+                    isLoadingTrack = isLoadingTrack,
+                    favoriteIds = favoriteIds,
+                    onBack = { selectedPlaylistId = null },
+                    onMoreClick = { trackForOptions = it }
+                )
+            } else {
+                Column(modifier = Modifier.fillMaxSize()) {
                     Row(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(colors.card)
-                            .border(1.dp, colors.border, RoundedCornerShape(16.dp))
-                            .clickable { viewModel.syncLikedSongs() }
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Sync,
-                            contentDescription = "Sync Liked Songs",
-                            tint = colors.textPrimary,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = stringResource(R.string.lib_sync_yt),
-                            style = Typography.labelSmall,
-                            color = colors.textPrimary,
-                            fontSize = 11.sp
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(if (selectedTab == 0) colors.accent else colors.card)
-                        .border(1.dp, if (selectedTab == 0) colors.accent else colors.border, RoundedCornerShape(20.dp))
-                        .clickable { selectedTab = 0 }
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = stringResource(R.string.lib_tab_favorites),
-                        style = Typography.labelMedium.copy(fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Medium),
-                        color = if (selectedTab == 0) colors.background else colors.textPrimary
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(if (selectedTab == 1) colors.accent else colors.card)
-                        .border(1.dp, if (selectedTab == 1) colors.accent else colors.border, RoundedCornerShape(20.dp))
-                        .clickable { selectedTab = 1 }
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = stringResource(R.string.lib_tab_my_playlists, playlists.size),
-                        style = Typography.labelMedium.copy(fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium),
-                        color = if (selectedTab == 1) colors.background else colors.textPrimary
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            if (selectedTab == 0) {
-                if (favorites.isEmpty()) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                imageVector = Icons.Outlined.QueueMusic,
-                                contentDescription = null,
-                                tint = colors.textSecondary,
-                                modifier = Modifier.size(56.dp)
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
+                        Column {
                             Text(
-                                text = stringResource(R.string.lib_fav_empty),
-                                style = Typography.titleMedium,
+                                text = stringResource(R.string.lib_playlist_title),
+                                style = Typography.headlineLarge,
                                 color = colors.textPrimary
                             )
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = stringResource(R.string.lib_fav_empty_sub),
+                                text = if (selectedTab == 0) stringResource(R.string.lib_fav_count, favorites.size) else stringResource(R.string.lib_playlist_count, playlists.size),
                                 style = Typography.bodyMedium,
                                 color = colors.textMuted
                             )
                         }
-                    }
-                } else {
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
-                        items(favorites, key = { it.id }, contentType = { "track" }) { track ->
-                            TrackItem(
-                                track = track,
-                                isPlaying = currentTrack?.id == track.id,
-                                isLoading = isLoadingTrack && currentTrack?.id == track.id,
-                                onClick = { viewModel.playTrack(track, favorites) },
-                                onFavoriteClick = { viewModel.toggleFavorite(track) },
-                                onMoreClick = { trackForPlaylist = track }
-                            )
-                        }
-                        item {
-                            Spacer(modifier = Modifier.height(100.dp))
-                        }
-                    }
-                }
-            } else {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    item {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 4.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(colors.card)
-                                .border(1.dp, colors.border, RoundedCornerShape(12.dp))
-                                .clickable { showCreateDialog = true }
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(colors.accent),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Add,
-                                    contentDescription = "New Playlist",
-                                    tint = colors.background,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Column {
-                                Text(
-                                    text = stringResource(R.string.lib_create_playlist),
-                                    style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = colors.textPrimary
-                                )
-                                Text(
-                                    text = stringResource(R.string.lib_create_playlist_sub),
-                                    style = Typography.bodySmall,
-                                    color = colors.textMuted
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(12.dp))
-                    }
 
-                    if (playlists.isEmpty()) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 40.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.QueueMusic,
-                                        contentDescription = null,
-                                        tint = colors.textSecondary,
-                                        modifier = Modifier.size(52.dp)
-                                    )
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    Text(
-                                        text = stringResource(R.string.lib_no_playlists),
-                                        style = Typography.titleMedium,
-                                        color = colors.textPrimary
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = stringResource(R.string.lib_no_playlists_sub),
-                                        style = Typography.bodyMedium,
-                                        color = colors.textMuted
-                                    )
-                                }
-                            }
-                        }
-                    } else {
-                        items(playlists, key = { it.id }) { playlist ->
+                        if (selectedTab == 0 && currentAccount != null) {
                             Row(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 6.dp)
-                                    .clip(RoundedCornerShape(12.dp))
+                                    .clip(RoundedCornerShape(16.dp))
                                     .background(colors.card)
-                                    .clickable { selectedPlaylistId = playlist.id }
-                                    .padding(12.dp),
+                                    .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+                                    .clickable { viewModel.syncLikedSongs() }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                PlaylistCollageIcon(playlist = playlist, size = 52)
-                                Spacer(modifier = Modifier.width(14.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = playlist.name,
-                                        style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = colors.textPrimary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = "${playlist.tracks.size} lagu",
-                                        style = Typography.bodySmall,
-                                        color = colors.textMuted
-                                    )
-                                }
-                                IconButton(onClick = { playlistToDelete = playlist }) {
-                                    Icon(
-                                        imageVector = Icons.Default.DeleteOutline,
-                                        contentDescription = "Hapus Playlist",
-                                        tint = colors.textMuted,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
+                                Icon(
+                                    imageVector = Icons.Default.Sync,
+                                    contentDescription = "Sync Liked Songs",
+                                    tint = colors.textPrimary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = stringResource(R.string.lib_sync_yt),
+                                    style = Typography.labelSmall,
+                                    color = colors.textPrimary,
+                                    fontSize = 11.sp
+                                )
                             }
                         }
                     }
 
-                    item {
-                        Spacer(modifier = Modifier.height(100.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(if (selectedTab == 0) colors.accent else colors.card)
+                                .border(1.dp, if (selectedTab == 0) colors.accent else colors.border, RoundedCornerShape(20.dp))
+                                .clickable { selectedTab = 0 }
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = stringResource(R.string.lib_tab_favorites),
+                                style = Typography.labelMedium.copy(fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Medium),
+                                color = if (selectedTab == 0) colors.background else colors.textPrimary
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(if (selectedTab == 1) colors.accent else colors.card)
+                                .border(1.dp, if (selectedTab == 1) colors.accent else colors.border, RoundedCornerShape(20.dp))
+                                .clickable { selectedTab = 1 }
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = stringResource(R.string.lib_tab_my_playlists, playlists.size),
+                                style = Typography.labelMedium.copy(fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium),
+                                color = if (selectedTab == 1) colors.background else colors.textPrimary
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    AnimatedContent(
+                        targetState = selectedTab,
+                        transitionSpec = {
+                            fadeIn(tween(220, easing = KuroMotion.EmphasizedDecelerate))
+                                .togetherWith(fadeOut(tween(150, easing = KuroMotion.EmphasizedAccelerate)))
+                        },
+                        label = "library_tab_transition",
+                        modifier = Modifier.fillMaxSize()
+                    ) { tab ->
+                        if (tab == 0) {
+                            if (favorites.isEmpty()) {
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.QueueMusic,
+                                            contentDescription = null,
+                                            tint = colors.textSecondary,
+                                            modifier = Modifier.size(56.dp)
+                                        )
+                                        Spacer(modifier = Modifier.height(16.dp))
+                                        Text(
+                                            text = stringResource(R.string.lib_fav_empty),
+                                            style = Typography.titleMedium,
+                                            color = colors.textPrimary
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = stringResource(R.string.lib_fav_empty_sub),
+                                            style = Typography.bodyMedium,
+                                            color = colors.textMuted
+                                        )
+                                    }
+                                }
+                            } else {
+                                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                                    items(favorites, key = { it.id }, contentType = { "track" }) { track ->
+                                        TrackItem(
+                                            track = track.copy(isFavorite = true),
+                                            isPlaying = currentTrack?.id == track.id,
+                                            isLoading = isLoadingTrack && currentTrack?.id == track.id,
+                                            onClick = { viewModel.playTrack(track, favorites) },
+                                            onFavoriteClick = { viewModel.toggleFavorite(track) },
+                                            onMoreClick = { trackForOptions = track }
+                                        )
+                                    }
+                                    item {
+                                        Spacer(modifier = Modifier.height(130.dp))
+                                    }
+                                }
+                            }
+                        } else {
+                            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                                item {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(colors.card)
+                                            .border(1.dp, colors.border, RoundedCornerShape(12.dp))
+                                            .clickable { showCreateDialog = true }
+                                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(40.dp)
+                                                .clip(CircleShape)
+                                                .background(colors.accent),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Add,
+                                                contentDescription = "New Playlist",
+                                                tint = colors.background,
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(14.dp))
+                                        Column {
+                                            Text(
+                                                text = stringResource(R.string.lib_create_playlist),
+                                                style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                                color = colors.textPrimary
+                                            )
+                                            Text(
+                                                text = stringResource(R.string.lib_create_playlist_sub),
+                                                style = Typography.bodySmall,
+                                                color = colors.textMuted
+                                            )
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                }
+
+                                if (playlists.isEmpty()) {
+                                    item {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 40.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.QueueMusic,
+                                                    contentDescription = null,
+                                                    tint = colors.textSecondary,
+                                                    modifier = Modifier.size(52.dp)
+                                                )
+                                                Spacer(modifier = Modifier.height(12.dp))
+                                                Text(
+                                                    text = stringResource(R.string.lib_no_playlists),
+                                                    style = Typography.titleMedium,
+                                                    color = colors.textPrimary
+                                                )
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text(
+                                                    text = stringResource(R.string.lib_no_playlists_sub),
+                                                    style = Typography.bodyMedium,
+                                                    color = colors.textMuted
+                                                )
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    items(playlists, key = { it.id }) { playlist ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 16.dp, vertical = 6.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(colors.card)
+                                                .clickable { selectedPlaylistId = playlist.id }
+                                                .padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            PlaylistCollageIcon(playlist = playlist, size = 52)
+                                            Spacer(modifier = Modifier.width(14.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = playlist.name,
+                                                    style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                                    color = colors.textPrimary,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(
+                                                    text = stringResource(R.string.lib_songs_count, playlist.tracks.size),
+                                                    style = Typography.bodySmall,
+                                                    color = colors.textMuted
+                                                )
+                                            }
+                                            IconButton(onClick = { playlistToDelete = playlist }) {
+                                                Icon(
+                                                    imageVector = Icons.Default.DeleteOutline,
+                                                    contentDescription = stringResource(R.string.lib_delete),
+                                                    tint = colors.textMuted,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                item {
+                                    Spacer(modifier = Modifier.height(130.dp))
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -379,7 +428,7 @@ fun LibraryScreen(
                 OutlinedTextField(
                     value = newPlaylistName,
                     onValueChange = { newPlaylistName = it },
-                    placeholder = { Text("Contoh: Galau Malam, Workout...", color = colors.textMuted) },
+                    placeholder = { Text(stringResource(R.string.lib_playlist_name_hint), color = colors.textMuted) },
                     singleLine = true,
                     colors = TextFieldDefaults.colors(
                         focusedContainerColor = colors.card,
@@ -458,6 +507,51 @@ fun LibraryScreen(
                 }
             },
             containerColor = colors.background
+        )
+    }
+
+    if (trackForOptions != null) {
+        val targetTrack = trackForOptions!!
+        TrackOptionsBottomSheet(
+            track = targetTrack.copy(isFavorite = targetTrack.id in favoriteIds),
+            viewModel = viewModel,
+            onDismiss = { trackForOptions = null },
+            onOpenLyrics = {
+                trackForOptions = null
+                viewModel.expandPlayer(true)
+            },
+            onOpenQueue = {
+                trackForOptions = null
+                showQueueSheet = true
+            },
+            onOpenSettings = {
+                trackForOptions = null
+                showSettingsDialog = true
+            },
+            onAddToPlaylist = {
+                val t = trackForOptions
+                trackForOptions = null
+                trackForPlaylist = t
+            },
+            onRemoveFromPlaylist = if (selectedPlaylist != null) {
+                {
+                    viewModel.removeTrackFromPlaylist(selectedPlaylist.id, targetTrack.id)
+                    trackForOptions = null
+                }
+            } else null
+        )
+    }
+
+    if (showQueueSheet) {
+        QueueBottomSheet(
+            viewModel = viewModel,
+            onDismiss = { showQueueSheet = false }
+        )
+    }
+
+    if (showSettingsDialog) {
+        SettingsDialog(
+            onDismiss = { showSettingsDialog = false }
         )
     }
 
@@ -548,8 +642,9 @@ fun PlaylistDetailView(
     viewModel: MusicViewModel,
     currentTrack: Track?,
     isLoadingTrack: Boolean,
+    favoriteIds: Set<String> = emptySet(),
     onBack: () -> Unit,
-    onAddTrackClick: (Track) -> Unit
+    onMoreClick: (Track) -> Unit
 ) {
     val colors = KuroAppTheme.colors
 
@@ -596,7 +691,7 @@ fun PlaylistDetailView(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "${playlist.tracks.size} Lagu",
+                        text = stringResource(R.string.lib_songs_count, playlist.tracks.size),
                         style = Typography.bodyMedium,
                         color = colors.textMuted
                     )
@@ -619,7 +714,7 @@ fun PlaylistDetailView(
                             ) {
                                 Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Play All", fontWeight = FontWeight.Bold)
+                                Text(stringResource(R.string.lib_play_all), fontWeight = FontWeight.Bold)
                             }
 
                             Button(
@@ -633,7 +728,7 @@ fun PlaylistDetailView(
                             ) {
                                 Icon(Icons.Default.Shuffle, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Shuffle", fontWeight = FontWeight.SemiBold)
+                                Text(stringResource(R.string.lib_shuffle), fontWeight = FontWeight.SemiBold)
                             }
                         }
                     }
@@ -659,19 +754,20 @@ fun PlaylistDetailView(
                 }
             } else {
                 items(playlist.tracks, key = { it.id }) { track ->
+                    val isFav = track.id in favoriteIds
                     TrackItem(
-                        track = track,
+                        track = track.copy(isFavorite = isFav),
                         isPlaying = currentTrack?.id == track.id,
                         isLoading = isLoadingTrack && currentTrack?.id == track.id,
                         onClick = { viewModel.playPlaylist(playlist, startTrack = track) },
                         onFavoriteClick = { viewModel.toggleFavorite(track) },
-                        onMoreClick = { onAddTrackClick(track) }
+                        onMoreClick = { onMoreClick(track) }
                     )
                 }
             }
 
             item {
-                Spacer(modifier = Modifier.height(100.dp))
+                Spacer(modifier = Modifier.height(130.dp))
             }
         }
     }

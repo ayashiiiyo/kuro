@@ -7,8 +7,10 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
@@ -37,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -53,6 +56,7 @@ import coil.compose.AsyncImage
 import com.ayashii.kuro.R
 import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.ui.theme.KuroAppTheme
+import com.ayashii.kuro.ui.theme.KuroMotion
 import com.ayashii.kuro.ui.theme.Typography
 
 @Composable
@@ -76,15 +80,22 @@ fun MiniPlayer(
     val animatedOffsetX by animateFloatAsState(
         targetValue = dragOffsetX,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
+            dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessMedium
         ),
         label = "mini_swipe_offset"
     )
 
+    val solidContainerColor = if (colors.isDark) Color(0xFF0A0A0A) else Color(0xFFFFFFFF)
+    val shape = RoundedCornerShape(14.dp)
+
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .shadow(elevation = 12.dp, shape = shape, clip = false)
+            .clip(shape)
+            .background(solidContainerColor)
+            .border(1.dp, colors.border, shape)
             .clickable { onClick() }
             .pointerInput(track.id) {
                 detectHorizontalDragGestures(
@@ -112,28 +123,32 @@ fun MiniPlayer(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp)
+                .padding(horizontal = 12.dp, vertical = 9.dp)
                 .graphicsLayer {
                     translationX = animatedOffsetX * 0.35f
                 },
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
-                modifier = Modifier.size(42.dp),
+                modifier = Modifier.size(44.dp),
                 contentAlignment = Alignment.Center
             ) {
                 AnimatedContent(
                     targetState = track,
-                    transitionSpec = { fadeIn(tween(210)) togetherWith fadeOut(tween(170)) },
+                    transitionSpec = {
+                        (fadeIn(tween(240, easing = KuroMotion.EmphasizedDecelerate)) +
+                            scaleIn(initialScale = 0.92f, animationSpec = tween(240, easing = KuroMotion.EmphasizedDecelerate)))
+                            .togetherWith(fadeOut(tween(180, easing = KuroMotion.EmphasizedAccelerate)))
+                    },
                     label = "mini_artwork"
                 ) { animatedTrack ->
                     AsyncImage(
-                        model = animatedTrack.thumbnailUrlForDisplay(144),
+                        model = animatedTrack.thumbnailUrlForDisplay(160),
                         contentDescription = animatedTrack.title,
                         modifier = Modifier
-                            .size(42.dp)
+                            .size(44.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(colors.surface),
+                            .background(colors.card),
                         contentScale = ContentScale.Crop
                     )
                 }
@@ -146,7 +161,10 @@ fun MiniPlayer(
             ) {
                 AnimatedContent(
                     targetState = track,
-                    transitionSpec = { fadeIn(tween(210)) togetherWith fadeOut(tween(170)) },
+                    transitionSpec = {
+                        fadeIn(tween(220, easing = KuroMotion.EmphasizedDecelerate))
+                            .togetherWith(fadeOut(tween(160, easing = KuroMotion.EmphasizedAccelerate)))
+                    },
                     label = "mini_metadata"
                 ) { animatedTrack ->
                     Column {
@@ -202,7 +220,7 @@ fun MiniPlayer(
             } else {
                 val playScale by animateFloatAsState(
                     targetValue = if (isPlaying) 0.94f else 1f,
-                    animationSpec = tween(durationMillis = 140),
+                    animationSpec = tween(durationMillis = 160, easing = KuroMotion.StandardEasing),
                     label = "mini_play_scale"
                 )
                 IconButton(
@@ -241,7 +259,7 @@ fun MiniPlayer(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(2.dp)
+                .height(2.5.dp)
                 .drawBehind {
                     val p = (progressProvider?.invoke() ?: progress).coerceIn(0f, 1f)
                     drawRect(color = trackLineColor, size = size)

@@ -42,6 +42,8 @@ object PlayerQueueManager : IPlayerQueueManager {
     private val playbackHistory = ArrayDeque<Int>()
     private val shuffleDeck = ArrayList<Int>()
     private var lastAutoAdvanceTimestamp = 0L
+    @Volatile
+    var sleepTimerEndOfTrack: Boolean = false
 
     private val _queueState = MutableStateFlow<List<Track>>(emptyList())
     override val queueState: StateFlow<List<Track>> = _queueState.asStateFlow()
@@ -62,6 +64,16 @@ object PlayerQueueManager : IPlayerQueueManager {
     override val consecutiveErrors: StateFlow<Int> = _consecutiveErrors.asStateFlow()
 
     fun getInstance(): PlayerQueueManager = this
+
+    fun consumeSleepTimerEndOfTrack(): Boolean {
+        synchronized(lock) {
+            if (sleepTimerEndOfTrack) {
+                sleepTimerEndOfTrack = false
+                return true
+            }
+            return false
+        }
+    }
 
     override fun setQueue(tracks: List<Track>, startIndex: Int) {
         synchronized(lock) {

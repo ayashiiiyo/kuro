@@ -26,8 +26,8 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Logout
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -42,12 +42,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.ayashii.kuro.R
 import com.ayashii.kuro.data.auth.UserAccount
 import com.ayashii.kuro.ui.theme.KuroAppTheme
 import com.ayashii.kuro.ui.theme.Typography
@@ -68,7 +70,6 @@ fun ProfileMenuSheet(
     var showRecentsDialog by remember { mutableStateOf(false) }
 
     val recentlyPlayed by viewModel.recentlyPlayed.collectAsState()
-    val onRepeatTracks by viewModel.onRepeatTracks.collectAsState()
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -140,7 +141,7 @@ fun ProfileMenuSheet(
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = account?.name ?: "Kuro Music Lover",
+                            text = account?.name ?: stringResource(R.string.profile_default_name),
                             style = Typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                             color = colors.textPrimary,
                             maxLines = 1,
@@ -148,7 +149,11 @@ fun ProfileMenuSheet(
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = if (account != null) (account.email.ifBlank { "Akun Google Terhubung" }) else "Ketuk untuk Login Google",
+                            text = if (account != null) {
+                                account.email.ifBlank { stringResource(R.string.profile_google_connected) }
+                            } else {
+                                stringResource(R.string.profile_tap_to_login)
+                            },
                             style = Typography.bodyMedium,
                             color = colors.textMuted,
                             maxLines = 1,
@@ -187,7 +192,7 @@ fun ProfileMenuSheet(
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "Ganti / Keluar Akun",
+                            text = stringResource(R.string.profile_switch_account),
                             style = Typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                             color = colors.textPrimary
                         )
@@ -218,7 +223,7 @@ fun ProfileMenuSheet(
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "Hubungkan Akun Google",
+                            text = stringResource(R.string.profile_connect_google),
                             style = Typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                             color = colors.textPrimary
                         )
@@ -234,22 +239,22 @@ fun ProfileMenuSheet(
             ) {
                 DrawerMenuItem(
                     icon = Icons.Outlined.BarChart,
-                    title = "Statistik Mendengarkan",
-                    subtitle = "Analisis selera & artis favoritmu",
+                    title = stringResource(R.string.profile_stats),
+                    subtitle = stringResource(R.string.profile_stats_sub),
                     onClick = { showStatsDialog = true }
                 )
 
                 DrawerMenuItem(
                     icon = Icons.Outlined.History,
-                    title = "Terakhir Diputar",
-                    subtitle = "${recentlyPlayed.size} lagu baru saja diputar",
+                    title = stringResource(R.string.home_recently_played),
+                    subtitle = stringResource(R.string.profile_recents_sub, recentlyPlayed.size),
                     onClick = { showRecentsDialog = true }
                 )
 
                 DrawerMenuItem(
                     icon = Icons.Outlined.Settings,
-                    title = "Pengaturan & Privasi",
-                    subtitle = "Kualitas audio, tema, cache & preferensi",
+                    title = stringResource(R.string.profile_settings_privacy),
+                    subtitle = stringResource(R.string.profile_settings_sub),
                     onClick = {
                         onDismiss()
                         onOpenSettingsClick()
@@ -276,7 +281,7 @@ fun ProfileMenuSheet(
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "Statistik Mendengarkan",
+                        text = stringResource(R.string.profile_stats),
                         style = Typography.titleLarge,
                         color = colors.textPrimary
                     )
@@ -291,7 +296,7 @@ fun ProfileMenuSheet(
             },
             confirmButton = {
                 TextButton(onClick = { showStatsDialog = false }) {
-                    Text("Tutup", color = colors.textPrimary)
+                    Text(stringResource(R.string.action_close), color = colors.textPrimary)
                 }
             },
             containerColor = colors.background
@@ -311,7 +316,7 @@ fun ProfileMenuSheet(
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "Terakhir Diputar",
+                        text = stringResource(R.string.home_recently_played),
                         style = Typography.titleLarge,
                         color = colors.textPrimary
                     )
@@ -320,7 +325,7 @@ fun ProfileMenuSheet(
             text = {
                 if (recentlyPlayed.isEmpty()) {
                     Text(
-                        text = "Belum ada riwayat lagu yang diputar.",
+                        text = stringResource(R.string.home_no_history),
                         style = Typography.bodyMedium,
                         color = colors.textMuted
                     )
@@ -377,7 +382,7 @@ fun ProfileMenuSheet(
             },
             confirmButton = {
                 TextButton(onClick = { showRecentsDialog = false }) {
-                    Text("Tutup", color = colors.textPrimary)
+                    Text(stringResource(R.string.action_close), color = colors.textPrimary)
                 }
             },
             containerColor = colors.background
@@ -459,13 +464,13 @@ fun ListeningStatsDiagram(
                     .padding(12.dp)
             ) {
                 Text(
-                    text = "Total Putar",
+                    text = stringResource(R.string.profile_total_plays),
                     style = Typography.bodySmall,
                     color = colors.textMuted
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "$totalPlays kali",
+                    text = stringResource(R.string.profile_total_plays_val, totalPlays),
                     style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = colors.textPrimary
                 )
@@ -480,13 +485,13 @@ fun ListeningStatsDiagram(
                     .padding(12.dp)
             ) {
                 Text(
-                    text = "Artis Didengar",
+                    text = stringResource(R.string.profile_artists_heard),
                     style = Typography.bodySmall,
                     color = colors.textMuted
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "$uniqueArtists artis",
+                    text = stringResource(R.string.profile_artists_heard_val, uniqueArtists),
                     style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = colors.textPrimary
                 )
@@ -503,7 +508,7 @@ fun ListeningStatsDiagram(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "Belum cukup data. Putar lebih banyak lagu untuk melihat diagram!",
+                    text = stringResource(R.string.profile_stats_not_enough),
                     style = Typography.bodyMedium,
                     color = colors.textMuted,
                     textAlign = TextAlign.Center
@@ -526,12 +531,12 @@ fun ListeningStatsDiagram(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "DIAGRAM FREKUENSI ARTIS",
+                        text = stringResource(R.string.profile_chart_title),
                         style = Typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp),
                         color = colors.textMuted
                     )
                     Text(
-                        text = "Top ${topArtists.size}",
+                        text = stringResource(R.string.profile_top_artists, topArtists.size),
                         style = Typography.labelSmall.copy(fontSize = 10.sp),
                         color = colors.textSecondary
                     )
@@ -592,7 +597,7 @@ fun ListeningStatsDiagram(
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "Peringkat Artis Teratas",
+                text = stringResource(R.string.profile_top_ranking),
                 style = Typography.labelLarge.copy(fontWeight = FontWeight.Bold),
                 color = colors.textPrimary,
                 modifier = Modifier.padding(bottom = 8.dp)

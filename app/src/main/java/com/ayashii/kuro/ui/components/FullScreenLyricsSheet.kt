@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ayashii.kuro.R
 import com.ayashii.kuro.data.lyrics.LyricsData
+import com.ayashii.kuro.data.settings.SettingsManager
 import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.ui.theme.KuroAppTheme
 import com.ayashii.kuro.ui.theme.Typography
@@ -99,7 +100,10 @@ fun FullScreenLyricsSheet(
 
     val currentPositionMs by viewModel.playbackPosition.collectAsState()
 
+    val settingsManager = remember { SettingsManager.getInstance() }
+    val currentLyricsLanguage by settingsManager.lyricsLanguage.collectAsState()
     var showTranslation by remember { mutableStateOf(true) }
+    var showLangPickerDialog by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val isUserDragging by listState.interactionSource.collectIsDraggedAsState()
     var userScrolledRecently by remember { mutableStateOf(false) }
@@ -319,7 +323,7 @@ fun FullScreenLyricsSheet(
                                         .background(if (showTranslation) colors.textPrimary else colors.card)
                                         .border(1.dp, if (showTranslation) colors.textPrimary else colors.border, RoundedCornerShape(20.dp))
                                         .clickable { showTranslation = !showTranslation }
-                                        .padding(horizontal = 16.dp, vertical = 9.dp),
+                                        .padding(horizontal = 14.dp, vertical = 9.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(
@@ -330,9 +334,25 @@ fun FullScreenLyricsSheet(
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = stringResource(R.string.player_indonesian),
+                                        text = "${stringResource(R.string.player_translate_lyrics)} · ${currentLyricsLanguage.deeplCode.uppercase()}",
                                         style = Typography.labelMedium.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold),
                                         color = if (showTranslation) colors.background else colors.textPrimary
+                                    )
+                                }
+
+                                Row(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(20.dp))
+                                        .background(colors.card)
+                                        .border(1.dp, colors.border, RoundedCornerShape(20.dp))
+                                        .clickable { showLangPickerDialog = true }
+                                        .padding(horizontal = 14.dp, vertical = 9.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = currentLyricsLanguage.displayName.substringBefore(" ("),
+                                        style = Typography.labelMedium.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
+                                        color = colors.textPrimary
                                     )
                                 }
                             }
@@ -350,6 +370,19 @@ fun FullScreenLyricsSheet(
                 onPlayPauseClick = onPlayPauseClick
             )
         }
+    }
+
+    if (showLangPickerDialog) {
+        LyricsLanguagePickerDialog(
+            currentLyricsLanguage = currentLyricsLanguage,
+            onSelectLanguage = { selected ->
+                settingsManager.setLyricsLanguage(selected)
+                showTranslation = true
+                viewModel.retranslateActiveLyrics(lyricsData, selected)
+                showLangPickerDialog = false
+            },
+            onDismiss = { showLangPickerDialog = false }
+        )
     }
 }
 

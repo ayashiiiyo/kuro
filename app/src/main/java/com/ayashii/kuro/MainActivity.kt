@@ -12,13 +12,19 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -35,6 +41,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -54,6 +62,9 @@ import com.ayashii.kuro.ui.navigation.Screen
 import com.ayashii.kuro.ui.screens.HomeScreen
 import com.ayashii.kuro.ui.screens.LibraryScreen
 import com.ayashii.kuro.ui.screens.SearchScreen
+import com.ayashii.kuro.ui.screens.VibeScreen
+import com.ayashii.kuro.ui.theme.KuroAppTheme
+import com.ayashii.kuro.ui.theme.KuroMotion
 import com.ayashii.kuro.ui.theme.KuroTheme
 import com.ayashii.kuro.viewmodel.MusicViewModel
 
@@ -79,7 +90,11 @@ class MainActivity : ComponentActivity() {
             return
         }
         val wrappedContext = try {
-            val locale = java.util.Locale(language)
+            val locale = if (language == "in" || language == "id") {
+                java.util.Locale("in", "ID")
+            } else {
+                java.util.Locale(language)
+            }
             java.util.Locale.setDefault(locale)
             val configuration = android.content.res.Configuration(newBase.resources.configuration)
             configuration.setLocale(locale)
@@ -128,6 +143,10 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+private fun routeIndex(route: String?): Int {
+    return Screen.bottomNavItems.indexOfFirst { it.route == route }.coerceAtLeast(0)
+}
+
 @Composable
 fun MainAppScreen(viewModel: MusicViewModel) {
     val navController = rememberNavController()
@@ -158,7 +177,7 @@ fun MainAppScreen(viewModel: MusicViewModel) {
         viewModel.expandPlayer(false)
     }
 
-    val colors = com.ayashii.kuro.ui.theme.KuroAppTheme.colors
+    val colors = KuroAppTheme.colors
 
     Box(modifier = Modifier.fillMaxSize().background(colors.background)) {
         Scaffold(
@@ -210,7 +229,57 @@ fun MainAppScreen(viewModel: MusicViewModel) {
                 NavHost(
                     navController = navController,
                     startDestination = Screen.Home.route,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    enterTransition = {
+                        val initialIdx = routeIndex(initialState.destination.route)
+                        val targetIdx = routeIndex(targetState.destination.route)
+                        val direction = if (targetIdx >= initialIdx) 1 else -1
+                        slideInHorizontally(
+                            animationSpec = tween(280, easing = KuroMotion.EmphasizedDecelerate),
+                            initialOffsetX = { fullWidth -> direction * (fullWidth / 7) }
+                        ) + fadeIn(
+                            animationSpec = tween(240, easing = KuroMotion.EmphasizedDecelerate)
+                        ) + scaleIn(
+                            initialScale = 0.97f,
+                            animationSpec = tween(280, easing = KuroMotion.EmphasizedDecelerate)
+                        )
+                    },
+                    exitTransition = {
+                        val initialIdx = routeIndex(initialState.destination.route)
+                        val targetIdx = routeIndex(targetState.destination.route)
+                        val direction = if (targetIdx >= initialIdx) -1 else 1
+                        slideOutHorizontally(
+                            animationSpec = tween(220, easing = KuroMotion.EmphasizedAccelerate),
+                            targetOffsetX = { fullWidth -> direction * (fullWidth / 9) }
+                        ) + fadeOut(
+                            animationSpec = tween(180, easing = KuroMotion.EmphasizedAccelerate)
+                        )
+                    },
+                    popEnterTransition = {
+                        val initialIdx = routeIndex(initialState.destination.route)
+                        val targetIdx = routeIndex(targetState.destination.route)
+                        val direction = if (targetIdx >= initialIdx) 1 else -1
+                        slideInHorizontally(
+                            animationSpec = tween(280, easing = KuroMotion.EmphasizedDecelerate),
+                            initialOffsetX = { fullWidth -> direction * (fullWidth / 7) }
+                        ) + fadeIn(
+                            animationSpec = tween(240, easing = KuroMotion.EmphasizedDecelerate)
+                        ) + scaleIn(
+                            initialScale = 0.97f,
+                            animationSpec = tween(280, easing = KuroMotion.EmphasizedDecelerate)
+                        )
+                    },
+                    popExitTransition = {
+                        val initialIdx = routeIndex(initialState.destination.route)
+                        val targetIdx = routeIndex(targetState.destination.route)
+                        val direction = if (targetIdx >= initialIdx) -1 else 1
+                        slideOutHorizontally(
+                            animationSpec = tween(220, easing = KuroMotion.EmphasizedAccelerate),
+                            targetOffsetX = { fullWidth -> direction * (fullWidth / 9) }
+                        ) + fadeOut(
+                            animationSpec = tween(180, easing = KuroMotion.EmphasizedAccelerate)
+                        )
+                    }
                 ) {
                     composable(Screen.Home.route) {
                         HomeScreen(viewModel = viewModel)
@@ -218,21 +287,49 @@ fun MainAppScreen(viewModel: MusicViewModel) {
                     composable(Screen.Search.route) {
                         SearchScreen(viewModel = viewModel)
                     }
+                    composable(Screen.Vibe.route) {
+                        VibeScreen(viewModel = viewModel)
+                    }
                     composable(Screen.Library.route) {
                         LibraryScreen(viewModel = viewModel)
                     }
                 }
 
-                if (currentTrack != null && !isExpanded) {
-                    MiniPlayerContainer(
-                        viewModel = viewModel,
-                        track = currentTrack!!,
-                        isPlaying = isPlaying,
-                        isLoading = isLoadingTrack,
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(horizontal = 8.dp, vertical = 6.dp)
-                    )
+                AnimatedVisibility(
+                    visible = currentTrack != null && !isExpanded,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                    enter = slideInVertically(
+                        animationSpec = tween(260, easing = KuroMotion.EmphasizedDecelerate),
+                        initialOffsetY = { it }
+                    ) + fadeIn(tween(220)),
+                    exit = slideOutVertically(
+                        animationSpec = tween(220, easing = KuroMotion.EmphasizedAccelerate),
+                        targetOffsetY = { it }
+                    ) + fadeOut(tween(180))
+                ) {
+                    currentTrack?.let { activeTrack ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color.Transparent,
+                                            colors.background.copy(alpha = 0.94f),
+                                            colors.background
+                                        )
+                                    )
+                                )
+                                .padding(horizontal = 8.dp, vertical = 6.dp)
+                        ) {
+                            MiniPlayerContainer(
+                                viewModel = viewModel,
+                                track = activeTrack,
+                                isPlaying = isPlaying,
+                                isLoading = isLoadingTrack
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -240,13 +337,13 @@ fun MainAppScreen(viewModel: MusicViewModel) {
         AnimatedVisibility(
             visible = isExpanded && currentTrack != null,
             enter = slideInVertically(
-                animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+                animationSpec = tween(durationMillis = 340, easing = KuroMotion.EmphasizedDecelerate),
                 initialOffsetY = { it }
-            ),
+            ) + fadeIn(animationSpec = tween(240, easing = KuroMotion.EmphasizedDecelerate)),
             exit = slideOutVertically(
-                animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+                animationSpec = tween(durationMillis = 280, easing = KuroMotion.EmphasizedAccelerate),
                 targetOffsetY = { it }
-            )
+            ) + fadeOut(animationSpec = tween(200, easing = KuroMotion.EmphasizedAccelerate))
         ) {
             currentTrack?.let { track ->
                 FullPlayerSheet(
@@ -302,6 +399,8 @@ fun MiniPlayerContainer(
         progress = progressFloat,
         onPlayPauseClick = { viewModel.togglePlayPause() },
         onSkipNextClick = { viewModel.skipNext() },
+        onSkipPreviousClick = { viewModel.skipPrevious() },
+        onFavoriteClick = { viewModel.toggleFavorite(track) },
         onClick = { viewModel.expandPlayer(true) },
         modifier = modifier
     )

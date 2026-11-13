@@ -1,6 +1,13 @@
 package com.ayashii.kuro.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
+import com.ayashii.kuro.ui.theme.KuroMotion
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -155,7 +162,7 @@ fun HomeScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = if (genre == "Semua") "All" else genre,
+                                text = if (genre == "Semua") stringResource(R.string.home_genre_all) else genre,
                                 style = Typography.labelMedium.copy(fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium),
                                 fontSize = 13.sp,
                                 color = if (isSelected) colors.background else colors.textPrimary
@@ -168,7 +175,17 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        if (selectedGenre != "Semua") {
+        AnimatedContent(
+            targetState = selectedGenre,
+            transitionSpec = {
+                (fadeIn(tween(240, easing = KuroMotion.EmphasizedDecelerate)) +
+                    slideInVertically(animationSpec = tween(240, easing = KuroMotion.EmphasizedDecelerate)) { it / 18 })
+                    .togetherWith(fadeOut(tween(160, easing = KuroMotion.EmphasizedAccelerate)))
+            },
+            label = "home_genre_transition",
+            modifier = Modifier.fillMaxSize()
+        ) { activeGenre ->
+        if (activeGenre != "Semua") {
             if (isLoadingGenre || isSearching) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -182,7 +199,7 @@ fun HomeScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = stringResource(R.string.home_no_songs_genre, selectedGenre),
+                        text = stringResource(R.string.home_no_songs_genre, activeGenre),
                         style = Typography.bodyMedium,
                         color = colors.textMuted
                     )
@@ -195,7 +212,7 @@ fun HomeScreen(
                             track = track.copy(isFavorite = isFav),
                             isPlaying = currentTrack?.id == track.id,
                             isLoading = isLoadingTrack && currentTrack?.id == track.id,
-                            onClick = { viewModel.playTrackFromSearch(track) },
+                            onClick = { viewModel.playTrack(track, genreTracks) },
                             onFavoriteClick = { viewModel.toggleFavorite(track) },
                             onMoreClick = { trackForOptions = track }
                         )
@@ -549,6 +566,7 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.height(130.dp))
                 }
             }
+        }
         }
     }
 

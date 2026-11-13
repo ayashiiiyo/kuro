@@ -31,6 +31,7 @@ import com.ayashii.kuro.service.PlaybackService
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
@@ -47,6 +48,7 @@ private object WidgetRenderer {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     @Volatile private var artworkLoadedFor: String? = null
     @Volatile private var artworkLoadInProgressFor: String? = null
+    @Volatile private var artworkJob: Job? = null
     @Volatile private var cachedArtworkBitmap: Bitmap? = null
     @Volatile private var cachedCompactBackdrop: Bitmap? = null
     @Volatile private var cachedSquareBackdrop: Bitmap? = null
@@ -150,13 +152,20 @@ private object WidgetRenderer {
     }
 
     private fun loadArtwork(context: Context, manager: AppWidgetManager, compact: ComponentName, square: ComponentName, track: Track) {
-        scope.launch(Dispatchers.IO) {
+        artworkJob?.cancel()
+        artworkJob = scope.launch(Dispatchers.IO) {
             try {
                 val request = ImageRequest.Builder(context).data(track.thumbnailUrlForDisplay(256)).allowHardware(false).build()
                 val result = Coil.imageLoader(context).execute(request) as? SuccessResult
                 val bitmap = (result?.drawable as? BitmapDrawable)?.bitmap
                 if (bitmap == null) {
-                    artworkLoadInProgressFor = null
+                    if (artworkLoadInProgressFor == track.id) artworkLoadInProgressFor = null
+                    return@launch
+                }
+                val currentPersistedId = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    .getString(KEY_TRACK, null)?.let(::decodeTrack)?.id
+                if (currentPersistedId != null && currentPersistedId != track.id) {
+                    if (artworkLoadInProgressFor == track.id) artworkLoadInProgressFor = null
                     return@launch
                 }
                 val rounded = roundedBitmap(bitmap)
@@ -177,9 +186,9 @@ private object WidgetRenderer {
                     views.setImageViewBitmap(R.id.widget_bg_art, if (isSquare) squareBg else compactBg)
                     manager.partiallyUpdateAppWidget(id, views)
                 }
-                artworkLoadInProgressFor = null
+                if (artworkLoadInProgressFor == track.id) artworkLoadInProgressFor = null
             } catch (_: Exception) {
-                artworkLoadInProgressFor = null
+                if (artworkLoadInProgressFor == track.id) artworkLoadInProgressFor = null
             }
         }
     }

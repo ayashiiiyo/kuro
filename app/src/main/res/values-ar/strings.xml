@@ -1,0 +1,29 @@
+<resources>
+    <string name="tab_home">الرئيسية</string>
+    <string name="tab_search">بحث</string>
+    <string name="tab_vibe">Vibe</string>
+    <string name="tab_library">المكتبة</string>
+    <string name="action_close">إغلاق</string>
+    <string name="common_selected">محدد</string>
+    <string name="common_song_count">%1$d أغاني</string>
+    <string name="home_genre_all">الكل</string>
+    <string name="home_start_listening">ابدأ الاستماع</string>
+    <string name="home_to_get_you_started">للبدء</string>
+    <string name="home_play_again">الاستماع مجدداً</string>
+    <string name="home_view_all">عرض الكل ›</string>
+    <string name="home_picks_for_you">مختارات لك</string>
+    <string name="lib_playlist_title">المكتبة</string>
+    <string name="lib_tab_favorites">الأغاني المفضلة</string>
+    <string name="lib_tab_my_playlists">قوائم التشغيل (%1$d)</string>
+    <string name="lib_create_playlist">إنشاء قائمة تشغيل</string>
+    <string name="lib_songs_count">%1$d أغاني</string>
+    <string name="search_title">بحث</string>
+    <string name="search_what_do_you_want_to_listen_to">ماذا تريد أن تسمع؟</string>
+    <string name="search_explore_categories">استكشاف الفئات</string>
+    <string name="search_recents_title">الأخيرة</string>
+    <string name="settings_title">الإعدادات</string>
+    <string name="settings_language">لغة التطبيق</string>
+    <string name="lang_system">افتراضي النظام</string>
+    <string name="settings_lyrics_trans">ترجمة الكلمات</string>
+    <string name="settings_lyrics_target_lang">لغة ترجمة الكلمات (DeepL)</string>
+</resources>

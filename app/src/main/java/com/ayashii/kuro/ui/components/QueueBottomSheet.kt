@@ -147,7 +147,7 @@ fun QueueBottomSheet(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "BERIKUTNYA DALAM ANTREAN",
+                                text = stringResource(R.string.player_queue_up_next),
                                 style = Typography.labelSmall.copy(
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
@@ -161,7 +161,7 @@ fun QueueBottomSheet(
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                                 ) {
                                     Text(
-                                        text = "Hapus Antrean",
+                                        text = stringResource(R.string.player_queue_clear),
                                         style = Typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                         color = colors.accent
                                     )
@@ -173,7 +173,7 @@ fun QueueBottomSheet(
                     if (upcomingTracks.isEmpty()) {
                         item {
                             Text(
-                                text = "Lagu berikutnya akan dipilih secara otomatis (Radio Mix).",
+                                text = stringResource(R.string.player_queue_auto_radio),
                                 style = Typography.bodySmall,
                                 color = colors.textSecondary,
                                 modifier = Modifier.padding(vertical = 12.dp)

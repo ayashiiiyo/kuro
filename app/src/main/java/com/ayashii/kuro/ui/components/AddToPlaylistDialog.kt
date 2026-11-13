@@ -41,6 +41,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
+import com.ayashii.kuro.R
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -142,7 +144,7 @@ fun AddToPlaylistDialog(
                 }
                 Spacer(modifier = Modifier.width(14.dp))
                 Text(
-                    text = "Buat Playlist Baru",
+                    text = stringResource(R.string.lib_create_playlist),
                     style = Typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                     color = colors.textPrimary
                 )
@@ -151,7 +153,7 @@ fun AddToPlaylistDialog(
             Spacer(modifier = Modifier.height(16.dp))
 
             Text(
-                text = "Pilih Playlist",
+                text = stringResource(R.string.lib_select_playlist),
                 style = Typography.labelLarge.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold),
                 color = colors.textMuted,
                 modifier = Modifier.padding(bottom = 8.dp)
@@ -165,7 +167,7 @@ fun AddToPlaylistDialog(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Belum ada playlist. Buat playlist pertamamu!",
+                        text = stringResource(R.string.lib_no_playlists_sub),
                         style = Typography.bodyMedium,
                         color = colors.textMuted
                     )
@@ -215,7 +217,7 @@ fun AddToPlaylistDialog(
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = "${playlist.tracks.size} lagu",
+                                    text = stringResource(R.string.lib_songs_count, playlist.tracks.size),
                                     style = Typography.bodySmall,
                                     color = colors.textMuted
                                 )
@@ -240,7 +242,7 @@ fun AddToPlaylistDialog(
             onDismissRequest = { showCreateDialog = false },
             title = {
                 Text(
-                    text = "Beri Nama Playlist",
+                    text = stringResource(R.string.lib_enter_name),
                     style = Typography.titleLarge,
                     color = colors.textPrimary
                 )
@@ -249,7 +251,7 @@ fun AddToPlaylistDialog(
                 OutlinedTextField(
                     value = newPlaylistName,
                     onValueChange = { newPlaylistName = it },
-                    placeholder = { Text("Nama playlist...", color = colors.textMuted) },
+                    placeholder = { Text(stringResource(R.string.lib_playlist_name_hint), color = colors.textMuted) },
                     singleLine = true,
                     colors = TextFieldDefaults.colors(
                         focusedContainerColor = colors.card,
@@ -278,12 +280,12 @@ fun AddToPlaylistDialog(
                         contentColor = colors.background
                     )
                 ) {
-                    Text("Buat & Tambahkan")
+                    Text(stringResource(R.string.lib_create_and_add))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showCreateDialog = false }) {
-                    Text("Batal", color = colors.textMuted)
+                    Text(stringResource(R.string.lib_cancel), color = colors.textMuted)
                 }
             },
             containerColor = colors.background

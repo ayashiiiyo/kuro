@@ -199,6 +199,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     fun setSleepTimer(minutes: Int?, pauseAtEndOfTrack: Boolean = false) {
         sleepTimerJob?.cancel()
         _sleepTimerEndOfTrack.value = pauseAtEndOfTrack
+        queueManager.sleepTimerEndOfTrack = pauseAtEndOfTrack
         if (pauseAtEndOfTrack || minutes == null || minutes <= 0) {
             _sleepTimerMinutes.value = null
             return
@@ -223,6 +224,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         sleepTimerJob = null
         _sleepTimerMinutes.value = null
         _sleepTimerEndOfTrack.value = false
+        queueManager.sleepTimerEndOfTrack = false
     }
 
     private val playlistQueue = Collections.synchronizedList(mutableListOf<Track>())
@@ -316,6 +318,28 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) { updateKuroWidgets(getApplication()) }
     }
 
+    fun retranslateActiveLyrics(
+        sourceLyrics: com.ayashii.kuro.data.lyrics.LyricsData? = _currentLyrics.value,
+        targetLang: com.ayashii.kuro.data.settings.LyricsLanguage = settingsManager.lyricsLanguage.value
+    ) {
+        val data = sourceLyrics ?: return
+        val trackId = data.trackId
+        lyricsJob?.cancel()
+        lyricsJob = viewModelScope.launch(Dispatchers.IO) {
+            _isLoadingLyrics.value = true
+            try {
+                val translated = lyricsRepository.translateLyrics(data, targetLang)
+                if (_currentTrack.value?.id == trackId) {
+                    _currentLyrics.value = translated
+                }
+            } catch (e: Exception) {
+                Log.e("KuroVM", "Retranslate lyrics error: ${e.message}")
+            } finally {
+                _isLoadingLyrics.value = false
+            }
+        }
+    }
+
     private fun triggerLyricsAndRadioForTrack(track: Track) {
         if (lastLyricsLoadedForId == track.id) return
         lastLyricsLoadedForId = track.id
@@ -335,7 +359,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 _currentLyrics.value = data
 
                 if (data != null && data.lines.isNotEmpty() && settingsManager.autoTranslate.value) {
-                    val translated = lyricsRepository.translateLyrics(data)
+                    val translated = lyricsRepository.translateLyrics(data, settingsManager.lyricsLanguage.value)
                     if (_currentTrack.value?.id == track.id) {
                         _currentLyrics.value = translated
                     }
@@ -402,6 +426,29 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             authState.collect { account ->
                 if (account != null) {
                     syncLikedSongs()
+                }
+            }
+        }
+        var lastObservedAppLang = settingsManager.language.value
+        viewModelScope.launch {
+            settingsManager.language.collect { newLang ->
+                if (newLang != lastObservedAppLang) {
+                    lastObservedAppLang = newLang
+                    repository.invalidateHomeCache()
+                    loadTrending()
+                }
+            }
+        }
+        var lastObservedLyricsLang = settingsManager.lyricsLanguage.value
+        viewModelScope.launch {
+            settingsManager.lyricsLanguage.collect { newTargetLang ->
+                if (newTargetLang != lastObservedLyricsLang) {
+                    lastObservedLyricsLang = newTargetLang
+                    val existingLyrics = _currentLyrics.value
+                    val activeTrk = _currentTrack.value
+                    if (existingLyrics != null && activeTrk != null && existingLyrics.trackId == activeTrk.id) {
+                        retranslateActiveLyrics(existingLyrics, newTargetLang)
+                    }
                 }
             }
         }
@@ -719,7 +766,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     syncWidgetState()
                 }
 
-                delay(33)
+                delay(50)
             }
         }
     }
@@ -741,8 +788,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             val onRepeat = tasteManager.onRepeatTracks.value
             if (onRepeat.isNotEmpty()) {
                 rawShelves.add(0, HomeSection(
-                    title = "Lagi Sering Kamu Putar",
-                    subtitle = "Berdasarkan selera musikmu",
+                    title = settingsManager.getLocalizedString(com.ayashii.kuro.R.string.home_on_repeat_title),
+                    subtitle = settingsManager.getLocalizedString(com.ayashii.kuro.R.string.home_on_repeat_sub),
                     tracks = onRepeat
                 ))
             }
@@ -920,6 +967,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     pendingTrackToPlay = updatedTrack
                 }
 
+                syncWidgetState()
+
                 launch(Dispatchers.IO) {
                     val bestThumbnail = repository.resolveBestThumbnail(activeTrack)
                     if (bestThumbnail != activeTrack.thumbnailUrl && _currentTrack.value?.id == activeTrack.id) {
@@ -927,6 +976,21 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                         if (withBestThumb != null) {
                             _currentTrack.value = withBestThumb
                             queueManager.updateCurrentTrack(withBestThumb)
+                            withContext(Dispatchers.Main) {
+                                val ctrl = mediaController
+                                val curItem = ctrl?.currentMediaItem
+                                if (ctrl != null && curItem != null && curItem.mediaId == activeTrack.id && ctrl.mediaItemCount > 0) {
+                                    val newMeta = curItem.mediaMetadata.buildUpon()
+                                        .setTitle(withBestThumb.title)
+                                        .setArtist(withBestThumb.artist)
+                                        .setArtworkUri(Uri.parse(withBestThumb.highResThumbnailUrl))
+                                        .setDisplayTitle(withBestThumb.title)
+                                        .build()
+                                    val replaced = curItem.buildUpon().setMediaMetadata(newMeta).build()
+                                    ctrl.replaceMediaItem(ctrl.currentMediaItemIndex, replaced)
+                                    syncWidgetState()
+                                }
+                            }
                         }
                     }
                 }

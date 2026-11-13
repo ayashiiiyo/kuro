@@ -37,7 +37,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.ayashii.kuro.R
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -115,12 +117,12 @@ fun LoginWebViewDialog(
                 Spacer(modifier = Modifier.width(8.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Login to YouTube",
+                        text = stringResource(R.string.login_youtube_title),
                         style = Typography.titleMedium,
                         color = colors.textPrimary
                     )
                     Text(
-                        text = "Sign in via official Google login",
+                        text = stringResource(R.string.login_youtube_sub),
                         style = Typography.bodyMedium,
                         color = colors.textMuted
                     )

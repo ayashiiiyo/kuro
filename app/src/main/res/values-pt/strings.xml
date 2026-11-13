@@ -1,0 +1,29 @@
+<resources>
+    <string name="tab_home">Início</string>
+    <string name="tab_search">Buscar</string>
+    <string name="tab_vibe">Vibe</string>
+    <string name="tab_library">Biblioteca</string>
+    <string name="action_close">Fechar</string>
+    <string name="common_selected">Selecionado</string>
+    <string name="common_song_count">%1$d músicas</string>
+    <string name="home_genre_all">Tudo</string>
+    <string name="home_start_listening">Comece a ouvir</string>
+    <string name="home_to_get_you_started">Para começar</string>
+    <string name="home_play_again">Ouvir novamente</string>
+    <string name="home_view_all">Ver tudo ›</string>
+    <string name="home_picks_for_you">Escolhas para você</string>
+    <string name="lib_playlist_title">Biblioteca</string>
+    <string name="lib_tab_favorites">Músicas favoritas</string>
+    <string name="lib_tab_my_playlists">Minhas playlists (%1$d)</string>
+    <string name="lib_create_playlist">Criar nova playlist</string>
+    <string name="lib_songs_count">%1$d músicas</string>
+    <string name="search_title">Buscar</string>
+    <string name="search_what_do_you_want_to_listen_to">O que você quer ouvir?</string>
+    <string name="search_explore_categories">Explorar categorias</string>
+    <string name="search_recents_title">Recentes</string>
+    <string name="settings_title">Configurações</string>
+    <string name="settings_language">Idioma do aplicativo</string>
+    <string name="lang_system">Padrão do sistema</string>
+    <string name="settings_lyrics_trans">Tradução de letras</string>
+    <string name="settings_lyrics_target_lang">Idioma da tradução (DeepL)</string>
+</resources>

@@ -18,7 +18,7 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
-        resourceConfigurations += listOf("en", "id", "in")
+        resourceConfigurations += listOf("en", "id", "in", "ja", "ko", "zh", "es", "fr", "de", "pt", "ru", "ar")
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
