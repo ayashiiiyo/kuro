@@ -8,14 +8,18 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.Shader
 import android.graphics.drawable.BitmapDrawable
 import android.view.View
 import android.widget.RemoteViews
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import androidx.palette.graphics.Palette
 import coil.Coil
 import coil.request.ImageRequest
 import coil.request.SuccessResult
@@ -44,6 +48,8 @@ private object WidgetRenderer {
     @Volatile private var artworkLoadedFor: String? = null
     @Volatile private var artworkLoadInProgressFor: String? = null
     @Volatile private var cachedArtworkBitmap: Bitmap? = null
+    @Volatile private var cachedCompactBackdrop: Bitmap? = null
+    @Volatile private var cachedSquareBackdrop: Bitmap? = null
 
     fun update(context: Context) {
         try {
@@ -70,6 +76,8 @@ private object WidgetRenderer {
         track?.let {
             if (artworkLoadedFor != it.id) {
                 cachedArtworkBitmap = null
+                cachedCompactBackdrop = null
+                cachedSquareBackdrop = null
             }
             if (artworkLoadedFor != it.id && artworkLoadInProgressFor != it.id) {
                 artworkLoadInProgressFor = it.id
@@ -92,10 +100,15 @@ private object WidgetRenderer {
         val currentCached = cachedArtworkBitmap
         if (currentCached != null && artworkLoadedFor == track?.id) {
             views.setImageViewBitmap(R.id.widget_art, currentCached)
+            val backdrop = if (square) cachedSquareBackdrop else cachedCompactBackdrop
+            if (backdrop != null) {
+                views.setImageViewBitmap(R.id.widget_bg_art, backdrop)
+            }
         } else {
             views.setImageViewResource(R.id.widget_art, R.drawable.widget_art_background)
+            views.setImageViewBitmap(R.id.widget_bg_art, null)
         }
-        views.setTextViewText(R.id.widget_play, if (playing) "Ⅱ" else "▶")
+        views.setImageViewResource(R.id.widget_play, if (playing) R.drawable.ic_kuro_pause else R.drawable.ic_kuro_play)
         views.setContentDescription(R.id.widget_play, context.getString(R.string.widget_play_desc))
         views.setContentDescription(R.id.widget_previous, context.getString(R.string.widget_previous_desc))
         views.setContentDescription(R.id.widget_next, context.getString(R.string.widget_next_desc))
@@ -105,12 +118,15 @@ private object WidgetRenderer {
         if (!square) {
             val options = manager.getAppWidgetOptions(id)
             val minWidth = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0)
-            val showPrevious = minWidth == 0 || minWidth >= 300
+            val showPrevious = minWidth == 0 || minWidth >= 260
             views.setViewVisibility(R.id.widget_previous, if (showPrevious) View.VISIBLE else View.GONE)
             if (showPrevious) setAction(context, views, R.id.widget_previous, KuroWidgetActionReceiver.ACTION_PREVIOUS, id * 10 + 3)
         }
         if (square) {
-            views.setTextViewText(R.id.widget_favorite, if (track?.isFavorite == true) "♥" else "♡")
+            views.setImageViewResource(
+                R.id.widget_favorite,
+                if (track?.isFavorite == true) R.drawable.ic_widget_heart_filled else R.drawable.ic_widget_heart_outline
+            )
             setAction(context, views, R.id.widget_previous, KuroWidgetActionReceiver.ACTION_PREVIOUS, id * 10 + 3)
             setAction(context, views, R.id.widget_favorite, KuroWidgetActionReceiver.ACTION_FAVORITE, id * 10 + 4)
         }
@@ -144,7 +160,12 @@ private object WidgetRenderer {
                     return@launch
                 }
                 val rounded = roundedBitmap(bitmap)
+                val accentColor = extractWidgetAccentColor(bitmap)
+                val compactBg = renderGradientBackdrop(360, 96, accentColor)
+                val squareBg = renderGradientBackdrop(220, 220, accentColor)
                 cachedArtworkBitmap = rounded
+                cachedCompactBackdrop = compactBg
+                cachedSquareBackdrop = squareBg
                 artworkLoadedFor = track.id
                 val compactIds = manager.getAppWidgetIds(compact)
                 val squareIds = manager.getAppWidgetIds(square)
@@ -153,6 +174,7 @@ private object WidgetRenderer {
                     val isSquare = id in squareIds
                     val views = RemoteViews(context.packageName, if (isSquare) R.layout.widget_kuro_square else R.layout.widget_kuro_compact)
                     views.setImageViewBitmap(R.id.widget_art, rounded)
+                    views.setImageViewBitmap(R.id.widget_bg_art, if (isSquare) squareBg else compactBg)
                     manager.partiallyUpdateAppWidget(id, views)
                 }
                 artworkLoadInProgressFor = null
@@ -162,16 +184,63 @@ private object WidgetRenderer {
         }
     }
 
+    private fun extractWidgetAccentColor(source: Bitmap): Int {
+        return try {
+            val palette = Palette.from(source).maximumColorCount(12).generate()
+            palette.darkVibrantSwatch?.rgb
+                ?: palette.dominantSwatch?.rgb
+                ?: palette.mutedSwatch?.rgb
+                ?: Color.parseColor("#1E1F24")
+        } catch (_: Exception) {
+            Color.parseColor("#1E1F24")
+        }
+    }
+
+    private fun renderGradientBackdrop(width: Int, height: Int, accentRgb: Int): Bitmap {
+        val output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(output)
+        val r = (Color.red(accentRgb) * 0.42f).toInt().coerceIn(10, 110)
+        val g = (Color.green(accentRgb) * 0.42f).toInt().coerceIn(10, 110)
+        val b = (Color.blue(accentRgb) * 0.42f).toInt().coerceIn(12, 120)
+        val startColor = Color.argb(242, r, g, b)
+        val endColor = Color.argb(248, 10, 10, 13)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = LinearGradient(
+                0f,
+                0f,
+                width.toFloat(),
+                height.toFloat(),
+                startColor,
+                endColor,
+                Shader.TileMode.CLAMP
+            )
+        }
+        val radius = 34f
+        canvas.drawRoundRect(RectF(0f, 0f, width.toFloat(), height.toFloat()), radius, radius, paint)
+        val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 2f
+            color = Color.argb(55, (r + 90).coerceAtMost(255), (g + 90).coerceAtMost(255), (b + 90).coerceAtMost(255))
+        }
+        canvas.drawRoundRect(RectF(1f, 1f, width - 1f, height - 1f), radius, radius, strokePaint)
+        return output
+    }
+
     private fun roundedBitmap(source: Bitmap): Bitmap {
-        val output = Bitmap.createBitmap(160, 160, Bitmap.Config.RGB_565)
+        val output = Bitmap.createBitmap(160, 160, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(output)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
         val shader = android.graphics.BitmapShader(source, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP)
         val scale = maxOf(160f / source.width, 160f / source.height)
-        val matrix = android.graphics.Matrix().apply { setScale(scale, scale) }
+        val dx = (160f - source.width * scale) * 0.5f
+        val dy = (160f - source.height * scale) * 0.5f
+        val matrix = android.graphics.Matrix().apply {
+            setScale(scale, scale)
+            postTranslate(dx, dy)
+        }
         shader.setLocalMatrix(matrix)
         paint.shader = shader
-        canvas.drawRoundRect(RectF(0f, 0f, 160f, 160f), 24f, 24f, paint)
+        canvas.drawRoundRect(RectF(0f, 0f, 160f, 160f), 28f, 28f, paint)
         return output
     }
 }
@@ -335,7 +404,6 @@ private fun decodeTrack(raw: String): Track? = try {
 
 fun updateKuroWidgets(context: Context) = WidgetRenderer.update(context)
 
-/** Last track persisted by the player, used to restore playback after the service is recreated. */
 fun loadPersistedTrack(context: Context): Track? =
     context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         .getString(KEY_TRACK, null)

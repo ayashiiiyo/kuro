@@ -86,25 +86,35 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.8.5 — Comprehensive UI/UX Polish, Lyrics Cleanup & Player Stability
+          ## Kuro v3.8.6 — Vibe Radar, Sleep Timer, MiniPlayer Gestures & Widget Redesign
 
-          - **Lyrics Cleanup & Noise Filtering**:
-            - Added native junk line filtering to suppress noise (watermarks, copyright tags, production credits, pure music markers).
-            - Cached regex matchers and chronological sort order for parsed timed lyric items.
-          - **Player & Lyrics UI Refinements**:
-            - Enhanced insets and padding for full-screen lyrics and full player sheets.
-            - Spring animation transitions and responsive back handling.
-            - Widget layout adjustments for improved scaling.
-          - **Authentication & Media Stability**:
-            - Sanitized cookie headers on login and storage to prevent header injection or corruption.
-            - Enhanced error recovery and queue lifecycle management.
+          - **Vibe Radar Screen**:
+            - Added dynamic 4th bottom navigation tab with personalized smart frequency and local taste ranking.
+            - Curated mood filters (All Vibes, Late Night, Deep Focus, High Energy, On Repeat) and instant smart radio.
+          - **Sleep Timer**:
+            - Configurable countdown timer (5 to 60 minutes) or auto-pause at the end of the current track.
+            - Accessible directly from full player and track options bottom sheet.
+          - **MiniPlayer Enhancements**:
+            - Horizontal drag gestures to skip tracks (swipe left for next, swipe right for previous) with haptic feedback.
+            - Direct favorite toggle button on the mini player.
+            - Optimized low-overhead progress rendering with `drawBehind`.
+          - **UI Polish & Animations**:
+            - Floating bottom dock navigation with spring pill animations.
+            - Full player artwork breathing animation (dynamic scale between playing and paused states).
+            - Drag-to-dismiss scale and alpha animations for player sheets.
+            - Kinetic canvas animated splash screen.
+            - Instant shuffle mix button on Search screen.
+          - **Widgets & Launcher**:
+            - Palette API gradient backdrops for both compact and square home screen widgets.
+            - Replaced text glyphs with clean vector drawables in widget controls.
+            - Android 13+ themed monochrome launcher icon support.
           - **Codebase Hygiene**:
-            - Strict zero single-line `//` and `///` comments across all source files.
+            - Maintained zero single-line `//` and `///` comment compliance.
           EOF
           gh release create "$RELEASE_TAG" \
             "${{ steps.apk.outputs.release_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (UI/UX Polish & Player Stability)" \
+            --title "Kuro $RELEASE_TAG (Vibe Radar, Sleep Timer & Widget Redesign)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 

@@ -4,16 +4,32 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Sleek Minimalist White Music Waveform Circle -->
+    <!-- Subtle Crescent Eclipse Arc -->
     <path
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="3.5"
+        android:fillColor="#00000000"
+        android:strokeColor="#A1A1AA"
+        android:strokeAlpha="0.55"
+        android:strokeWidth="2.4"
         android:strokeLineCap="round"
-        android:pathData="M54,20 A34,34 0 1,1 53.9,20" />
+        android:pathData="M56,28 A26,26 0 0,1 56,80" />
+    <!-- Acoustic Wave Entry & Lower K Stroke (Silver Satin) -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M44,48 L44,60 M50,42 L50,66 M56,38 L56,70 M62,45 L62,63 M68,50 L68,58"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="4"
-        android:strokeLineCap="round" />
+        android:fillColor="#00000000"
+        android:strokeColor="#D4D4D8"
+        android:strokeWidth="5.2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M29,56 C33,56 35,48 39,48 C43,48 44,64 48,64 C51,64 53,54 57,54 L71,69" />
+    <!-- Primary Sculptural K Ribbon & Upper Eclipse Sweep (Silk White) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FAFAFA"
+        android:strokeWidth="5.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M48,37 C48,47 48,61 48,71 M52,55 C57,49 63,43 71,38" />
+    <!-- Precision Harmonic Node Accent -->
+    <path
+        android:fillColor="#FAFAFA"
+        android:pathData="M71,38 m-2.6,0 a2.6,2.6 0 1,0 5.2,0 a2.6,2.6 0 1,0 -5.2,0" />
 </vector>

@@ -1,10 +1,11 @@
 package com.ayashii.kuro.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,49 +26,46 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.outlined.AccountCircle
-import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
-import androidx.compose.ui.res.stringResource
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.ayashii.kuro.R
-import androidx.activity.compose.BackHandler
-import androidx.compose.runtime.saveable.rememberSaveable
 import com.ayashii.kuro.data.auth.UserAccount
-import androidx.compose.material.icons.outlined.History
 import com.ayashii.kuro.data.model.Track
-import com.ayashii.kuro.data.model.HomeSection
 import com.ayashii.kuro.ui.components.AddToPlaylistDialog
 import com.ayashii.kuro.ui.components.LoginWebViewDialog
 import com.ayashii.kuro.ui.components.ProfileMenuSheet
 import com.ayashii.kuro.ui.components.QueueBottomSheet
+import com.ayashii.kuro.ui.components.SettingsDialog
 import com.ayashii.kuro.ui.components.TrackItem
 import com.ayashii.kuro.ui.components.TrackOptionsBottomSheet
-import com.ayashii.kuro.ui.theme.DarkBorder
-import com.ayashii.kuro.ui.theme.DarkCard
-import com.ayashii.kuro.ui.theme.MutedText
+import com.ayashii.kuro.ui.theme.KuroAppTheme
 import com.ayashii.kuro.ui.theme.PureBlack
 import com.ayashii.kuro.ui.theme.PureWhite
-import com.ayashii.kuro.ui.theme.SubtleGray
 import com.ayashii.kuro.ui.theme.Typography
 import com.ayashii.kuro.viewmodel.MusicViewModel
 
@@ -79,6 +77,7 @@ fun HomeScreen(
     val homeSections by viewModel.homeSections.collectAsState()
     val trendingTracks by viewModel.trendingTracks.collectAsState()
     val genreTracks by viewModel.genreTracks.collectAsState()
+    val isLoadingGenre by viewModel.isLoadingGenre.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
     val isLoadingTrending by viewModel.isLoadingTrending.collectAsState()
     val isLoadingTrack by viewModel.isLoadingTrack.collectAsState()
@@ -86,7 +85,7 @@ fun HomeScreen(
     val currentAccount by viewModel.authState.collectAsState()
     val favorites by viewModel.favorites.collectAsState()
     val recentlyPlayed by viewModel.recentlyPlayed.collectAsState()
-    val favoriteIds by remember(favorites) { androidx.compose.runtime.derivedStateOf { favorites.mapTo(HashSet()) { it.id } } }
+    val favoriteIds by remember(favorites) { derivedStateOf { favorites.mapTo(HashSet()) { it.id } } }
 
     var showProfileMenu by rememberSaveable { mutableStateOf(false) }
     var showLoginWebView by rememberSaveable { mutableStateOf(false) }
@@ -104,7 +103,7 @@ fun HomeScreen(
         viewModel.loadTrending()
     }
 
-    val colors = com.ayashii.kuro.ui.theme.KuroAppTheme.colors
+    val colors = KuroAppTheme.colors
 
     Column(
         modifier = modifier
@@ -134,11 +133,16 @@ fun HomeScreen(
                 ) {
                     items(genres) { genre ->
                         val isSelected = selectedGenre == genre
-                        val chipBg = if (isSelected) Color(0xFF1ED760) else colors.card
+                        val chipBg = if (isSelected) colors.accent else colors.card
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(20.dp))
                                 .background(chipBg)
+                                .border(
+                                    1.dp,
+                                    if (isSelected) colors.accent else colors.border,
+                                    RoundedCornerShape(20.dp)
+                                )
                                 .clickable {
                                     selectedGenre = genre
                                     if (genre == "Semua") {
@@ -154,7 +158,7 @@ fun HomeScreen(
                                 text = if (genre == "Semua") "All" else genre,
                                 style = Typography.labelMedium.copy(fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium),
                                 fontSize = 13.sp,
-                                color = if (isSelected) Color.Black else colors.textPrimary
+                                color = if (isSelected) colors.background else colors.textPrimary
                             )
                         }
                     }
@@ -165,7 +169,7 @@ fun HomeScreen(
         Spacer(modifier = Modifier.height(10.dp))
 
         if (selectedGenre != "Semua") {
-            if (isSearching) {
+            if (isLoadingGenre || isSearching) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -197,7 +201,7 @@ fun HomeScreen(
                         )
                     }
                     item {
-                        Spacer(modifier = Modifier.height(100.dp))
+                        Spacer(modifier = Modifier.height(130.dp))
                     }
                 }
             }
@@ -311,7 +315,7 @@ fun HomeScreen(
                                     Box(
                                         modifier = Modifier
                                             .size(152.dp)
-                                            .clip(RoundedCornerShape(10.dp))
+                                            .clip(RoundedCornerShape(12.dp))
                                             .background(colors.card)
                                     ) {
                                         AsyncImage(
@@ -324,15 +328,16 @@ fun HomeScreen(
                                             modifier = Modifier
                                                 .align(Alignment.BottomStart)
                                                 .padding(8.dp)
-                                                .clip(RoundedCornerShape(4.dp))
-                                                .background(Color(0xFFCCFF00))
-                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(PureBlack.copy(alpha = 0.78f))
+                                                .border(1.dp, PureWhite.copy(alpha = 0.18f), RoundedCornerShape(6.dp))
+                                                .padding(horizontal = 7.dp, vertical = 3.dp)
                                         ) {
                                             Text(
                                                 text = "${track.artist.take(12)} Mix",
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Black,
-                                                color = Color.Black,
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = PureWhite,
                                                 maxLines = 1
                                             )
                                         }
@@ -357,7 +362,7 @@ fun HomeScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 10.dp),
+                                .padding(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
@@ -385,8 +390,9 @@ fun HomeScreen(
                                             modifier = Modifier
                                                 .weight(1f)
                                                 .height(62.dp)
-                                                .clip(RoundedCornerShape(9.dp))
+                                                .clip(RoundedCornerShape(10.dp))
                                                 .background(colors.card)
+                                                .border(1.dp, colors.border, RoundedCornerShape(10.dp))
                                                 .clickable { viewModel.playTrack(track, quickPicks) },
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
@@ -431,7 +437,7 @@ fun HomeScreen(
                                 .fillMaxWidth()
                                 .padding(horizontal = 20.dp)
                                 .height(142.dp)
-                                .clip(RoundedCornerShape(15.dp))
+                                .clip(RoundedCornerShape(16.dp))
                                 .clickable { viewModel.playTrack(featuredTrack, homeSections.firstOrNull { it.tracks.contains(featuredTrack) }?.tracks ?: homeTracks) }
                         ) {
                             AsyncImage(
@@ -443,7 +449,7 @@ fun HomeScreen(
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .background(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(PureBlack.copy(alpha = 0.78f), PureBlack.copy(alpha = 0.05f))))
+                                    .background(Brush.horizontalGradient(listOf(PureBlack.copy(alpha = 0.82f), PureBlack.copy(alpha = 0.08f))))
                             )
                             Column(
                                 modifier = Modifier
@@ -451,9 +457,9 @@ fun HomeScreen(
                                     .padding(15.dp)
                                     .fillMaxWidth(0.72f)
                             ) {
-                                Text(stringResource(R.string.home_mix_personal), style = Typography.labelSmall.copy(fontSize = 9.sp, letterSpacing = 1.2.sp), color = colors.textSecondary)
+                                Text(stringResource(R.string.home_mix_personal), style = Typography.labelSmall.copy(fontSize = 9.sp, letterSpacing = 1.2.sp), color = PureWhite.copy(alpha = 0.72f))
                                 Text(featuredTrack.title, style = Typography.titleLarge, color = PureWhite, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(featuredTrack.artist, style = Typography.bodySmall, color = colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(featuredTrack.artist, style = Typography.bodySmall, color = PureWhite.copy(alpha = 0.8f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                             Box(
                                 modifier = Modifier
@@ -521,7 +527,7 @@ fun HomeScreen(
                 }
 
                 item {
-                    Spacer(modifier = Modifier.height(100.dp))
+                    Spacer(modifier = Modifier.height(130.dp))
                 }
             }
         } else {
@@ -540,7 +546,7 @@ fun HomeScreen(
                     )
                 }
                 item {
-                    Spacer(modifier = Modifier.height(100.dp))
+                    Spacer(modifier = Modifier.height(130.dp))
                 }
             }
         }
@@ -565,18 +571,18 @@ fun HomeScreen(
     }
 
     if (showSettingsDialog) {
-        com.ayashii.kuro.ui.components.SettingsDialog(
+        SettingsDialog(
             onDismiss = { showSettingsDialog = false }
         )
     }
 
     if (showRecentsDialog) {
-        androidx.compose.material3.AlertDialog(
+        AlertDialog(
             onDismissRequest = { showRecentsDialog = false },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = androidx.compose.material.icons.Icons.Outlined.History,
+                        imageVector = Icons.Outlined.History,
                         contentDescription = null,
                         tint = colors.textPrimary,
                         modifier = Modifier.size(24.dp)
@@ -597,7 +603,7 @@ fun HomeScreen(
                         color = colors.textMuted
                     )
                 } else {
-                    androidx.compose.foundation.lazy.LazyColumn(
+                    LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(320.dp),
@@ -647,8 +653,8 @@ fun HomeScreen(
                 }
             },
             confirmButton = {
-                androidx.compose.material3.TextButton(onClick = { showRecentsDialog = false }) {
-                    Text("Tutup", color = colors.textPrimary)
+                TextButton(onClick = { showRecentsDialog = false }) {
+                    Text(stringResource(R.string.action_close), color = colors.textPrimary)
                 }
             },
             containerColor = colors.background
@@ -701,13 +707,14 @@ fun AccountTopButton(
     account: UserAccount?,
     onClick: () -> Unit
 ) {
-    val colors = com.ayashii.kuro.ui.theme.KuroAppTheme.colors
+    val colors = KuroAppTheme.colors
 
     Box(
         modifier = Modifier
             .size(36.dp)
             .clip(CircleShape)
-            .background(if (account?.avatarUrl.isNullOrBlank()) Color(0xFF1ED760) else colors.card)
+            .background(if (account?.avatarUrl.isNullOrBlank()) colors.accent else colors.card)
+            .border(1.dp, colors.border, CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
@@ -724,8 +731,8 @@ fun AccountTopButton(
             val initial = account?.name?.take(1)?.uppercase() ?: "K"
             Text(
                 text = initial,
-                style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontSize = 16.sp),
-                color = Color.Black
+                style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontSize = 15.sp),
+                color = colors.background
             )
         }
     }
@@ -740,7 +747,7 @@ fun YtmMusicCard(
     onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    val colors = com.ayashii.kuro.ui.theme.KuroAppTheme.colors
+    val colors = KuroAppTheme.colors
 
     Column(
         modifier = modifier

@@ -3,7 +3,6 @@ package com.ayashii.kuro.ui.components
 import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,8 +14,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.AddCircleOutline
+import androidx.compose.material.icons.outlined.Bedtime
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.FormatListBulleted
 import androidx.compose.material.icons.outlined.QueueMusic
@@ -30,6 +32,11 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,6 +70,11 @@ fun TrackOptionsBottomSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val colors = KuroAppTheme.colors
     val context = LocalContext.current
+    val playlists by viewModel.playlists.collectAsState()
+    val isInWatchLater = remember(playlists, track.id) {
+        viewModel.isTrackInWatchLater(track.id)
+    }
+    var showSleepTimerDialog by remember { mutableStateOf(false) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -159,6 +171,16 @@ fun TrackOptionsBottomSheet(
             )
 
             TrackOptionItem(
+                icon = if (isInWatchLater) Icons.Default.Bookmark else Icons.Outlined.BookmarkBorder,
+                title = if (isInWatchLater) stringResource(R.string.player_remove_watch_later) else stringResource(R.string.player_save_watch_later),
+                iconTint = if (isInWatchLater) colors.accent else colors.textPrimary,
+                onClick = {
+                    viewModel.toggleWatchLater(track)
+                    onDismiss()
+                }
+            )
+
+            TrackOptionItem(
                 icon = Icons.Outlined.AddCircleOutline,
                 title = stringResource(R.string.player_add_to_playlist),
                 onClick = {
@@ -186,6 +208,14 @@ fun TrackOptionsBottomSheet(
             )
 
             TrackOptionItem(
+                icon = Icons.Outlined.Bedtime,
+                title = stringResource(R.string.sleep_timer_title),
+                onClick = {
+                    showSleepTimerDialog = true
+                }
+            )
+
+            TrackOptionItem(
                 icon = Icons.Outlined.Tune,
                 title = stringResource(R.string.player_audio_settings),
                 onClick = {
@@ -196,6 +226,16 @@ fun TrackOptionsBottomSheet(
 
             Spacer(modifier = Modifier.height(28.dp))
         }
+    }
+
+    if (showSleepTimerDialog) {
+        SleepTimerDialog(
+            viewModel = viewModel,
+            onDismiss = {
+                showSleepTimerDialog = false
+                onDismiss()
+            }
+        )
     }
 }
 

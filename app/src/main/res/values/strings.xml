@@ -2,6 +2,7 @@
     <string name="app_name">Kuro</string>
     <string name="tab_home">Home</string>
     <string name="tab_search">Search</string>
+    <string name="tab_vibe">Vibe</string>
     <string name="tab_library">Library</string>
     <string name="search_placeholder">Search songs, artists, albums…</string>
     <string name="trending_title">Trending Now</string>
@@ -16,6 +17,7 @@
     <string name="widget_play_desc">Play or pause</string>
     <string name="widget_previous_desc">Previous track</string>
     <string name="widget_next_desc">Next track</string>
+    <string name="widget_favorite_desc">Favorite track</string>
 
     <!-- Common actions -->
     <string name="action_close">Close</string>
@@ -43,6 +45,18 @@
     <string name="home_recently_played">Recently Played</string>
     <string name="home_no_history">No listening history yet.</string>
 
+    <!-- Vibe Screen -->
+    <string name="vibe_title">Vibe Radar</string>
+    <string name="vibe_subtitle">Smart on-device frequency &amp; instant radio</string>
+    <string name="vibe_start_mix">Start Instant Vibe Mix</string>
+    <string name="vibe_start_mix_sub">Ranked locally from your favorite artists &amp; affinity score</string>
+    <string name="vibe_mood_all">All Vibes</string>
+    <string name="vibe_mood_chill">Late Night</string>
+    <string name="vibe_mood_focus">Deep Focus</string>
+    <string name="vibe_mood_energy">High Energy</string>
+    <string name="vibe_mood_repeat">On Repeat</string>
+    <string name="vibe_heavy_rotation">Heavy Rotation</string>
+
     <!-- Library Screen -->
     <string name="lib_playlist_title">Library</string>
     <string name="lib_tab_favorites">Favorite Songs</string>
@@ -58,7 +72,7 @@
     <string name="lib_songs_count">%1$d songs</string>
     <string name="lib_enter_name">Playlist Name</string>
     <string name="lib_delete_title">Delete Playlist?</string>
-    <string name="lib_delete_confirm">Playlist \"%1$s\" and its %2$d songs will be permanently deleted.</string>
+    <string name="lib_delete_confirm">Playlist "%1$s" and its %2$d songs will be permanently deleted.</string>
     <string name="lib_playlist_empty">This playlist is empty. Add songs from search or home!</string>
     <string name="lib_cancel">Cancel</string>
     <string name="lib_delete">Delete</string>
@@ -75,7 +89,7 @@
     <string name="search_not_found_sub">Try using different keywords or check your spelling.</string>
     <string name="search_results">Search Results</string>
 
-    <!-- Player Sheet -->
+    <!-- Player Sheet & Sleep Timer -->
     <string name="player_now_playing">NOW PLAYING</string>
     <string name="player_playing_from">Playing from</string>
     <string name="player_lyrics_preview">Lyrics preview</string>
@@ -94,6 +108,11 @@
     <string name="player_lyrics_unavailable">Synced lyrics unavailable</string>
     <string name="player_share_text">Listen to %1$s by %2$s: %3$s</string>
     <string name="player_share_via">Share via</string>
+    <string name="sleep_timer_title">Sleep Timer</string>
+    <string name="sleep_timer_off">Turn Off Timer</string>
+    <string name="sleep_timer_end_track">End of current track</string>
+    <string name="sleep_timer_minutes">%1$d minutes</string>
+    <string name="sleep_timer_active">Sleep Timer · %1$s</string>
 
     <!-- Profile & Statistics Menu -->
     <string name="profile_switch_account">Switch / Logout Account</string>
@@ -138,7 +157,7 @@
 
     <!-- Update Dialog -->
     <string name="update_available">Update Available</string>
-    <string name="update_whats_new">What\'s new:</string>
+    <string name="update_whats_new">What's new:</string>
     <string name="update_later">Later</string>
     <string name="update_now">Update</string>
 

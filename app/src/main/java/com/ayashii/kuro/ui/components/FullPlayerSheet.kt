@@ -44,18 +44,21 @@ import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.outlined.AddCircleOutline
+import androidx.compose.material.icons.outlined.Bedtime
 import androidx.compose.material.icons.outlined.BluetoothAudio
 import androidx.compose.material.icons.outlined.Headphones
 import androidx.compose.material.icons.outlined.QueueMusic
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Speaker
 import androidx.compose.material.icons.outlined.Translate
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -116,12 +119,15 @@ fun FullPlayerSheet(
 
     val currentLyrics by viewModel.currentLyrics.collectAsState()
     val audioDeviceState by viewModel.audioDeviceState.collectAsState()
+    val sleepTimerMinutes by viewModel.sleepTimerMinutes.collectAsState()
+    val sleepTimerEndOfTrack by viewModel.sleepTimerEndOfTrack.collectAsState()
 
     var showAddToPlaylist by rememberSaveable { mutableStateOf(false) }
     var showSettingsDialog by rememberSaveable { mutableStateOf(false) }
     var showOptionsMenu by rememberSaveable { mutableStateOf(false) }
     var showQueueSheet by rememberSaveable { mutableStateOf(false) }
     var showFullScreenLyrics by rememberSaveable { mutableStateOf(false) }
+    var showSleepTimerDialog by rememberSaveable { mutableStateOf(false) }
     var showTranslationInPreview by rememberSaveable { mutableStateOf(true) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
 
@@ -134,6 +140,15 @@ fun FullPlayerSheet(
         label = "sheet_drag_offset"
     )
 
+    val artworkBreathingScale by animateFloatAsState(
+        targetValue = if (isPlaying) 1.0f else 0.89f,
+        animationSpec = spring(
+            dampingRatio = 0.72f,
+            stiffness = 260f
+        ),
+        label = "artwork_breathing_scale"
+    )
+
     BackHandler(enabled = showFullScreenLyrics) {
         showFullScreenLyrics = false
     }
@@ -142,8 +157,8 @@ fun FullPlayerSheet(
     val dominantColor = rememberDynamicDominantColor(track.thumbnailUrlForDisplay(768))
     val baseBg = colors.background
     val ambientGradient = remember(dominantColor, baseBg, colors.isDark) {
-        val topWeight = if (colors.isDark) 0.40f else 0.22f
-        val midWeight = if (colors.isDark) 0.15f else 0.08f
+        val topWeight = if (colors.isDark) 0.42f else 0.22f
+        val midWeight = if (colors.isDark) 0.16f else 0.08f
         val topTint = androidx.compose.ui.graphics.lerp(baseBg, dominantColor, topWeight)
         val midTint = androidx.compose.ui.graphics.lerp(baseBg, dominantColor, midWeight)
         Brush.verticalGradient(
@@ -158,7 +173,12 @@ fun FullPlayerSheet(
         modifier = modifier
             .fillMaxSize()
             .graphicsLayer {
-                translationY = animatedDragY.coerceAtLeast(0f)
+                val clamped = animatedDragY.coerceAtLeast(0f)
+                translationY = clamped
+                val dragScale = (1f - (clamped / 3200f)).coerceIn(0.92f, 1f)
+                scaleX = dragScale
+                scaleY = dragScale
+                alpha = (1f - (clamped / 1600f)).coerceIn(0.65f, 1f)
             }
             .background(baseBg)
             .background(ambientGradient)
@@ -262,9 +282,13 @@ fun FullPlayerSheet(
                     modifier = Modifier
                         .fillMaxWidth(0.92f)
                         .aspectRatio(1f)
-                        .clip(RoundedCornerShape(16.dp))
+                        .graphicsLayer {
+                            scaleX = artworkBreathingScale
+                            scaleY = artworkBreathingScale
+                        }
+                        .clip(RoundedCornerShape(18.dp))
                         .background(colors.card)
-                        .border(1.dp, colors.border.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+                        .border(1.dp, colors.border.copy(alpha = 0.5f), RoundedCornerShape(18.dp))
                 ) {
                     AnimatedContent(
                         targetState = track,
@@ -480,21 +504,51 @@ fun FullPlayerSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(
-                    onClick = { viewModel.openAudioOutputSettings() },
-                    modifier = Modifier.size(40.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    val icon = when (audioDeviceState.iconType) {
-                        com.ayashii.kuro.data.audio.OutputType.WIRED -> Icons.Outlined.Headphones
-                        com.ayashii.kuro.data.audio.OutputType.BLUETOOTH -> Icons.Outlined.BluetoothAudio
-                        com.ayashii.kuro.data.audio.OutputType.SPEAKER -> Icons.Outlined.Speaker
+                    IconButton(
+                        onClick = { viewModel.openAudioOutputSettings() },
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        val icon = when (audioDeviceState.iconType) {
+                            com.ayashii.kuro.data.audio.OutputType.WIRED -> Icons.Outlined.Headphones
+                            com.ayashii.kuro.data.audio.OutputType.BLUETOOTH -> Icons.Outlined.BluetoothAudio
+                            com.ayashii.kuro.data.audio.OutputType.SPEAKER -> Icons.Outlined.Speaker
+                        }
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = "Audio Output",
+                            tint = colors.textPrimary,
+                            modifier = Modifier.size(22.dp)
+                        )
                     }
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = "Audio Output",
-                        tint = colors.textPrimary,
-                        modifier = Modifier.size(22.dp)
-                    )
+
+                    val timerActive = sleepTimerMinutes != null || sleepTimerEndOfTrack
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(if (timerActive) colors.accent else Color.Transparent)
+                            .clickable { showSleepTimerDialog = true }
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Bedtime,
+                            contentDescription = stringResource(R.string.sleep_timer_title),
+                            tint = if (timerActive) colors.background else colors.textPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        if (timerActive) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (sleepTimerEndOfTrack) "EOT" else "${sleepTimerMinutes}m",
+                                style = Typography.labelSmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                                color = colors.background
+                            )
+                        }
+                    }
                 }
 
                 Row(
@@ -579,6 +633,13 @@ fun FullPlayerSheet(
         }
     }
 
+    if (showSleepTimerDialog) {
+        SleepTimerDialog(
+            viewModel = viewModel,
+            onDismiss = { showSleepTimerDialog = false }
+        )
+    }
+
     if (showOptionsMenu) {
         TrackOptionsBottomSheet(
             track = track,
@@ -611,6 +672,117 @@ fun FullPlayerSheet(
             onDismiss = { showSettingsDialog = false }
         )
     }
+}
+
+@Composable
+fun SleepTimerDialog(
+    viewModel: MusicViewModel,
+    onDismiss: () -> Unit
+) {
+    val colors = KuroAppTheme.colors
+    val activeMinutes by viewModel.sleepTimerMinutes.collectAsState()
+    val endOfTrack by viewModel.sleepTimerEndOfTrack.collectAsState()
+    val presets = listOf(15, 30, 45, 60)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Outlined.Bedtime,
+                    contentDescription = null,
+                    tint = colors.textPrimary,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = stringResource(R.string.sleep_timer_title),
+                    style = Typography.titleLarge,
+                    color = colors.textPrimary
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                presets.forEach { mins ->
+                    val isSelected = activeMinutes == mins && !endOfTrack
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (isSelected) colors.accent else colors.card)
+                            .border(1.dp, if (isSelected) colors.accent else colors.border, RoundedCornerShape(12.dp))
+                            .clickable {
+                                viewModel.setSleepTimer(mins, pauseAtEndOfTrack = false)
+                                onDismiss()
+                            }
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(R.string.sleep_timer_minutes, mins),
+                            style = Typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                            color = if (isSelected) colors.background else colors.textPrimary
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (endOfTrack) colors.accent else colors.card)
+                        .border(1.dp, if (endOfTrack) colors.accent else colors.border, RoundedCornerShape(12.dp))
+                        .clickable {
+                            viewModel.setSleepTimer(null, pauseAtEndOfTrack = true)
+                            onDismiss()
+                        }
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.sleep_timer_end_track),
+                        style = Typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                        color = if (endOfTrack) colors.background else colors.textPrimary
+                    )
+                }
+
+                if (activeMinutes != null || endOfTrack) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(colors.surface)
+                            .border(1.dp, Color(0xFFFF3B30), RoundedCornerShape(12.dp))
+                            .clickable {
+                                viewModel.cancelSleepTimer()
+                                onDismiss()
+                            }
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(R.string.sleep_timer_off),
+                            style = Typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color(0xFFFF3B30)
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_close), color = colors.textPrimary)
+            }
+        },
+        containerColor = colors.background
+    )
 }
 
 @Composable

@@ -2,6 +2,7 @@
     <string name="app_name">Kuro</string>
     <string name="tab_home">Beranda</string>
     <string name="tab_search">Cari</string>
+    <string name="tab_vibe">Vibe</string>
     <string name="tab_library">Koleksi</string>
     <string name="search_placeholder">Cari lagu, artis, album…</string>
     <string name="trending_title">Lagu Populer</string>
@@ -16,6 +17,7 @@
     <string name="widget_play_desc">Putar atau jeda</string>
     <string name="widget_previous_desc">Lagu sebelumnya</string>
     <string name="widget_next_desc">Lagu berikutnya</string>
+    <string name="widget_favorite_desc">Sukai lagu</string>
 
     <!-- Common actions -->
     <string name="action_close">Tutup</string>
@@ -32,16 +34,31 @@
     <string name="greeting_subtitle">Musik yang pas untuk sekarang.</string>
 
     <!-- Home Screen -->
+    <string name="home_start_listening">Mulai mendengarkan</string>
+    <string name="home_start_listening_sub">Langsung putar sesi musik sesuai seleramu</string>
+    <string name="home_to_get_you_started">Untuk memulai harimu</string>
     <string name="home_play_again">Putar kembali</string>
-    <string name="home_view_all">Lihat semua  ›</string>
+    <string name="home_view_all">Lihat semua ›</string>
     <string name="home_picks_for_you">Pilihan untukmu</string>
     <string name="home_mix_personal">MIX PERSONAL</string>
     <string name="home_no_songs_genre">Tidak ada lagu ditemukan untuk %1$s</string>
     <string name="home_recently_played">Terakhir Diputar</string>
     <string name="home_no_history">Belum ada riwayat lagu yang diputar.</string>
 
+    <!-- Vibe Screen -->
+    <string name="vibe_title">Vibe Radar</string>
+    <string name="vibe_subtitle">Frekuensi musik personal &amp; radio instan di perangkat</string>
+    <string name="vibe_start_mix">Putar Instant Vibe Mix</string>
+    <string name="vibe_start_mix_sub">Diracik secara lokal dari skor afinitas &amp; artis favoritmu</string>
+    <string name="vibe_mood_all">Semua Vibe</string>
+    <string name="vibe_mood_chill">Santai Malam</string>
+    <string name="vibe_mood_focus">Fokus Kerja</string>
+    <string name="vibe_mood_energy">Penuh Energi</string>
+    <string name="vibe_mood_repeat">Sering Diputar</string>
+    <string name="vibe_heavy_rotation">Lagi Sering Kamu Putar</string>
+
     <!-- Library Screen -->
-    <string name="lib_playlist_title">Playlist</string>
+    <string name="lib_playlist_title">Koleksi</string>
     <string name="lib_tab_favorites">Lagu Favorit</string>
     <string name="lib_tab_my_playlists">Playlist Saya (%1$d)</string>
     <string name="lib_fav_count">%1$d Lagu Favorit</string>
@@ -55,7 +72,7 @@
     <string name="lib_songs_count">%1$d lagu</string>
     <string name="lib_enter_name">Beri Nama Playlist</string>
     <string name="lib_delete_title">Hapus Playlist?</string>
-    <string name="lib_delete_confirm">Playlist \"%1$s\" beserta %2$d lagu di dalamnya akan dihapus secara permanen.</string>
+    <string name="lib_delete_confirm">Playlist "%1$s" beserta %2$d lagu di dalamnya akan dihapus secara permanen.</string>
     <string name="lib_playlist_empty">Playlist ini masih kosong. Tambahkan lagu dari pencarian atau beranda!</string>
     <string name="lib_cancel">Batal</string>
     <string name="lib_delete">Hapus</string>
@@ -65,13 +82,14 @@
     <!-- Search Screen -->
     <string name="search_title">Cari</string>
     <string name="search_hint">Lagu, artis, atau genre…</string>
+    <string name="search_what_do_you_want_to_listen_to">Ingin dengar apa hari ini?</string>
     <string name="search_suggestions">Saran Pencarian</string>
     <string name="search_explore_categories">Jelajahi Kategori</string>
     <string name="search_not_found">Lagu tidak ditemukan</string>
     <string name="search_not_found_sub">Coba gunakan kata kunci artis, judul lagu lain, atau periksa ejaanmu.</string>
     <string name="search_results">Hasil Pencarian</string>
 
-    <!-- Player Sheet -->
+    <!-- Player Sheet & Sleep Timer -->
     <string name="player_now_playing">SEDANG DIPUTAR</string>
     <string name="player_playing_from">Memutar dari</string>
     <string name="player_lyrics_preview">Pratinjau lirik</string>
@@ -90,6 +108,11 @@
     <string name="player_lyrics_unavailable">Lirik tersinkron belum tersedia</string>
     <string name="player_share_text">Dengarkan %1$s oleh %2$s: %3$s</string>
     <string name="player_share_via">Bagikan via</string>
+    <string name="sleep_timer_title">Pengatur Waktu Tidur</string>
+    <string name="sleep_timer_off">Matikan Timer</string>
+    <string name="sleep_timer_end_track">Saat lagu ini selesai</string>
+    <string name="sleep_timer_minutes">%1$d menit</string>
+    <string name="sleep_timer_active">Timer Tidur · %1$s</string>
 
     <!-- Profile & Statistics Menu -->
     <string name="profile_switch_account">Ganti / Keluar Akun</string>

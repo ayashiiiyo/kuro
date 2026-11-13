@@ -1,9 +1,6 @@
 package com.ayashii.kuro.ui.screens
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -38,9 +35,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NorthWest
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.outlined.AddCircleOutline
-import androidx.compose.material.icons.outlined.Explore
-import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -55,6 +51,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,6 +62,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -75,8 +73,6 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.ayashii.kuro.R
 import com.ayashii.kuro.data.model.Track
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import com.ayashii.kuro.ui.components.AddToPlaylistDialog
 import com.ayashii.kuro.ui.components.LoginWebViewDialog
 import com.ayashii.kuro.ui.components.ProfileMenuSheet
@@ -127,8 +123,10 @@ fun SearchScreen(
             SearchCategoryItem("Music", "Pop Music", Color(0xFFE13300)),
             SearchCategoryItem("Podcasts", "Podcast", Color(0xFF006450)),
             SearchCategoryItem("Live Events", "Live Concert", Color(0xFF8400E7)),
-            SearchCategoryItem("K-Pop ON!\n(온) Hub", "K-Pop Hits", Color(0xFF1E3264)),
-            SearchCategoryItem("Made For\nYou", "Top Trending Hits", Color(0xFF8D67AB)),
+            SearchCategoryItem("K-Pop ON!
+(온) Hub", "K-Pop Hits", Color(0xFF1E3264)),
+            SearchCategoryItem("Made For
+You", "Top Trending Hits", Color(0xFF8D67AB)),
             SearchCategoryItem("Indie & Alt", "Indie Alternative", Color(0xFFBA5D07)),
             SearchCategoryItem("Charts", "Top 50", Color(0xFF8C1932)),
             SearchCategoryItem("Discover", "New Music", Color(0xFF503750))
@@ -169,12 +167,29 @@ fun SearchScreen(
                     color = colors.textPrimary
                 )
                 Spacer(modifier = Modifier.weight(1f))
-                Icon(
-                    imageVector = Icons.Outlined.PhotoCamera,
-                    contentDescription = "Search Camera",
-                    tint = colors.textPrimary,
-                    modifier = Modifier.size(24.dp)
-                )
+                IconButton(
+                    onClick = {
+                        val pool = (favorites + recentlyPlayed + trendingTracks).distinctBy { it.id }
+                        if (pool.isNotEmpty()) {
+                            val shuffled = pool.shuffled()
+                            viewModel.playTrack(shuffled.first(), shuffled)
+                        } else {
+                            isSearchActive = true
+                        }
+                    },
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(colors.card)
+                        .border(1.dp, colors.border, CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Shuffle,
+                        contentDescription = "Quick Shuffle",
+                        tint = colors.textPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
 
             Box(
@@ -188,6 +203,7 @@ fun SearchScreen(
                         .height(46.dp)
                         .clip(CircleShape)
                         .background(colors.card)
+                        .border(1.dp, colors.border, CircleShape)
                         .clickable { isSearchActive = true }
                         .padding(horizontal = 16.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -195,13 +211,13 @@ fun SearchScreen(
                     Icon(
                         imageVector = Icons.Default.Search,
                         contentDescription = null,
-                        tint = Color(0xFF8E8E8E),
+                        tint = colors.textMuted,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
                         text = stringResource(R.string.search_what_do_you_want_to_listen_to),
-                        color = Color(0xFF8E8E8E),
+                        color = colors.textMuted,
                         style = Typography.bodyLarge.copy(fontSize = 15.sp, fontWeight = FontWeight.Normal)
                     )
                 }
@@ -247,7 +263,7 @@ fun SearchScreen(
                     placeholder = {
                         Text(
                             text = stringResource(R.string.search_what_do_you_want_to_listen_to),
-                            color = Color(0xFF8E8E8E),
+                            color = colors.textMuted,
                             style = Typography.bodyLarge.copy(fontSize = 15.sp, fontWeight = FontWeight.Normal)
                         )
                     },
@@ -263,7 +279,7 @@ fun SearchScreen(
                                 Icon(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = "Clear",
-                                    tint = Color(0xFFA7A7A7),
+                                    tint = colors.textMuted,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
@@ -300,7 +316,7 @@ fun SearchScreen(
         if (searchQuery.isNotEmpty()) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 120.dp)
+                contentPadding = PaddingValues(bottom = 140.dp)
             ) {
                 if (suggestions.isNotEmpty()) {
                     items(suggestions) { suggestion ->
@@ -318,7 +334,7 @@ fun SearchScreen(
                             Icon(
                                 imageVector = Icons.Default.Search,
                                 contentDescription = null,
-                                tint = Color(0xFFB3B3B3),
+                                tint = colors.textSecondary,
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(16.dp))
@@ -333,7 +349,7 @@ fun SearchScreen(
                             Icon(
                                 imageVector = Icons.Default.NorthWest,
                                 contentDescription = "Use suggestion",
-                                tint = Color(0xFF727272),
+                                tint = colors.textMuted,
                                 modifier = Modifier.size(16.dp)
                             )
                         }
@@ -381,8 +397,8 @@ fun SearchScreen(
                                 contentDescription = track.title,
                                 modifier = Modifier
                                     .size(48.dp)
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(Color(0xFF282828)),
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(colors.card),
                                 contentScale = ContentScale.Crop
                             )
 
@@ -403,7 +419,7 @@ fun SearchScreen(
                                 Text(
                                     text = "Song • ${track.artist}",
                                     style = Typography.bodyMedium.copy(fontSize = 13.sp),
-                                    color = Color(0xFFA7A7A7),
+                                    color = colors.textMuted,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -418,7 +434,7 @@ fun SearchScreen(
                                 Icon(
                                     imageVector = Icons.Default.MoreVert,
                                     contentDescription = "Options",
-                                    tint = Color(0xFFA7A7A7),
+                                    tint = colors.textMuted,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -438,7 +454,7 @@ fun SearchScreen(
                                 Icon(
                                     imageVector = if (isSaved) Icons.Default.CheckCircle else Icons.Outlined.AddCircleOutline,
                                     contentDescription = "Save track",
-                                    tint = if (isSaved) colors.accent else Color(0xFFA7A7A7),
+                                    tint = if (isSaved) colors.accent else colors.textMuted,
                                     modifier = Modifier.size(22.dp)
                                 )
                             }
@@ -457,7 +473,7 @@ fun SearchScreen(
                                     modifier = Modifier
                                         .size(64.dp)
                                         .clip(CircleShape)
-                                        .background(Color(0xFF242424)),
+                                        .background(colors.card),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
@@ -477,7 +493,7 @@ fun SearchScreen(
                                 Text(
                                     text = stringResource(R.string.search_not_found_sub),
                                     style = Typography.bodyMedium,
-                                    color = Color(0xFFA7A7A7),
+                                    color = colors.textMuted,
                                     textAlign = TextAlign.Center
                                 )
                             }
@@ -488,7 +504,7 @@ fun SearchScreen(
         } else if (isSearchActive) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 120.dp)
+                contentPadding = PaddingValues(bottom = 140.dp)
             ) {
                 if (recentlyPlayed.isNotEmpty()) {
                     item {
@@ -518,8 +534,8 @@ fun SearchScreen(
                                 contentDescription = track.title,
                                 modifier = Modifier
                                     .size(48.dp)
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(Color(0xFF282828)),
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(colors.card),
                                 contentScale = ContentScale.Crop
                             )
 
@@ -537,7 +553,7 @@ fun SearchScreen(
                                 Text(
                                     text = "Song • ${track.artist}",
                                     style = Typography.bodyMedium.copy(fontSize = 13.sp),
-                                    color = Color(0xFFA7A7A7),
+                                    color = colors.textMuted,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -558,7 +574,7 @@ fun SearchScreen(
                                 Icon(
                                     imageVector = if (isSaved) Icons.Default.CheckCircle else Icons.Outlined.AddCircleOutline,
                                     contentDescription = "Save track",
-                                    tint = if (isSaved) colors.accent else Color(0xFFB3B3B3),
+                                    tint = if (isSaved) colors.accent else colors.textMuted,
                                     modifier = Modifier.size(22.dp)
                                 )
                             }
@@ -572,7 +588,7 @@ fun SearchScreen(
                                 Icon(
                                     imageVector = Icons.Default.Close,
                                     contentDescription = "Remove from recents",
-                                    tint = Color(0xFFB3B3B3),
+                                    tint = colors.textMuted,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -588,7 +604,7 @@ fun SearchScreen(
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(20.dp))
-                                    .border(BorderStroke(1.dp, Color(0xFF666666)), RoundedCornerShape(20.dp))
+                                    .border(BorderStroke(1.dp, colors.border), RoundedCornerShape(20.dp))
                                     .clickable { viewModel.clearRecentSearches() }
                                     .padding(horizontal = 24.dp, vertical = 9.dp)
                             ) {
@@ -611,7 +627,7 @@ fun SearchScreen(
                             Text(
                                 text = "Search for artists, songs, or podcasts",
                                 style = Typography.bodyMedium,
-                                color = Color(0xFFA7A7A7)
+                                color = colors.textMuted
                             )
                         }
                     }
@@ -622,7 +638,7 @@ fun SearchScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 18.dp),
-                contentPadding = PaddingValues(bottom = 120.dp)
+                contentPadding = PaddingValues(bottom = 140.dp)
             ) {
                 item {
                     Spacer(modifier = Modifier.height(10.dp))
@@ -648,7 +664,7 @@ fun SearchScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(96.dp)
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .clip(RoundedCornerShape(10.dp))
                                     .background(category.color)
                                     .clickable {
                                         searchQuery = category.searchQuery
@@ -676,7 +692,7 @@ fun SearchScreen(
                                         .offset(x = 10.dp, y = 6.dp)
                                         .graphicsLayer { rotationZ = 24f }
                                         .size(60.dp)
-                                        .clip(RoundedCornerShape(4.dp))
+                                        .clip(RoundedCornerShape(6.dp))
                                         .background(Color.White.copy(alpha = 0.22f))
                                 )
                             }
@@ -710,8 +726,8 @@ fun SearchScreen(
                                             contentScale = ContentScale.Crop,
                                             modifier = Modifier
                                                 .size(136.dp)
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .background(Color(0xFF282828))
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(colors.card)
                                         )
                                         Spacer(modifier = Modifier.height(6.dp))
                                         Text(
@@ -724,7 +740,7 @@ fun SearchScreen(
                                         Text(
                                             text = track.artist,
                                             style = Typography.bodySmall.copy(fontSize = 11.sp),
-                                            color = Color(0xFFA7A7A7),
+                                            color = colors.textMuted,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
