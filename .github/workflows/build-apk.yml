@@ -87,19 +87,20 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.8.5 — 32-Bit & 64-Bit Universal Compatibility, Two-Way YTM Like Sync & APK Compression
+          ## Kuro v3.8.8 — Multi-Language UI, Lyrics Target Language & Notification Fixes
 
-          - **32-Bit (`armeabi-v7a` / `x86`) Startup Force Close Fixes**:
-            - Enabled Core Library Desugaring (`desugar_jdk_libs_nio`) so Java 8/11 APIs in `NewPipeExtractor v0.26.5` run without `NoClassDefFoundError` on 32-bit Android 8–12 devices.
-            - Fixed `NullPointerException` in `MainActivity.attachBaseContext()` where `newBase.applicationContext` was null prior to Activity attachment.
-            - Disabled hardware bitmaps (`Bitmap.Config.HARDWARE`) and switched to `RGB_565` on 32-bit runtimes to prevent `RenderThread` GPU crashes and OOM on 32-bit devices.
-            - Preserved `NewPipeExtractor`, `nanojson`, and `jsoup` classes under R8 FullMode and eliminated `.unwrap()` across Rust JNI boundaries.
-          - **APK Size Compression**:
-            - Enabled `jniLibs.useLegacyPackaging = true` and `android:extractNativeLibs="true"` to Deflate-compress native `.so` binaries inside the APK.
-            - Added Rust release profile size optimizations (`opt-level = "z"`, `lto = true`, `codegen-units = 1`, `strip = true`, `panic = "abort"`) and trimmed unused Unicode regex tables.
-          - **Two-Way YouTube Music Like Sync & 120 FPS Player Polish**:
-            - Added two-way InnerTube `like/like` and `like/removelike` synchronization when liking tracks in Kuro or from the homescreen widget.
-            - Fixed `STATE_ENDED` double-skip bug, shared `MusicRepository` singleton caches with `PlaybackService`, fixed Light Mode contrast in `FullPlayerSheet` / `FullScreenLyricsSheet`, and eliminated 30 FPS recomposition overhead.
+          - **Multi-Language Support**:
+            - Added full UI translations for Japanese, Korean, Chinese, Spanish, French, German, Portuguese, Russian, and Arabic.
+            - InnerTube requests now resolve `hl`/`gl` dynamically from the selected app language.
+          - **Lyrics Translation**:
+            - Added lyrics target-language picker with per-language memory and disk caches.
+            - Lyrics are translated to the selected language instead of always Indonesian.
+          - **Notification & Widget Fixes**:
+            - Media notification artwork now loads through a Coil-backed Media3 `BitmapLoader` with thumbnail fallback.
+            - Notification and home-screen widgets stay in sync on playback, media item, and play-state changes.
+          - **Playback Fixes**:
+            - Sleep timer end-of-track now pauses playback via `PlayerQueueManager` without auto-advancing.
+            - Restored the sleep timer dialog removed in v3.8.7 that broke the build.
           - Published signed release and debug APKs.
           EOF
           gh release delete "$RELEASE_TAG" --yes --cleanup-tag 2>/dev/null || true
