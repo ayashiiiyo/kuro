@@ -62,9 +62,28 @@ class UpdateManager private constructor(private val context: Context) {
         }
     }
 
+    private fun resolveDevicePrimaryAbi(): String {
+        val supported = try {
+            Build.SUPPORTED_ABIS?.firstOrNull { abi ->
+                abi.equals("arm64-v8a", ignoreCase = true) ||
+                    abi.equals("armeabi-v7a", ignoreCase = true)
+            }
+        } catch (_: Throwable) {
+            null
+        }
+        if (!supported.isNullOrBlank()) return supported.lowercase()
+        val is64 = try {
+            Process.is64Bit()
+        } catch (_: Throwable) {
+            true
+        }
+        return if (is64) "arm64-v8a" else "armeabi-v7a"
+    }
+
     /**
-     * Checks GitHub API for newer releases.
-     * @param force If true, bypasses throttle check (used for manual check from Settings).
+     * Checks GitHub API for newer releases and automatically selects the smaller
+     * ABI-matched APK (arm64-v8a or armeabi-v7a) for the user's phone, with a
+     * seamless fallback to the universal -release.apk asset.
      */
     suspend fun checkForUpdate(force: Boolean = false): UpdateInfo? = withContext(Dispatchers.IO) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -105,16 +124,32 @@ class UpdateManager private constructor(private val context: Context) {
             val currentVersion = BuildConfig.VERSION_NAME
             if (isNewerVersion(currentVersion, tagName)) {
                 val assets = json.optJSONArray("assets") ?: return@withContext null
+                val preferredAbi = resolveDevicePrimaryAbi()
                 var downloadUrl: String? = null
                 var fileName: String? = null
 
                 for (i in 0 until assets.length()) {
                     val asset = assets.getJSONObject(i)
                     val name = asset.optString("name", "")
-                    if (name.endsWith("-release.apk", ignoreCase = true)) {
+                    if (name.endsWith(".apk", ignoreCase = true) &&
+                        !name.contains("debug", ignoreCase = true) &&
+                        name.contains(preferredAbi, ignoreCase = true)
+                    ) {
                         downloadUrl = asset.optString("browser_download_url")
                         fileName = name
                         break
+                    }
+                }
+
+                if (downloadUrl == null) {
+                    for (i in 0 until assets.length()) {
+                        val asset = assets.getJSONObject(i)
+                        val name = asset.optString("name", "")
+                        if (name.endsWith("-release.apk", ignoreCase = true)) {
+                            downloadUrl = asset.optString("browser_download_url")
+                            fileName = name
+                            break
+                        }
                     }
                 }
 

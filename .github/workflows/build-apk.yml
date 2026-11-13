@@ -51,7 +51,7 @@ jobs:
       - name: Set up Rust Toolchain and Targets
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
+          targets: aarch64-linux-android,armv7-linux-androideabi
 
       - name: Install cargo-ndk
         run: cargo install cargo-ndk
@@ -60,9 +60,7 @@ jobs:
         run: |
           mkdir -p app/src/main/jniLibs/arm64-v8a
           mkdir -p app/src/main/jniLibs/armeabi-v7a
-          mkdir -p app/src/main/jniLibs/x86_64
-          mkdir -p app/src/main/jniLibs/x86
-          cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -t x86 -o app/src/main/jniLibs build --release --manifest-path kuro-core/Cargo.toml
+          cargo ndk -t arm64-v8a -t armeabi-v7a -o app/src/main/jniLibs build --release --manifest-path kuro-core/Cargo.toml
 
       - name: Build Release and Debug APKs
         run: ./gradlew assembleRelease assembleDebug --stacktrace || (echo "=== GRADLE BUILD FAILED ===" && exit 1)
@@ -72,12 +70,36 @@ jobs:
         run: |
           VERSION_NAME=$(sed -nE 's/^[[:space:]]*versionName[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' app/build.gradle.kts | head -n 1)
           test -n "$VERSION_NAME" || { echo "Could not read app versionName"; exit 1; }
-          RELEASE_APK="app/build/outputs/apk/release/kuro-v${VERSION_NAME}-release.apk"
-          DEBUG_APK="app/build/outputs/apk/debug/kuro-v${VERSION_NAME}-debug.apk"
-          cp app/build/outputs/apk/release/app-release.apk "$RELEASE_APK"
-          cp app/build/outputs/apk/debug/app-debug.apk "$DEBUG_APK"
+          RELEASE_DIR="app/build/outputs/apk/release"
+          DEBUG_DIR="app/build/outputs/apk/debug"
+          RELEASE_APK="${RELEASE_DIR}/kuro-v${VERSION_NAME}-release.apk"
+          ARM64_APK="${RELEASE_DIR}/kuro-v${VERSION_NAME}-arm64-v8a.apk"
+          ARM32_APK="${RELEASE_DIR}/kuro-v${VERSION_NAME}-armeabi-v7a.apk"
+          DEBUG_APK="${DEBUG_DIR}/kuro-v${VERSION_NAME}-debug.apk"
+          if [ -f "${RELEASE_DIR}/app-universal-release.apk" ]; then
+            cp "${RELEASE_DIR}/app-universal-release.apk" "$RELEASE_APK"
+          else
+            cp "${RELEASE_DIR}/app-release.apk" "$RELEASE_APK"
+          fi
+          if [ -f "${RELEASE_DIR}/app-arm64-v8a-release.apk" ]; then
+            cp "${RELEASE_DIR}/app-arm64-v8a-release.apk" "$ARM64_APK"
+          else
+            cp "$RELEASE_APK" "$ARM64_APK"
+          fi
+          if [ -f "${RELEASE_DIR}/app-armeabi-v7a-release.apk" ]; then
+            cp "${RELEASE_DIR}/app-armeabi-v7a-release.apk" "$ARM32_APK"
+          else
+            cp "$RELEASE_APK" "$ARM32_APK"
+          fi
+          if [ -f "${DEBUG_DIR}/app-universal-debug.apk" ]; then
+            cp "${DEBUG_DIR}/app-universal-debug.apk" "$DEBUG_APK"
+          else
+            cp "${DEBUG_DIR}/app-debug.apk" "$DEBUG_APK"
+          fi
           echo "version=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "release_path=$RELEASE_APK" >> "$GITHUB_OUTPUT"
+          echo "arm64_path=$ARM64_APK" >> "$GITHUB_OUTPUT"
+          echo "arm32_path=$ARM32_APK" >> "$GITHUB_OUTPUT"
           echo "debug_path=$DEBUG_APK" >> "$GITHUB_OUTPUT"
 
       - name: Publish GitHub Release
@@ -87,25 +109,25 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.8.9 — Widget Corner Polish, Fade-In UI, Full YT Music Search, Multi-Account Profile & Branded Media Notification
+          ## Kuro v3.8.10 — Ultra-Compact APK, Touchscreen Gestures, Widget Polish, Fade-In UI & Full YT Music Search
 
+          - **Ultra-Compact APK & Smart Auto-Update (`< 5 MB` Per-ABI)**:
+            - Added `arm64-v8a` (64-bit) and `armeabi-v7a` (32-bit) split APKs alongside the Universal release APK, with automatic CPU architecture detection in `UpdateManager`.
+            - Replaced heavy Rust `regex` (`unicode-perl`) with zero-dependency ASCII title sanitization and tightened R8 tree-shaking on unused extractor services.
+          - **Touchscreen Gestures & `BackHandler` Fix**:
+            - Fixed LIFO `BackHandler` priority when `FullPlayerSheet` is open, unified `SearchScreen` back navigation, and added swipe-down on `FullScreenLyricsSheet`, swipe-up/down on `MiniPlayer`, horizontal artwork swipe & double-tap heart burst on `FullPlayerSheet`, and swipe-to-queue / long-press on `TrackItem`.
           - **Widget Corner & Backdrop Fix**:
             - Eliminated double-stroke corner peeling by rendering widget backdrops at exact launcher cell aspect ratios and 24dp density-matched radii with `clipToOutline`.
-            - Cleared gray placeholder bleed behind rounded album thumbnails and added the Kuro logo to the `KURO STUDIO` badge.
-          - **Smooth Fade-In Navigation & Edge Masking**:
-            - Replaced hard-cut screen edges above the bottom navigation bar (`Home`, `Search`, `Vibe`, `Library`) and top genre chips with offscreen `BlendMode.DstIn` gradient fade masks and smooth `fadeIn` transitions.
-          - **Complete YouTube Music Search Parity**:
-            - Combined unfiltered YT Music search (`musicCardShelfRenderer` Top Result), Songs, and Videos/Montage streams with `playlistItemData`/`overlay` videoId extraction and live debounced search as you type.
-          - **Multi-Account Google Profile Reliability**:
-            - Fixed premature WebView login dismissal and added 4-stage account discovery (`account_menu`, `googleAccountHeaderRenderer`, `accountItem`, `accounts_list`, and `ytcfg`/HTML fallback) with `X-Goog-AuthUser` & `X-Goog-PageId` support.
-          - **Branded Kuro Media Notification**:
-            - Replaced generic music note icon with the official Kuro acoustic-wave K vector logo and added a sleek Kuro logo badge on media notification artwork cards.
+          - **Complete YouTube Music Search Parity & Multi-Account Profile**:
+            - Combined unfiltered YT Music search (`musicCardShelfRenderer` Top Result), Songs, and Videos/Montage streams with 4-stage Google account discovery and branded Kuro media notifications.
           EOF
           gh release delete "$RELEASE_TAG" --yes --cleanup-tag 2>/dev/null || true
           gh release create "$RELEASE_TAG" \
             "${{ steps.apk.outputs.release_path }}" \
+            "${{ steps.apk.outputs.arm64_path }}" \
+            "${{ steps.apk.outputs.arm32_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (Widget Fix, Fade-In UI, Full YTM Search & Kuro Notification Logo)" \
+            --title "Kuro $RELEASE_TAG (Ultra-Compact APK, Touchscreen Gestures, Widget & YTM Search Fix)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 
@@ -115,6 +137,8 @@ jobs:
           name: Kuro-${{ steps.apk.outputs.version }}-APKs
           path: |
             ${{ steps.apk.outputs.release_path }}
+            ${{ steps.apk.outputs.arm64_path }}
+            ${{ steps.apk.outputs.arm32_path }}
             ${{ steps.apk.outputs.debug_path }}
           retention-days: 30
 

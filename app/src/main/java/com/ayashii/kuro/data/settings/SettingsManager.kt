@@ -1,11 +1,12 @@
 package com.ayashii.kuro.data.settings
 
+import android.app.LocaleManager
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.res.Configuration
+import android.os.Build
+import android.os.LocaleList
 import androidx.annotation.StringRes
-import androidx.appcompat.app.AppCompatDelegate
-import androidx.core.os.LocaleListCompat
 import com.ayashii.kuro.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -142,12 +143,15 @@ class SettingsManager private constructor(private val context: Context) {
         try {
             val locale = resolveEffectiveLocale(lang)
             Locale.setDefault(locale)
-            val appLocales = if (lang.code.isEmpty()) {
-                LocaleListCompat.getEmptyLocaleList()
-            } else {
-                LocaleListCompat.forLanguageTags(if (lang.code == "in") "id" else lang.code)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                val localeManager = context.getSystemService(LocaleManager::class.java)
+                if (lang.code.isEmpty()) {
+                    localeManager?.applicationLocales = LocaleList.getEmptyLocaleList()
+                } else {
+                    val tag = if (lang.code == "in") "id" else lang.code
+                    localeManager?.applicationLocales = LocaleList.forLanguageTags(tag)
+                }
             }
-            AppCompatDelegate.setApplicationLocales(appLocales)
         } catch (_: Throwable) {}
     }
 

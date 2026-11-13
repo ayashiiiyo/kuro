@@ -11,12 +11,16 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,6 +42,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Repeat
@@ -60,6 +65,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -95,6 +101,7 @@ import com.ayashii.kuro.ui.theme.KuroAppTheme
 import com.ayashii.kuro.ui.theme.Typography
 import com.ayashii.kuro.ui.theme.rememberDynamicDominantColor
 import com.ayashii.kuro.viewmodel.MusicViewModel
+import kotlinx.coroutines.delay
 
 @Composable
 fun FullPlayerSheet(
@@ -127,6 +134,16 @@ fun FullPlayerSheet(
     var showFullScreenLyrics by rememberSaveable { mutableStateOf(false) }
     var showTranslationInPreview by rememberSaveable { mutableStateOf(true) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
+    var lastDragDeltaY by remember { mutableFloatStateOf(0f) }
+    var artworkDragX by remember { mutableFloatStateOf(0f) }
+    var showHeartBurst by remember { mutableStateOf(false) }
+
+    LaunchedEffect(showHeartBurst) {
+        if (showHeartBurst) {
+            delay(650L)
+            showHeartBurst = false
+        }
+    }
 
     val animatedDragY by animateFloatAsState(
         targetValue = dragOffsetY,
@@ -136,6 +153,19 @@ fun FullPlayerSheet(
         ),
         label = "sheet_drag_offset"
     )
+
+    val animatedArtworkX by animateFloatAsState(
+        targetValue = artworkDragX,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "artwork_swipe_offset"
+    )
+
+    BackHandler(enabled = !showFullScreenLyrics) {
+        onDismiss()
+    }
 
     BackHandler(enabled = showFullScreenLyrics) {
         showFullScreenLyrics = false
@@ -157,12 +187,19 @@ fun FullPlayerSheet(
         )
     }
 
+    val dismissProgress = (animatedDragY.coerceAtLeast(0f) / 520f).coerceIn(0f, 1f)
+
     Box(
         modifier = modifier
             .fillMaxSize()
             .graphicsLayer {
                 translationY = animatedDragY.coerceAtLeast(0f)
+                val sheetScale = 1f - (dismissProgress * 0.07f)
+                scaleX = sheetScale
+                scaleY = sheetScale
+                alpha = 1f - (dismissProgress * 0.22f)
             }
+            .clip(RoundedCornerShape((dismissProgress * 28f).dp))
             .background(baseBg)
             .background(ambientGradient)
     ) {
@@ -172,18 +209,27 @@ fun FullPlayerSheet(
                 .navigationBarsPadding()
                 .pointerInput(Unit) {
                     detectVerticalDragGestures(
-                        onDragStart = { dragOffsetY = 0f },
+                        onDragStart = {
+                            dragOffsetY = 0f
+                            lastDragDeltaY = 0f
+                        },
                         onDragEnd = {
-                            if (dragOffsetY > 140f && scrollState.value == 0) {
-                                dragOffsetY = 0f
+                            val shouldDismiss = scrollState.value == 0 &&
+                                (dragOffsetY > 105f || (dragOffsetY > 36f && lastDragDeltaY > 13f))
+                            dragOffsetY = 0f
+                            lastDragDeltaY = 0f
+                            if (shouldDismiss) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 onDismiss()
-                            } else {
-                                dragOffsetY = 0f
                             }
                         },
-                        onDragCancel = { dragOffsetY = 0f },
+                        onDragCancel = {
+                            dragOffsetY = 0f
+                            lastDragDeltaY = 0f
+                        },
                         onVerticalDrag = { change, dragAmount ->
                             if (scrollState.value == 0 && (dragAmount > 0 || dragOffsetY > 0f)) {
+                                lastDragDeltaY = dragAmount
                                 dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
                                 change.consume()
                             }
@@ -192,64 +238,106 @@ fun FullPlayerSheet(
                 }
                 .verticalScroll(scrollState)
         ) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .statusBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures(
+                            onDragStart = {
+                                dragOffsetY = 0f
+                                lastDragDeltaY = 0f
+                            },
+                            onDragEnd = {
+                                val shouldDismiss = dragOffsetY > 90f || (dragOffsetY > 30f && lastDragDeltaY > 11f)
+                                dragOffsetY = 0f
+                                lastDragDeltaY = 0f
+                                if (shouldDismiss) {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onDismiss()
+                                }
+                            },
+                            onDragCancel = {
+                                dragOffsetY = 0f
+                                lastDragDeltaY = 0f
+                            },
+                            onVerticalDrag = { change, dragAmount ->
+                                if (dragAmount > 0 || dragOffsetY > 0f) {
+                                    lastDragDeltaY = dragAmount
+                                    dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
+                                    change.consume()
+                                }
+                            }
+                        )
+                    },
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                IconButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.size(40.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowDown,
-                        contentDescription = "Collapse Player",
-                        tint = colors.textPrimary,
-                        modifier = Modifier.size(30.dp)
-                    )
-                }
-
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
+                Spacer(modifier = Modifier.height(8.dp))
+                Box(
                     modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 12.dp)
+                        .width(38.dp)
+                        .height(4.dp)
+                        .clip(CircleShape)
+                        .background(colors.textMuted.copy(alpha = 0.36f))
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = stringResource(R.string.player_playing_from).uppercase(),
-                        style = Typography.labelSmall.copy(
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            letterSpacing = 1.2.sp
-                        ),
-                        color = colors.textMuted
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = track.artist.ifEmpty { "Kuro" },
-                        style = Typography.bodySmall.copy(
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = colors.textPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowDown,
+                            contentDescription = "Collapse Player",
+                            tint = colors.textPrimary,
+                            modifier = Modifier.size(30.dp)
+                        )
+                    }
 
-                IconButton(
-                    onClick = { showOptionsMenu = true },
-                    modifier = Modifier.size(40.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "Opsi lagu",
-                        tint = colors.textPrimary,
-                        modifier = Modifier.size(22.dp)
-                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 12.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.player_playing_from).uppercase(),
+                            style = Typography.labelSmall.copy(
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 1.2.sp
+                            ),
+                            color = colors.textMuted
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = track.artist.ifEmpty { "Kuro" },
+                            style = Typography.bodySmall.copy(
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = colors.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { showOptionsMenu = true },
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "Opsi lagu",
+                            tint = colors.textPrimary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
                 }
             }
 
@@ -265,9 +353,48 @@ fun FullPlayerSheet(
                     modifier = Modifier
                         .fillMaxWidth(0.92f)
                         .aspectRatio(1f)
+                        .graphicsLayer {
+                            translationX = animatedArtworkX * 0.45f
+                            rotationZ = (animatedArtworkX / 38f).coerceIn(-6f, 6f)
+                        }
                         .clip(RoundedCornerShape(16.dp))
                         .background(colors.card)
                         .border(1.dp, colors.border.copy(alpha = 0.5f), RoundedCornerShape(16.dp))
+                        .pointerInput(track.id) {
+                            detectTapGestures(
+                                onDoubleTap = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    showHeartBurst = true
+                                    if (!track.isFavorite) {
+                                        onFavoriteClick()
+                                    }
+                                }
+                            )
+                        }
+                        .pointerInput(track.id) {
+                            detectHorizontalDragGestures(
+                                onDragStart = { artworkDragX = 0f },
+                                onDragEnd = {
+                                    if (artworkDragX < -85f) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        artworkDragX = 0f
+                                        onSkipNextClick()
+                                    } else if (artworkDragX > 85f) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        artworkDragX = 0f
+                                        onSkipPreviousClick()
+                                    } else {
+                                        artworkDragX = 0f
+                                    }
+                                },
+                                onDragCancel = { artworkDragX = 0f },
+                                onHorizontalDrag = { change, dragAmount ->
+                                    artworkDragX = (artworkDragX + dragAmount).coerceIn(-220f, 220f)
+                                    change.consume()
+                                }
+                            )
+                        },
+                    contentAlignment = Alignment.Center
                 ) {
                     AnimatedContent(
                         targetState = track,
@@ -283,6 +410,33 @@ fun FullPlayerSheet(
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop
                         )
+                    }
+
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = showHeartBurst,
+                        enter = scaleIn(
+                            initialScale = 0.4f,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessMedium
+                            )
+                        ) + fadeIn(tween(120)),
+                        exit = scaleOut(targetScale = 1.35f, animationSpec = tween(220)) + fadeOut(tween(220))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(84.dp)
+                                .clip(CircleShape)
+                                .background(Color.Black.copy(alpha = 0.45f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Favorite,
+                                contentDescription = null,
+                                tint = Color(0xFFFF3B30),
+                                modifier = Modifier.size(48.dp)
+                            )
+                        }
                     }
                 }
             }

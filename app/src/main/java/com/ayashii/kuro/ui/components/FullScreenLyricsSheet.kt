@@ -1,13 +1,17 @@
 package com.ayashii.kuro.ui.components
 
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -53,7 +57,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -82,6 +89,7 @@ fun FullScreenLyricsSheet(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val colors = KuroAppTheme.colors
     val dominantColor = rememberDynamicDominantColor(track.thumbnailUrlForDisplay(768))
     val baseBg = colors.background
@@ -107,6 +115,21 @@ fun FullScreenLyricsSheet(
     val listState = rememberLazyListState()
     val isUserDragging by listState.interactionSource.collectIsDraggedAsState()
     var userScrolledRecently by remember { mutableStateOf(false) }
+    var dragOffsetY by remember { mutableFloatStateOf(0f) }
+    var lastDragDeltaY by remember { mutableFloatStateOf(0f) }
+
+    val animatedDragY by animateFloatAsState(
+        targetValue = dragOffsetY,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "lyrics_drag_offset"
+    )
+
+    BackHandler {
+        onDismiss()
+    }
 
     LaunchedEffect(isUserDragging) {
         if (isUserDragging) {
@@ -129,86 +152,171 @@ fun FullScreenLyricsSheet(
         }
     }
 
+    val dismissProgress = (animatedDragY.coerceAtLeast(0f) / 500f).coerceIn(0f, 1f)
+    val isAtTop by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
+            .graphicsLayer {
+                translationY = animatedDragY.coerceAtLeast(0f)
+                val s = 1f - (dismissProgress * 0.06f)
+                scaleX = s
+                scaleY = s
+                alpha = 1f - (dismissProgress * 0.22f)
+            }
+            .clip(RoundedCornerShape((dismissProgress * 28f).dp))
             .background(baseBg)
             .background(lyricsGradient)
+            .pointerInput(isAtTop) {
+                detectVerticalDragGestures(
+                    onDragStart = {
+                        dragOffsetY = 0f
+                        lastDragDeltaY = 0f
+                    },
+                    onDragEnd = {
+                        val shouldDismiss = dragOffsetY > 100f || (dragOffsetY > 34f && lastDragDeltaY > 12f)
+                        dragOffsetY = 0f
+                        lastDragDeltaY = 0f
+                        if (shouldDismiss) {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onDismiss()
+                        }
+                    },
+                    onDragCancel = {
+                        dragOffsetY = 0f
+                        lastDragDeltaY = 0f
+                    },
+                    onVerticalDrag = { change, dragAmount ->
+                        if (isAtTop && (dragAmount > 0 || dragOffsetY > 0f)) {
+                            lastDragDeltaY = dragAmount
+                            dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
+                            change.consume()
+                        }
+                    }
+                )
+            }
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 20.dp)
         ) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .statusBarsPadding()
-                    .padding(vertical = 14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.size(40.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowDown,
-                        contentDescription = "Collapse Lyrics",
-                        tint = colors.textPrimary,
-                        modifier = Modifier.size(30.dp)
-                    )
-                }
-
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = track.title,
-                        style = Typography.titleMedium.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
-                        color = colors.textPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = track.artist,
-                        style = Typography.bodySmall.copy(fontSize = 12.sp),
-                        color = colors.textMuted,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center
-                    )
-                }
-
-                IconButton(
-                    onClick = {
-                        try {
-                            val shareText = if (lyricsData != null && lyricsData.lines.isNotEmpty()) {
-                                val snippet = lyricsData.lines.take(8).joinToString("\n") { it.text }
-                                "${track.title} - ${track.artist}\n\n$snippet\n\n${track.url}"
-                            } else {
-                                "${track.title} - ${track.artist}: ${track.url}"
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures(
+                            onDragStart = {
+                                dragOffsetY = 0f
+                                lastDragDeltaY = 0f
+                            },
+                            onDragEnd = {
+                                val shouldDismiss = dragOffsetY > 90f || (dragOffsetY > 30f && lastDragDeltaY > 11f)
+                                dragOffsetY = 0f
+                                lastDragDeltaY = 0f
+                                if (shouldDismiss) {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onDismiss()
+                                }
+                            },
+                            onDragCancel = {
+                                dragOffsetY = 0f
+                                lastDragDeltaY = 0f
+                            },
+                            onVerticalDrag = { change, dragAmount ->
+                                if (dragAmount > 0 || dragOffsetY > 0f) {
+                                    lastDragDeltaY = dragAmount
+                                    dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
+                                    change.consume()
+                                }
                             }
-                            val intent = Intent(Intent.ACTION_SEND).apply {
-                                putExtra(Intent.EXTRA_TEXT, shareText)
-                                type = "text/plain"
-                            }
-                            context.startActivity(Intent.createChooser(intent, "Bagikan Lirik"))
-                        } catch (_: Exception) {}
+                        )
                     },
-                    modifier = Modifier.size(40.dp)
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .width(38.dp)
+                        .height(4.dp)
+                        .clip(CircleShape)
+                        .background(colors.textMuted.copy(alpha = 0.36f))
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "Options",
-                        tint = colors.textPrimary,
-                        modifier = Modifier.size(22.dp)
-                    )
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowDown,
+                            contentDescription = "Collapse Lyrics",
+                            tint = colors.textPrimary,
+                            modifier = Modifier.size(30.dp)
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = track.title,
+                            style = Typography.titleMedium.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
+                            color = colors.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = track.artist,
+                            style = Typography.bodySmall.copy(fontSize = 12.sp),
+                            color = colors.textMuted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    IconButton(
+                        onClick = {
+                            try {
+                                val shareText = if (lyricsData != null && lyricsData.lines.isNotEmpty()) {
+                                    val snippet = lyricsData.lines.take(8).joinToString("\n") { it.text }
+                                    "${track.title} - ${track.artist}\n\n$snippet\n\n${track.url}"
+                                } else {
+                                    "${track.title} - ${track.artist}: ${track.url}"
+                                }
+                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                    putExtra(Intent.EXTRA_TEXT, shareText)
+                                    type = "text/plain"
+                                }
+                                context.startActivity(Intent.createChooser(intent, "Bagikan Lirik"))
+                            } catch (_: Exception) {}
+                        },
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "Options",
+                            tint = colors.textPrimary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
                 }
             }
 

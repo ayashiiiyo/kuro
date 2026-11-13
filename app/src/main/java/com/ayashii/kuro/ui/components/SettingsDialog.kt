@@ -106,6 +106,8 @@ fun SettingsDialog(
         Box(
             modifier = Modifier
                 .fillMaxWidth(0.92f)
+                .padding(vertical = 24.dp)
+                .heightIn(max = 640.dp)
                 .clip(RoundedCornerShape(24.dp))
                 .background(colors.surface)
                 .border(1.dp, colors.border, RoundedCornerShape(24.dp))

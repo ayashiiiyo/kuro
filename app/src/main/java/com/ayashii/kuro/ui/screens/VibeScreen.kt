@@ -1,5 +1,6 @@
 package com.ayashii.kuro.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -73,6 +74,7 @@ fun VibeScreen(
     val favorites by viewModel.favorites.collectAsState()
     val currentTrack by viewModel.currentTrack.collectAsState()
     val isLoadingTrack by viewModel.isLoadingTrack.collectAsState()
+    val isPlayerExpanded by viewModel.isPlayerExpanded.collectAsState()
     val genreTracks by viewModel.genreTracks.collectAsState()
 
     val favoriteIds by remember(favorites) {
@@ -84,6 +86,10 @@ fun VibeScreen(
     var trackForPlaylist by remember { mutableStateOf<Track?>(null) }
     var showQueueSheet by rememberSaveable { mutableStateOf(false) }
     var showSettingsDialog by rememberSaveable { mutableStateOf(false) }
+
+    BackHandler(enabled = !isPlayerExpanded && selectedMoodIndex != 0) {
+        selectedMoodIndex = 0
+    }
 
     val moodLabels = listOf(
         stringResource(R.string.vibe_mood_all) to "",
@@ -354,7 +360,8 @@ fun VibeScreen(
                     isLoading = isLoadingTrack && currentTrack?.id == track.id,
                     onClick = { viewModel.playTrack(track, candidatePool) },
                     onFavoriteClick = { viewModel.toggleFavorite(track) },
-                    onMoreClick = { trackForOptions = track }
+                    onMoreClick = { trackForOptions = track },
+                    onSwipeAddToQueue = { viewModel.addToQueue(track) }
                 )
             }
         }

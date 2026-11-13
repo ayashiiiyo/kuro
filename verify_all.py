@@ -12,7 +12,7 @@ import subprocess
 from pygments.lexers.jvm import KotlinLexer
 from pygments.token import Token
 
-ROOT_DIR = "/root/kuro"
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 class Colors:
     GREEN = "\033[92m"
@@ -204,8 +204,8 @@ print(f"\n{Colors.BOLD}>>> 2. Category 1: UI & Navigation Architecture{Colors.RE
 # NAV-CORE-01: SearchScreen Staged Back Handling & MainActivity BackStack
 search_screen = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/screens/SearchScreen.kt")
 main_activity = suite.read_file("app/src/main/java/com/ayashii/kuro/MainActivity.kt")
-nav_stage1 = "BackHandler(enabled = searchQuery.isNotEmpty())" in search_screen and 'searchQuery = ""' in search_screen
-nav_stage2 = "BackHandler(enabled = isSearchActive && searchQuery.isEmpty())" in search_screen and "isSearchActive = false" in search_screen
+nav_stage1 = ("BackHandler(enabled = searchQuery.isNotEmpty())" in search_screen or "BackHandler(enabled = !isPlayerExpanded && searchQuery.isNotEmpty())" in search_screen) and 'searchQuery = ""' in search_screen
+nav_stage2 = ("BackHandler(enabled = isSearchActive && searchQuery.isEmpty())" in search_screen or "BackHandler(enabled = !isPlayerExpanded && isSearchActive && searchQuery.isEmpty())" in search_screen) and "isSearchActive = false" in search_screen
 nav_main = "BackHandler(enabled = isExpanded)" in main_activity and "expandPlayer(false)" in main_activity
 suite.assert_true(
     nav_stage1 and nav_stage2 and nav_main,
@@ -229,7 +229,7 @@ suite.assert_true(
 
 # UI-02: Missing BackHandler in LibraryScreen PlaylistDetailView
 library_screen = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/screens/LibraryScreen.kt")
-ui02_check = "BackHandler(enabled = selectedPlaylistId != null)" in library_screen and "selectedPlaylistId = null" in library_screen
+ui02_check = ("BackHandler(enabled = selectedPlaylistId != null)" in library_screen or "BackHandler(enabled = !isPlayerExpanded && selectedPlaylistId != null)" in library_screen) and "selectedPlaylistId = null" in library_screen
 suite.assert_true(
     ui02_check,
     "UI-02",
@@ -239,7 +239,7 @@ suite.assert_true(
 
 # UI-03: Missing BackHandler in HomeScreen Genre Filter
 home_screen = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/screens/HomeScreen.kt")
-ui03_check = ('BackHandler(enabled = selectedGenre != "Semua")' in home_screen or 'BackHandler(enabled = selectedGenre != "All")' in home_screen) and "selectedGenre = " in home_screen
+ui03_check = ('BackHandler(enabled = selectedGenre != "Semua")' in home_screen or 'BackHandler(enabled = !isPlayerExpanded && selectedGenre != "Semua")' in home_screen) and "selectedGenre = " in home_screen
 suite.assert_true(
     ui03_check,
     "UI-03",
@@ -826,6 +826,71 @@ suite.assert_true(
     "BUG-01",
     "Additional bug fixes: word-safe Mix badge truncation, localized shelf/liked queries, and background radio replenish",
     "Missing additional bug fixes"
+)
+
+
+full_player = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/components/FullPlayerSheet.kt")
+full_lyrics = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/components/FullScreenLyricsSheet.kt")
+mini_player = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/components/MiniPlayer.kt")
+search_screen = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/screens/SearchScreen.kt")
+library_screen = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/screens/LibraryScreen.kt")
+track_item = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/components/TrackItem.kt")
+queue_sheet = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/components/QueueBottomSheet.kt")
+manifest_xml = suite.read_file("app/src/main/AndroidManifest.xml")
+
+back01_check = (
+    "BackHandler(enabled = !showFullScreenLyrics)" in full_player
+    and "BackHandler(enabled = !isPlayerExpanded && searchQuery.isNotEmpty())" in search_screen
+    and "BackHandler(enabled = !isPlayerExpanded && selectedPlaylistId != null)" in library_screen
+    and "BackHandler(enabled = !isPlayerExpanded && selectedGenre != \"Semua\")" in home_screen
+    and "canNavigateBack" in suite.read_file("app/src/main/java/com/ayashii/kuro/ui/components/LoginWebViewDialog.kt")
+    and "enableOnBackInvokedCallback=\"true\"" in manifest_xml
+)
+suite.assert_true(
+    back01_check,
+    "BACK-01",
+    "LIFO BackHandler priority fix across FullPlayerSheet, SearchScreen, LibraryScreen, HomeScreen, LoginWebViewDialog, and OnBackInvokedCallback",
+    "Missing LIFO BackHandler priority guards or unified search back handler"
+)
+
+gesture01_check = (
+    "detectVerticalDragGestures" in full_lyrics
+    and "detectDragGestures" in mini_player
+    and "artworkDragX" in full_player
+    and "showHeartBurst" in full_player
+    and "onSwipeAddToQueue" in track_item
+    and "combinedClickable" in track_item
+    and "detectHorizontalDragGestures" in queue_sheet
+    and "detectHorizontalDragGestures" in library_screen
+    and "detectHorizontalDragGestures" in search_screen
+)
+suite.assert_true(
+    gesture01_check,
+    "GESTURE-01",
+    "Comprehensive touchscreen gestures: FullScreenLyrics swipe-down, MiniPlayer swipe-up/down, Artwork horizontal swipe & double-tap heart burst, TrackItem swipe-to-queue/favorite & long-press, Queue swipe-to-delete, and sub-screen swipe-back",
+    "Missing one or more touchscreen gesture handlers"
+)
+
+
+cargo_toml = suite.read_file("kuro-core/Cargo.toml")
+sanitizer_rs = suite.read_file("kuro-core/src/sanitizer.rs")
+build_gradle = suite.read_file("app/build.gradle.kts")
+proguard_rules = suite.read_file("app/proguard-rules.pro")
+update_mgr = suite.read_file("app/src/main/java/com/ayashii/kuro/data/update/UpdateManager.kt")
+
+size01_check = (
+    "unicode-perl" not in cargo_toml
+    and "strip_bracketed_noise" in sanitizer_rs
+    and "isUniversalApk = true" in build_gradle
+    and "androidx.appcompat:appcompat" not in build_gradle
+    and "-repackageclasses" in proguard_rules
+    and "resolveDevicePrimaryAbi" in update_mgr
+)
+suite.assert_true(
+    size01_check,
+    "SIZE-01",
+    "APK size compression: zero-regex Rust kuro-core, R8 tree-shaking, ABI splits with universal fallback, and auto-ABI UpdateManager",
+    "Missing one or more APK size compression or auto-ABI update components"
 )
 
 # ==============================================================================

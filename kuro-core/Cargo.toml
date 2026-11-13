@@ -7,14 +7,12 @@ description = "High-performance native core engine for Kuro Music Player"
 
 [lib]
 name = "kuro_core"
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib"]
 
 [dependencies]
 jni = "0.21"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-regex = { version = "1.10", default-features = false, features = ["std", "perf", "unicode-case", "unicode-perl"] }
-lazy_static = "1.4"
 
 [profile.release]
 opt-level = "z"

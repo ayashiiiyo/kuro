@@ -63,6 +63,14 @@ private fun isTrustedGoogleAuthHost(url: String?): Boolean {
         host.endsWith(".googleusercontent.com")
 }
 
+private fun isInitialSignInEntryUrl(url: String?): Boolean {
+    if (url.isNullOrBlank()) return true
+    val lower = url.lowercase()
+    return lower.contains("accounts.google.com/servicelogin") ||
+        lower.contains("accounts.google.com/v3/signin/identifier") ||
+        lower.contains("accounts.google.com/signin/v2/identifier")
+}
+
 private fun mergeCookieStrings(vararg cookieParts: String?): String {
     val map = LinkedHashMap<String, String>()
     for (part in cookieParts) {
@@ -89,6 +97,7 @@ fun LoginWebViewDialog(
     onLoginSuccess: () -> Unit
 ) {
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
+    var canNavigateBack by remember { mutableStateOf(false) }
     var pageProgress by remember { mutableFloatStateOf(0f) }
     var isLoading by remember { mutableStateOf(true) }
     var hasCompletedLogin by remember { mutableStateOf(false) }
@@ -110,8 +119,15 @@ fun LoginWebViewDialog(
             decorFitsSystemWindows = true
         )
     ) {
-        BackHandler(enabled = webViewInstance?.canGoBack() == true) {
-            webViewInstance?.goBack()
+        BackHandler {
+            val view = webViewInstance
+            val currentUrl = view?.url
+            if (view != null && canNavigateBack && view.canGoBack() && !isInitialSignInEntryUrl(currentUrl)) {
+                view.goBack()
+                canNavigateBack = view.canGoBack() && !isInitialSignInEntryUrl(view.url)
+            } else {
+                onDismiss()
+            }
         }
 
         Column(
@@ -325,11 +341,13 @@ fun LoginWebViewDialog(
                                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                                     super.onPageStarted(view, url, favicon)
                                     isLoading = true
+                                    canNavigateBack = view?.canGoBack() == true && !isInitialSignInEntryUrl(url)
                                 }
 
                                 override fun onPageFinished(view: WebView?, url: String?) {
                                     super.onPageFinished(view, url)
                                     isLoading = false
+                                    canNavigateBack = view?.canGoBack() == true && !isInitialSignInEntryUrl(url)
                                     val currentUrl = url ?: ""
                                     if (!isTrustedGoogleAuthHost(currentUrl)) return
                                     extractAndFinalizeLogin(view, currentUrl)
@@ -338,6 +356,7 @@ fun LoginWebViewDialog(
                                 override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
                                     super.doUpdateVisitedHistory(view, url, isReload)
                                     val currentUrl = url ?: ""
+                                    canNavigateBack = view?.canGoBack() == true && !isInitialSignInEntryUrl(currentUrl)
                                     if (!isTrustedGoogleAuthHost(currentUrl)) return
                                     if (currentUrl.contains("music.youtube.com")) {
                                         view?.postDelayed({

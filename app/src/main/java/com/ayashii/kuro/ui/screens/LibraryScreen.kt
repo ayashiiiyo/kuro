@@ -2,6 +2,9 @@ package com.ayashii.kuro.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -11,6 +14,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,6 +51,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -54,7 +59,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -82,6 +91,7 @@ fun LibraryScreen(
     val favorites by viewModel.favorites.collectAsState()
     val playlists by viewModel.playlists.collectAsState()
     val isLoadingTrack by viewModel.isLoadingTrack.collectAsState()
+    val isPlayerExpanded by viewModel.isPlayerExpanded.collectAsState()
     val currentTrack by viewModel.currentTrack.collectAsState()
     val currentAccount by viewModel.authState.collectAsState()
     val favoriteIds by remember(favorites) { derivedStateOf { favorites.mapTo(HashSet()) { it.id } } }
@@ -95,8 +105,15 @@ fun LibraryScreen(
     var showCreateDialog by rememberSaveable { mutableStateOf(false) }
     var playlistToDelete by remember { mutableStateOf<Playlist?>(null) }
     var newPlaylistName by rememberSaveable { mutableStateOf("") }
+    var tabDragOffsetX by remember { mutableFloatStateOf(0f) }
 
-    BackHandler(enabled = selectedPlaylistId != null) {
+    val haptic = LocalHapticFeedback.current
+
+    BackHandler(enabled = !isPlayerExpanded && selectedPlaylistId == null && selectedTab != 0) {
+        selectedTab = 0
+    }
+
+    BackHandler(enabled = !isPlayerExpanded && selectedPlaylistId != null) {
         selectedPlaylistId = null
     }
 
@@ -237,11 +254,47 @@ fun LibraryScreen(
                     AnimatedContent(
                         targetState = selectedTab,
                         transitionSpec = {
-                            fadeIn(tween(220, easing = KuroMotion.EmphasizedDecelerate))
-                                .togetherWith(fadeOut(tween(150, easing = KuroMotion.EmphasizedAccelerate)))
+                            if (targetState > initialState) {
+                                (slideInHorizontally(tween(240, easing = KuroMotion.EmphasizedDecelerate)) { it / 6 } +
+                                    fadeIn(tween(220, easing = KuroMotion.EmphasizedDecelerate)))
+                                    .togetherWith(
+                                        slideOutHorizontally(tween(180, easing = KuroMotion.EmphasizedAccelerate)) { -it / 6 } +
+                                            fadeOut(tween(150, easing = KuroMotion.EmphasizedAccelerate))
+                                    )
+                            } else {
+                                (slideInHorizontally(tween(240, easing = KuroMotion.EmphasizedDecelerate)) { -it / 6 } +
+                                    fadeIn(tween(220, easing = KuroMotion.EmphasizedDecelerate)))
+                                    .togetherWith(
+                                        slideOutHorizontally(tween(180, easing = KuroMotion.EmphasizedAccelerate)) { it / 6 } +
+                                            fadeOut(tween(150, easing = KuroMotion.EmphasizedAccelerate))
+                                    )
+                            }
                         },
                         label = "library_tab_transition",
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .pointerInput(selectedTab) {
+                                detectHorizontalDragGestures(
+                                    onDragStart = { tabDragOffsetX = 0f },
+                                    onDragEnd = {
+                                        if (tabDragOffsetX < -95f && selectedTab == 0) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            selectedTab = 1
+                                        } else if (tabDragOffsetX > 95f && selectedTab == 1) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            selectedTab = 0
+                                        }
+                                        tabDragOffsetX = 0f
+                                    },
+                                    onDragCancel = { tabDragOffsetX = 0f },
+                                    onHorizontalDrag = { change, dragAmount ->
+                                        tabDragOffsetX += dragAmount
+                                        if ((selectedTab == 0 && tabDragOffsetX < -20f) || (selectedTab == 1 && tabDragOffsetX > 20f)) {
+                                            change.consume()
+                                        }
+                                    }
+                                )
+                            }
                     ) { tab ->
                         if (tab == 0) {
                             if (favorites.isEmpty()) {
@@ -279,7 +332,8 @@ fun LibraryScreen(
                                             isLoading = isLoadingTrack && currentTrack?.id == track.id,
                                             onClick = { viewModel.playTrack(track, favorites) },
                                             onFavoriteClick = { viewModel.toggleFavorite(track) },
-                                            onMoreClick = { trackForOptions = track }
+                                            onMoreClick = { trackForOptions = track },
+                                            onSwipeAddToQueue = { viewModel.addToQueue(track) }
                                         )
                                     }
                                     item {
@@ -647,8 +701,46 @@ fun PlaylistDetailView(
     onMoreClick: (Track) -> Unit
 ) {
     val colors = KuroAppTheme.colors
+    val haptic = LocalHapticFeedback.current
+    var dragBackX by remember { mutableFloatStateOf(0f) }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    val animatedDragBackX by animateFloatAsState(
+        targetValue = dragBackX,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "playlist_detail_back_drag"
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                translationX = animatedDragBackX.coerceAtLeast(0f) * 0.45f
+            }
+            .pointerInput(playlist.id) {
+                detectHorizontalDragGestures(
+                    onDragStart = { dragBackX = 0f },
+                    onDragEnd = {
+                        if (dragBackX > 90f) {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            dragBackX = 0f
+                            onBack()
+                        } else {
+                            dragBackX = 0f
+                        }
+                    },
+                    onDragCancel = { dragBackX = 0f },
+                    onHorizontalDrag = { change, dragAmount ->
+                        if (dragAmount > 0f || dragBackX > 0f) {
+                            dragBackX = (dragBackX + dragAmount).coerceIn(0f, 240f)
+                            change.consume()
+                        }
+                    }
+                )
+            }
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -761,7 +853,8 @@ fun PlaylistDetailView(
                         isLoading = isLoadingTrack && currentTrack?.id == track.id,
                         onClick = { viewModel.playPlaylist(playlist, startTrack = track) },
                         onFavoriteClick = { viewModel.toggleFavorite(track) },
-                        onMoreClick = { onMoreClick(track) }
+                        onMoreClick = { onMoreClick(track) },
+                        onSwipeAddToQueue = { viewModel.addToQueue(track) }
                     )
                 }
             }

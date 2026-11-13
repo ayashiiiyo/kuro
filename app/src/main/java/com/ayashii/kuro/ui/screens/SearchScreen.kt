@@ -2,6 +2,9 @@ package com.ayashii.kuro.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -10,9 +13,12 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,18 +28,17 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -50,13 +55,12 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -67,9 +71,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -100,6 +108,7 @@ data class SearchCategoryItem(
     val color: Color
 )
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SearchScreen(
     viewModel: MusicViewModel,
@@ -113,10 +122,12 @@ fun SearchScreen(
     var showQueueSheet by rememberSaveable { mutableStateOf(false) }
     var showLoginWebView by rememberSaveable { mutableStateOf(false) }
     var showSettingsDialog by rememberSaveable { mutableStateOf(false) }
+    var swipeBackOffsetX by remember { mutableFloatStateOf(0f) }
 
     val searchResults by viewModel.searchResults.collectAsState()
     val suggestions by viewModel.suggestions.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
+    val isPlayerExpanded by viewModel.isPlayerExpanded.collectAsState()
     val currentTrack by viewModel.currentTrack.collectAsState()
     val trendingTracks by viewModel.trendingTracks.collectAsState()
     val recentlyPlayed by viewModel.recentlyPlayed.collectAsState()
@@ -126,8 +137,28 @@ fun SearchScreen(
 
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
+    val haptic = LocalHapticFeedback.current
     val focusRequester = remember { FocusRequester() }
     val colors = KuroAppTheme.colors
+    val focusedTextColor = colors.textPrimary
+    val unfocusedTextColor = colors.textPrimary
+
+    val exitSearchMode: () -> Unit = {
+        searchQuery = ""
+        isSearchActive = false
+        viewModel.search("")
+        focusManager.clearFocus()
+        keyboardController?.hide()
+    }
+
+    val animatedSwipeBackX by animateFloatAsState(
+        targetValue = swipeBackOffsetX,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "search_swipe_back_x"
+    )
 
     val categories = remember {
         listOf(
@@ -142,15 +173,12 @@ fun SearchScreen(
         )
     }
 
-    BackHandler(enabled = searchQuery.isNotEmpty()) {
-        searchQuery = ""
-        viewModel.search("")
+    BackHandler(enabled = !isPlayerExpanded && searchQuery.isNotEmpty()) {
+        exitSearchMode()
     }
 
-    BackHandler(enabled = isSearchActive && searchQuery.isEmpty()) {
-        isSearchActive = false
-        focusManager.clearFocus()
-        keyboardController?.hide()
+    BackHandler(enabled = !isPlayerExpanded && isSearchActive && searchQuery.isEmpty()) {
+        exitSearchMode()
     }
 
     val isFieldExpanded = isSearchActive || searchQuery.isNotEmpty()
@@ -219,12 +247,12 @@ fun SearchScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(46.dp)
+                                .height(48.dp)
                                 .clip(CircleShape)
                                 .background(colors.card)
                                 .border(1.dp, colors.border, CircleShape)
@@ -242,33 +270,32 @@ fun SearchScreen(
                             Text(
                                 text = stringResource(R.string.search_what_do_you_want_to_listen_to),
                                 color = colors.textMuted,
-                                style = Typography.bodyLarge.copy(fontSize = 15.sp, fontWeight = FontWeight.Normal)
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = Typography.bodyLarge.copy(
+                                    fontSize = 15.sp,
+                                    lineHeight = 20.sp,
+                                    fontWeight = FontWeight.Normal
+                                )
                             )
                         }
                     }
                 }
             } else {
                 LaunchedEffect(Unit) {
-                    focusRequester.requestFocus()
+                    if (searchQuery.isEmpty()) {
+                        focusRequester.requestFocus()
+                    }
                 }
 
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 6.dp, end = 16.dp, top = 10.dp, bottom = 6.dp),
+                        .padding(start = 6.dp, end = 16.dp, top = 10.dp, bottom = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(
-                        onClick = {
-                            if (searchQuery.isNotEmpty()) {
-                                searchQuery = ""
-                                viewModel.search("")
-                            } else if (isSearchActive) {
-                                isSearchActive = false
-                                focusManager.clearFocus()
-                                keyboardController?.hide()
-                            }
-                        },
+                        onClick = { exitSearchMode() },
                         modifier = Modifier.size(44.dp)
                     ) {
                         Icon(
@@ -279,60 +306,84 @@ fun SearchScreen(
                         )
                     }
 
-                    TextField(
-                        value = searchQuery,
-                        onValueChange = {
-                            searchQuery = it
-                            viewModel.loadSuggestions(it)
-                        },
-                        placeholder = {
-                            Text(
-                                text = stringResource(R.string.search_what_do_you_want_to_listen_to),
-                                color = colors.textMuted,
-                                style = Typography.bodyLarge.copy(fontSize = 15.sp, fontWeight = FontWeight.Normal)
-                            )
-                        },
-                        trailingIcon = {
-                            if (searchQuery.isNotEmpty()) {
-                                IconButton(
-                                    onClick = {
-                                        searchQuery = ""
-                                        viewModel.search("")
-                                    },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = "Clear",
-                                        tint = colors.textMuted,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                            }
-                        },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = {
-                            focusManager.clearFocus()
-                            if (searchQuery.isNotBlank()) {
-                                viewModel.search(searchQuery)
-                            }
-                        }),
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = colors.card,
-                            unfocusedContainerColor = colors.card,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            focusedTextColor = colors.textPrimary,
-                            unfocusedTextColor = colors.textPrimary,
-                            cursorColor = colors.accent
-                        ),
-                        shape = CircleShape,
+                    Row(
                         modifier = Modifier
                             .weight(1f)
                             .height(48.dp)
-                            .focusRequester(focusRequester)
-                    )
+                            .clip(CircleShape)
+                            .background(colors.card)
+                            .border(1.dp, colors.border, CircleShape)
+                            .padding(start = 16.dp, end = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = null,
+                            tint = colors.textMuted,
+                            modifier = Modifier.size(19.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Box(
+                            modifier = Modifier.weight(1f),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            if (searchQuery.isEmpty()) {
+                                Text(
+                                    text = stringResource(R.string.search_what_do_you_want_to_listen_to),
+                                    color = colors.textMuted,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = Typography.bodyLarge.copy(
+                                        fontSize = 15.sp,
+                                        lineHeight = 20.sp,
+                                        fontWeight = FontWeight.Normal
+                                    )
+                                )
+                            }
+                            BasicTextField(
+                                value = searchQuery,
+                                onValueChange = {
+                                    searchQuery = it
+                                    viewModel.loadSuggestions(it)
+                                },
+                                singleLine = true,
+                                textStyle = Typography.bodyLarge.copy(
+                                    fontSize = 15.sp,
+                                    lineHeight = 20.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (searchQuery.isNotEmpty()) focusedTextColor else unfocusedTextColor
+                                ),
+                                cursorBrush = SolidColor(colors.accent),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                keyboardActions = KeyboardActions(onSearch = {
+                                    focusManager.clearFocus()
+                                    keyboardController?.hide()
+                                    if (searchQuery.isNotBlank()) {
+                                        viewModel.search(searchQuery)
+                                    }
+                                }),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .focusRequester(focusRequester)
+                            )
+                        }
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(
+                                onClick = {
+                                    searchQuery = ""
+                                    viewModel.search("")
+                                },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Clear",
+                                    tint = colors.textMuted,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -356,13 +407,45 @@ fun SearchScreen(
                     )
             },
             label = "search_body_transition",
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .imePadding()
+                .graphicsLayer {
+                    translationX = if (bodyMode != 0) (animatedSwipeBackX.coerceAtLeast(0f) * 0.4f) else 0f
+                }
+                .then(
+                    if (bodyMode != 0) {
+                        Modifier.pointerInput(bodyMode) {
+                            detectHorizontalDragGestures(
+                                onDragStart = { swipeBackOffsetX = 0f },
+                                onDragEnd = {
+                                    if (swipeBackOffsetX > 95f) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        swipeBackOffsetX = 0f
+                                        exitSearchMode()
+                                    } else {
+                                        swipeBackOffsetX = 0f
+                                    }
+                                },
+                                onDragCancel = { swipeBackOffsetX = 0f },
+                                onHorizontalDrag = { change, dragAmount ->
+                                    if (dragAmount > 0f || swipeBackOffsetX > 0f) {
+                                        swipeBackOffsetX = (swipeBackOffsetX + dragAmount).coerceIn(0f, 220f)
+                                        change.consume()
+                                    }
+                                }
+                            )
+                        }
+                    } else {
+                        Modifier
+                    }
+                )
         ) { mode ->
             when (mode) {
                 2 -> {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 140.dp)
+                        contentPadding = PaddingValues(top = 4.dp, bottom = 156.dp)
                     ) {
                         if (suggestions.isNotEmpty()) {
                             items(suggestions) { suggestion ->
@@ -372,6 +455,7 @@ fun SearchScreen(
                                         .clickable {
                                             searchQuery = suggestion
                                             focusManager.clearFocus()
+                                            keyboardController?.hide()
                                             viewModel.search(suggestion)
                                         }
                                         .padding(horizontal = 18.dp, vertical = 12.dp),
@@ -431,19 +515,26 @@ fun SearchScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clickable {
-                                            focusManager.clearFocus()
-                                            viewModel.playTrack(track, searchResults)
-                                        }
-                                        .padding(horizontal = 18.dp, vertical = 7.dp),
+                                        .combinedClickable(
+                                            onClick = {
+                                                focusManager.clearFocus()
+                                                keyboardController?.hide()
+                                                viewModel.playTrack(track, searchResults)
+                                            },
+                                            onLongClick = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                trackForOptions = track
+                                            }
+                                        )
+                                        .padding(horizontal = 18.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     AsyncImage(
                                         model = track.thumbnailUrlForDisplay(160),
                                         contentDescription = track.title,
                                         modifier = Modifier
-                                            .size(48.dp)
-                                            .clip(RoundedCornerShape(6.dp))
+                                            .size(50.dp)
+                                            .clip(RoundedCornerShape(8.dp))
                                             .background(colors.card),
                                         contentScale = ContentScale.Crop
                                     )
@@ -453,18 +544,22 @@ fun SearchScreen(
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = track.title,
-                                            style = Typography.bodyLarge.copy(
+                                            style = Typography.titleMedium.copy(
                                                 fontSize = 15.sp,
+                                                lineHeight = 20.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = if (isCurrent) colors.accent else colors.textPrimary
                                             ),
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
-                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Spacer(modifier = Modifier.height(3.dp))
                                         Text(
                                             text = stringResource(R.string.search_song_subtitle, track.artist),
-                                            style = Typography.bodyMedium.copy(fontSize = 13.sp),
+                                            style = Typography.bodyMedium.copy(
+                                                fontSize = 13.sp,
+                                                lineHeight = 18.sp
+                                            ),
                                             color = colors.textMuted,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
@@ -551,7 +646,7 @@ fun SearchScreen(
                 1 -> {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 140.dp)
+                        contentPadding = PaddingValues(top = 4.dp, bottom = 156.dp)
                     ) {
                         if (recentlyPlayed.isNotEmpty()) {
                             item {
@@ -569,19 +664,26 @@ fun SearchScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clickable {
-                                            focusManager.clearFocus()
-                                            viewModel.playTrack(track, recentlyPlayed)
-                                        }
-                                        .padding(horizontal = 18.dp, vertical = 7.dp),
+                                        .combinedClickable(
+                                            onClick = {
+                                                focusManager.clearFocus()
+                                                keyboardController?.hide()
+                                                viewModel.playTrack(track, recentlyPlayed)
+                                            },
+                                            onLongClick = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                trackForOptions = track
+                                            }
+                                        )
+                                        .padding(horizontal = 18.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     AsyncImage(
                                         model = track.thumbnailUrlForDisplay(160),
                                         contentDescription = track.title,
                                         modifier = Modifier
-                                            .size(48.dp)
-                                            .clip(RoundedCornerShape(6.dp))
+                                            .size(50.dp)
+                                            .clip(RoundedCornerShape(8.dp))
                                             .background(colors.card),
                                         contentScale = ContentScale.Crop
                                     )
@@ -591,15 +693,22 @@ fun SearchScreen(
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = track.title,
-                                            style = Typography.bodyLarge.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
+                                            style = Typography.titleMedium.copy(
+                                                fontSize = 15.sp,
+                                                lineHeight = 20.sp,
+                                                fontWeight = FontWeight.Bold
+                                            ),
                                             color = colors.textPrimary,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
-                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Spacer(modifier = Modifier.height(3.dp))
                                         Text(
                                             text = stringResource(R.string.search_song_subtitle, track.artist),
-                                            style = Typography.bodyMedium.copy(fontSize = 13.sp),
+                                            style = Typography.bodyMedium.copy(
+                                                fontSize = 13.sp,
+                                                lineHeight = 18.sp
+                                            ),
                                             color = colors.textMuted,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
@@ -686,7 +795,7 @@ fun SearchScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(horizontal = 18.dp),
-                        contentPadding = PaddingValues(bottom = 140.dp)
+                        contentPadding = PaddingValues(bottom = 156.dp)
                     ) {
                         item {
                             Spacer(modifier = Modifier.height(10.dp))
@@ -699,50 +808,60 @@ fun SearchScreen(
                         }
 
                         item {
-                            LazyVerticalGrid(
-                                columns = GridCells.Fixed(2),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(440.dp)
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                items(categories) { category ->
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(96.dp)
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .background(category.color)
-                                            .clickable {
-                                                searchQuery = category.searchQuery
-                                                isSearchActive = true
-                                                viewModel.search(category.searchQuery)
-                                            }
+                                categories.chunked(2).forEach { rowCategories ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                                     ) {
-                                        Text(
-                                            text = stringResource(category.titleRes),
-                                            style = Typography.titleMedium.copy(
-                                                fontSize = 16.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                lineHeight = 20.sp
-                                            ),
-                                            color = Color.White,
-                                            modifier = Modifier
-                                                .padding(12.dp)
-                                                .align(Alignment.TopStart)
-                                                .fillMaxWidth(0.65f)
-                                        )
+                                        rowCategories.forEach { category ->
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(98.dp)
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .background(category.color)
+                                                    .clickable {
+                                                        searchQuery = category.searchQuery
+                                                        isSearchActive = true
+                                                        focusManager.clearFocus()
+                                                        keyboardController?.hide()
+                                                        viewModel.search(category.searchQuery)
+                                                    }
+                                            ) {
+                                                Text(
+                                                    text = stringResource(category.titleRes).replace("\n", " "),
+                                                    style = Typography.titleMedium.copy(
+                                                        fontSize = 16.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        lineHeight = 20.sp
+                                                    ),
+                                                    color = Color.White,
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier
+                                                        .padding(12.dp)
+                                                        .align(Alignment.TopStart)
+                                                        .fillMaxWidth(0.72f)
+                                                )
 
-                                        Box(
-                                            modifier = Modifier
-                                                .align(Alignment.BottomEnd)
-                                                .offset(x = 10.dp, y = 6.dp)
-                                                .graphicsLayer { rotationZ = 24f }
-                                                .size(60.dp)
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(Color.White.copy(alpha = 0.22f))
-                                        )
+                                                Box(
+                                                    modifier = Modifier
+                                                        .align(Alignment.BottomEnd)
+                                                        .offset(x = 10.dp, y = 6.dp)
+                                                        .graphicsLayer { rotationZ = 24f }
+                                                        .size(60.dp)
+                                                        .clip(RoundedCornerShape(6.dp))
+                                                        .background(Color.White.copy(alpha = 0.22f))
+                                                )
+                                            }
+                                        }
+                                        if (rowCategories.size == 1) {
+                                            Spacer(modifier = Modifier.weight(1f))
+                                        }
                                     }
                                 }
                             }
@@ -766,7 +885,13 @@ fun SearchScreen(
                                             Column(
                                                 modifier = Modifier
                                                     .width(136.dp)
-                                                    .clickable { viewModel.playTrack(track, discoverTracks) }
+                                                    .combinedClickable(
+                                                        onClick = { viewModel.playTrack(track, discoverTracks) },
+                                                        onLongClick = {
+                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                            trackForOptions = track
+                                                        }
+                                                    )
                                             ) {
                                                 AsyncImage(
                                                     model = track.thumbnailUrlForDisplay(512),

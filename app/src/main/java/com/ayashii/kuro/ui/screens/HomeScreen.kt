@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,6 +46,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -58,7 +60,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -94,6 +99,7 @@ private fun formatMixBadgeLabel(artist: String): String {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
     viewModel: MusicViewModel,
@@ -106,6 +112,7 @@ fun HomeScreen(
     val isSearching by viewModel.isSearching.collectAsState()
     val isLoadingTrending by viewModel.isLoadingTrending.collectAsState()
     val isLoadingTrack by viewModel.isLoadingTrack.collectAsState()
+    val isPlayerExpanded by viewModel.isPlayerExpanded.collectAsState()
     val currentTrack by viewModel.currentTrack.collectAsState()
     val currentAccount by viewModel.authState.collectAsState()
     val favorites by viewModel.favorites.collectAsState()
@@ -119,14 +126,16 @@ fun HomeScreen(
     var showQueueSheet by rememberSaveable { mutableStateOf(false) }
     var trackForPlaylist by remember { mutableStateOf<Track?>(null) }
     var trackForOptions by remember { mutableStateOf<Track?>(null) }
+    var genreSwipeX by remember { mutableFloatStateOf(0f) }
 
+    val haptic = LocalHapticFeedback.current
     var selectedGenre by rememberSaveable { mutableStateOf("Semua") }
     val genres = listOf("Semua", "Pop", "Lo-Fi", "Rock", "Acoustic", "Anime", "Hip-Hop", "R&B", "Top Global")
     val genreRowState = rememberLazyListState()
     val canScrollGenreBack by remember { derivedStateOf { genreRowState.canScrollBackward } }
     val canScrollGenreForward by remember { derivedStateOf { genreRowState.canScrollForward } }
 
-    BackHandler(enabled = selectedGenre != "Semua") {
+    BackHandler(enabled = !isPlayerExpanded && selectedGenre != "Semua") {
         selectedGenre = "Semua"
         viewModel.loadTrending()
     }
@@ -225,7 +234,38 @@ fun HomeScreen(
                     .togetherWith(fadeOut(tween(180, easing = KuroMotion.EmphasizedAccelerate)))
             },
             label = "home_genre_transition",
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .then(
+                    if (selectedGenre != "Semua") {
+                        Modifier.pointerInput(selectedGenre) {
+                            detectHorizontalDragGestures(
+                                onDragStart = { genreSwipeX = 0f },
+                                onDragEnd = {
+                                    val idx = genres.indexOf(selectedGenre)
+                                    if (genreSwipeX > 95f && idx > 0) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        val prev = genres[idx - 1]
+                                        selectedGenre = prev
+                                        if (prev == "Semua") viewModel.loadTrending() else viewModel.loadGenreTracks(prev)
+                                    } else if (genreSwipeX < -95f && idx >= 0 && idx + 1 < genres.size) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        val next = genres[idx + 1]
+                                        selectedGenre = next
+                                        viewModel.loadGenreTracks(next)
+                                    }
+                                    genreSwipeX = 0f
+                                },
+                                onDragCancel = { genreSwipeX = 0f },
+                                onHorizontalDrag = { _, dragAmount ->
+                                    genreSwipeX += dragAmount
+                                }
+                            )
+                        }
+                    } else {
+                        Modifier
+                    }
+                )
         ) { activeGenre ->
         if (activeGenre != "Semua") {
             if (isLoadingGenre || isSearching) {
@@ -259,7 +299,8 @@ fun HomeScreen(
                             isLoading = isLoadingTrack && currentTrack?.id == track.id,
                             onClick = { viewModel.playTrack(track, genreTracks) },
                             onFavoriteClick = { viewModel.toggleFavorite(track) },
-                            onMoreClick = { trackForOptions = track }
+                            onMoreClick = { trackForOptions = track },
+                            onSwipeAddToQueue = { viewModel.addToQueue(track) }
                         )
                     }
                     item {
@@ -307,7 +348,13 @@ fun HomeScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { viewModel.playTrack(track, startListeningTracks) }
+                                .combinedClickable(
+                                    onClick = { viewModel.playTrack(track, startListeningTracks) },
+                                    onLongClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        trackForOptions = track
+                                    }
+                                )
                                 .padding(horizontal = 20.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -374,7 +421,13 @@ fun HomeScreen(
                                 Column(
                                     modifier = Modifier
                                         .width(152.dp)
-                                        .clickable { viewModel.playTrack(track, mixTracks) }
+                                        .combinedClickable(
+                                            onClick = { viewModel.playTrack(track, mixTracks) },
+                                            onLongClick = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                trackForOptions = track
+                                            }
+                                        )
                                 ) {
                                     Box(
                                         modifier = Modifier
@@ -464,7 +517,13 @@ fun HomeScreen(
                                                 .height(62.dp)
                                                 .clip(RoundedCornerShape(12.dp))
                                                 .background(colors.card)
-                                                .clickable { viewModel.playTrack(track, quickPicks) },
+                                                .combinedClickable(
+                                                    onClick = { viewModel.playTrack(track, quickPicks) },
+                                                    onLongClick = {
+                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                        trackForOptions = track
+                                                    }
+                                                ),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             AsyncImage(
@@ -516,7 +575,13 @@ fun HomeScreen(
                                 .padding(horizontal = 20.dp)
                                 .height(142.dp)
                                 .clip(RoundedCornerShape(16.dp))
-                                .clickable { viewModel.playTrack(featuredTrack, homeSections.firstOrNull { it.tracks.contains(featuredTrack) }?.tracks ?: homeTracks) }
+                                .combinedClickable(
+                                    onClick = { viewModel.playTrack(featuredTrack, homeSections.firstOrNull { it.tracks.contains(featuredTrack) }?.tracks ?: homeTracks) },
+                                    onLongClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        trackForOptions = featuredTrack
+                                    }
+                                )
                         ) {
                             AsyncImage(
                                 model = featuredTrack.thumbnailUrlForDisplay(640),
@@ -596,7 +661,7 @@ fun HomeScreen(
                                     track = track,
                                     isPlaying = currentTrack?.id == track.id,
                                     onClick = { viewModel.playTrack(track, section.tracks) },
-                                    onLongClick = { trackForPlaylist = track }
+                                    onLongClick = { trackForOptions = track }
                                 )
                             }
                         }
@@ -621,7 +686,8 @@ fun HomeScreen(
                         isLoading = isLoadingTrack && currentTrack?.id == track.id,
                         onClick = { viewModel.playTrack(track, trendingTracks) },
                         onFavoriteClick = { viewModel.toggleFavorite(track) },
-                        onMoreClick = { trackForOptions = track }
+                        onMoreClick = { trackForOptions = track },
+                        onSwipeAddToQueue = { viewModel.addToQueue(track) }
                     )
                 }
                 item {

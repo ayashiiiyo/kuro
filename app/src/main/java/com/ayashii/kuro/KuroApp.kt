@@ -1,8 +1,10 @@
 package com.ayashii.kuro
 
 import android.app.Application
+import android.app.LocaleManager
 import android.graphics.Bitmap
 import android.os.Build
+import android.os.LocaleList
 import android.os.Process
 import coil.ImageLoader
 import coil.ImageLoaderFactory
@@ -13,6 +15,7 @@ import com.ayashii.kuro.data.auth.AuthManager
 import com.ayashii.kuro.data.remote.KuroDownloader
 import okhttp3.OkHttpClient
 import org.schabi.newpipe.extractor.NewPipe
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 class KuroApp : Application(), ImageLoaderFactory {
@@ -26,9 +29,13 @@ class KuroApp : Application(), ImageLoaderFactory {
             val settings = com.ayashii.kuro.data.settings.SettingsManager.init(this)
             val savedLang = settings.language.value
             if (savedLang.code.isNotEmpty()) {
-                androidx.appcompat.app.AppCompatDelegate.setApplicationLocales(
-                    androidx.core.os.LocaleListCompat.forLanguageTags(savedLang.code)
-                )
+                val locale = settings.resolveEffectiveLocale(savedLang)
+                Locale.setDefault(locale)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    val tag = if (savedLang.code == "in") "id" else savedLang.code
+                    getSystemService(LocaleManager::class.java)?.applicationLocales =
+                        LocaleList.forLanguageTags(tag)
+                }
             }
         } catch (_: Throwable) {}
         try {

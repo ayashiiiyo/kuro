@@ -12,7 +12,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -33,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -58,6 +59,7 @@ import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.ui.theme.KuroAppTheme
 import com.ayashii.kuro.ui.theme.KuroMotion
 import com.ayashii.kuro.ui.theme.Typography
+import kotlin.math.abs
 
 @Composable
 fun MiniPlayer(
@@ -70,12 +72,15 @@ fun MiniPlayer(
     onSkipNextClick: () -> Unit,
     onSkipPreviousClick: (() -> Unit)? = null,
     onFavoriteClick: (() -> Unit)? = null,
+    onSwipeDown: (() -> Unit)? = null,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val colors = KuroAppTheme.colors
     val haptic = LocalHapticFeedback.current
     var dragOffsetX by remember { mutableFloatStateOf(0f) }
+    var dragOffsetY by remember { mutableFloatStateOf(0f) }
+    var lockedAxis by remember { mutableIntStateOf(0) }
 
     val animatedOffsetX by animateFloatAsState(
         targetValue = dragOffsetX,
@@ -83,7 +88,16 @@ fun MiniPlayer(
             dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessMedium
         ),
-        label = "mini_swipe_offset"
+        label = "mini_swipe_offset_x"
+    )
+
+    val animatedOffsetY by animateFloatAsState(
+        targetValue = dragOffsetY,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "mini_swipe_offset_y"
     )
 
     val solidContainerColor = if (colors.isDark) Color(0xFF0A0A0A) else Color(0xFFFFFFFF)
@@ -92,30 +106,84 @@ fun MiniPlayer(
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .graphicsLayer {
+                translationY = (animatedOffsetY * 0.35f).coerceIn(-28f, 20f)
+            }
             .shadow(elevation = 12.dp, shape = shape, clip = false)
             .clip(shape)
             .background(solidContainerColor)
             .border(1.dp, colors.border, shape)
             .clickable { onClick() }
-            .pointerInput(track.id) {
-                detectHorizontalDragGestures(
+            .pointerInput(track.id, isPlaying) {
+                detectDragGestures(
+                    onDragStart = {
+                        dragOffsetX = 0f
+                        dragOffsetY = 0f
+                        lockedAxis = 0
+                    },
                     onDragEnd = {
-                        if (dragOffsetX < -110f) {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            dragOffsetX = 0f
-                            onSkipNextClick()
-                        } else if (dragOffsetX > 110f && onSkipPreviousClick != null) {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            dragOffsetX = 0f
-                            onSkipPreviousClick()
+                        if (lockedAxis == 2) {
+                            if (dragOffsetY < -44f) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                dragOffsetX = 0f
+                                dragOffsetY = 0f
+                                lockedAxis = 0
+                                onClick()
+                            } else if (dragOffsetY > 48f) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                dragOffsetX = 0f
+                                dragOffsetY = 0f
+                                lockedAxis = 0
+                                if (onSwipeDown != null) {
+                                    onSwipeDown()
+                                } else if (isPlaying) {
+                                    onPlayPauseClick()
+                                }
+                            } else {
+                                dragOffsetX = 0f
+                                dragOffsetY = 0f
+                                lockedAxis = 0
+                            }
                         } else {
-                            dragOffsetX = 0f
+                            if (dragOffsetX < -95f) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                dragOffsetX = 0f
+                                dragOffsetY = 0f
+                                lockedAxis = 0
+                                onSkipNextClick()
+                            } else if (dragOffsetX > 95f && onSkipPreviousClick != null) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                dragOffsetX = 0f
+                                dragOffsetY = 0f
+                                lockedAxis = 0
+                                onSkipPreviousClick()
+                            } else {
+                                dragOffsetX = 0f
+                                dragOffsetY = 0f
+                                lockedAxis = 0
+                            }
                         }
                     },
-                    onDragCancel = { dragOffsetX = 0f },
-                    onHorizontalDrag = { change, dragAmount ->
-                        dragOffsetX = (dragOffsetX + dragAmount).coerceIn(-180f, 180f)
-                        change.consume()
+                    onDragCancel = {
+                        dragOffsetX = 0f
+                        dragOffsetY = 0f
+                        lockedAxis = 0
+                    },
+                    onDrag = { change, dragAmount ->
+                        if (lockedAxis == 0) {
+                            val nextX = dragOffsetX + dragAmount.x
+                            val nextY = dragOffsetY + dragAmount.y
+                            if (abs(nextX) > 10f || abs(nextY) > 10f) {
+                                lockedAxis = if (abs(nextY) > abs(nextX) * 1.15f) 2 else 1
+                            }
+                        }
+                        if (lockedAxis == 2) {
+                            dragOffsetY = (dragOffsetY + dragAmount.y).coerceIn(-140f, 120f)
+                            change.consume()
+                        } else {
+                            dragOffsetX = (dragOffsetX + dragAmount.x).coerceIn(-180f, 180f)
+                            change.consume()
+                        }
                     }
                 )
             }
