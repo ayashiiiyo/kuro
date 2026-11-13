@@ -72,7 +72,7 @@
     <string name="lib_songs_count">%1$d lagu</string>
     <string name="lib_enter_name">Beri Nama Playlist</string>
     <string name="lib_delete_title">Hapus Playlist?</string>
-    <string name="lib_delete_confirm">Playlist "%1$s" beserta %2$d lagu di dalamnya akan dihapus secara permanen.</string>
+    <string name="lib_delete_confirm">Playlist \"%1$s\" beserta %2$d lagu di dalamnya akan dihapus secara permanen.</string>
     <string name="lib_playlist_empty">Playlist ini masih kosong. Tambahkan lagu dari pencarian atau beranda!</string>
     <string name="lib_cancel">Batal</string>
     <string name="lib_delete">Hapus</string>

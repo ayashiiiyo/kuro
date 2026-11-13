@@ -72,7 +72,7 @@
     <string name="lib_songs_count">%1$d songs</string>
     <string name="lib_enter_name">Playlist Name</string>
     <string name="lib_delete_title">Delete Playlist?</string>
-    <string name="lib_delete_confirm">Playlist "%1$s" and its %2$d songs will be permanently deleted.</string>
+    <string name="lib_delete_confirm">Playlist \"%1$s\" and its %2$d songs will be permanently deleted.</string>
     <string name="lib_playlist_empty">This playlist is empty. Add songs from search or home!</string>
     <string name="lib_cancel">Cancel</string>
     <string name="lib_delete">Delete</string>
@@ -157,7 +157,7 @@
 
     <!-- Update Dialog -->
     <string name="update_available">Update Available</string>
-    <string name="update_whats_new">What's new:</string>
+    <string name="update_whats_new">What\'s new:</string>
     <string name="update_later">Later</string>
     <string name="update_now">Update</string>
 
