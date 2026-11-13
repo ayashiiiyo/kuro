@@ -123,10 +123,8 @@ fun SearchScreen(
             SearchCategoryItem("Music", "Pop Music", Color(0xFFE13300)),
             SearchCategoryItem("Podcasts", "Podcast", Color(0xFF006450)),
             SearchCategoryItem("Live Events", "Live Concert", Color(0xFF8400E7)),
-            SearchCategoryItem("K-Pop ON!
-(온) Hub", "K-Pop Hits", Color(0xFF1E3264)),
-            SearchCategoryItem("Made For
-You", "Top Trending Hits", Color(0xFF8D67AB)),
+            SearchCategoryItem("K-Pop ON!\n(온) Hub", "K-Pop Hits", Color(0xFF1E3264)),
+            SearchCategoryItem("Made For\nYou", "Top Trending Hits", Color(0xFF8D67AB)),
             SearchCategoryItem("Indie & Alt", "Indie Alternative", Color(0xFFBA5D07)),
             SearchCategoryItem("Charts", "Top 50", Color(0xFF8C1932)),
             SearchCategoryItem("Discover", "New Music", Color(0xFF503750))
