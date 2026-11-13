@@ -19,3 +19,4 @@ app/build
 app/*.keystore
 .agents/
 
+__pycache__/
