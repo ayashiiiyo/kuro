@@ -333,10 +333,13 @@ class PlaybackService : MediaSessionService() {
                         repository.evictStreamUrl(current.url)
                     } catch (_: Throwable) {}
                 }
+                val failedTrackId = current?.id
                 servicePlayJob?.cancel()
                 servicePlayJob = serviceScope.launch {
                     delay(650L)
-                    if (exoPlayer.playbackState == Player.STATE_IDLE && !exoPlayer.isPlaying) {
+                    if (PlayerQueueManager.currentTrack.value?.id == failedTrackId &&
+                        exoPlayer.playbackState == Player.STATE_IDLE && !exoPlayer.isPlaying
+                    ) {
                         val failureCount = PlayerQueueManager.recordPlaybackFailure()
                         if (failureCount < 3) {
                             val nextTrack = PlayerQueueManager.getNextTrack(userInitiated = false, isErrorRecovery = true)

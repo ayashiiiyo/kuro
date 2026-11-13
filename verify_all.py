@@ -893,6 +893,25 @@ suite.assert_true(
     "Missing one or more APK size compression or auto-ABI update components"
 )
 
+
+theme_kt = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/theme/Theme.kt")
+taste_mgr = suite.read_file("app/src/main/java/com/ayashii/kuro/data/recommendation/TasteManager.kt")
+apple01_check = (
+    "appleFluidSpring" in theme_kt
+    and "appleSnappySpring" in theme_kt
+    and "artworkBreathingScale" in suite.read_file("app/src/main/java/com/ayashii/kuro/ui/components/FullPlayerSheet.kt")
+    and "lineOffsetX" in suite.read_file("app/src/main/java/com/ayashii/kuro/ui/components/FullScreenLyricsSheet.kt")
+    and "miniArtScale" in suite.read_file("app/src/main/java/com/ayashii/kuro/ui/components/MiniPlayer.kt")
+    and "bgRecedeScale" in suite.read_file("app/src/main/java/com/ayashii/kuro/MainActivity.kt")
+    and "20000L" in taste_mgr
+)
+suite.assert_true(
+    apple01_check,
+    "APPLE-MOTION-01",
+    "Apple-style motion-only upgrade: artwork breathing, cascading depth lyrics, 3D modal recession, spring nav physics, and play-count dedup",
+    "Missing one or more Apple motion or v3.8.12 bug-fix components"
+)
+
 # ==============================================================================
 # SUMMARY & VERDICT
 # ==============================================================================

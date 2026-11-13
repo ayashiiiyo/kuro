@@ -80,6 +80,7 @@ import com.ayashii.kuro.data.lyrics.LyricsData
 import com.ayashii.kuro.data.settings.SettingsManager
 import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.ui.theme.KuroAppTheme
+import com.ayashii.kuro.ui.theme.KuroMotion
 import com.ayashii.kuro.ui.theme.Typography
 import com.ayashii.kuro.ui.theme.rememberDynamicDominantColor
 import com.ayashii.kuro.viewmodel.MusicViewModel
@@ -125,7 +126,7 @@ fun FullScreenLyricsSheet(
     var isDraggingSheet by remember { mutableStateOf(false) }
     var isDismissingSheet by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(track.id) {
         dragOffsetY = 0f
         isDraggingSheet = false
         isDismissingSheet = false
@@ -423,15 +424,38 @@ fun FullScreenLyricsSheet(
                             key = { idx, item -> "${idx}_${item.timeMs}" }
                         ) { index, line ->
                             val isActive = index == activeIndex
+                            val distance = kotlin.math.abs(index - activeIndex)
+                            val targetScale = when {
+                                isActive -> 1.0f
+                                distance == 1 -> 0.89f
+                                distance == 2 -> 0.84f
+                                else -> 0.80f
+                            }
+                            val targetAlpha = when {
+                                isActive -> 1.0f
+                                distance == 1 -> 0.56f
+                                distance == 2 -> 0.34f
+                                else -> 0.18f
+                            }
                             val lineScale by animateFloatAsState(
-                                targetValue = if (isActive) 1.0f else 0.80f,
-                                animationSpec = tween(260, easing = FastOutSlowInEasing),
+                                targetValue = targetScale,
+                                animationSpec = KuroMotion.appleFluidSpring(),
                                 label = "lyrics_font_size"
+                            )
+                            val lineAlpha by animateFloatAsState(
+                                targetValue = targetAlpha,
+                                animationSpec = KuroMotion.appleFluidSpring(),
+                                label = "lyrics_line_alpha"
+                            )
+                            val lineOffsetX by animateFloatAsState(
+                                targetValue = if (isActive) 6f else 0f,
+                                animationSpec = KuroMotion.appleFluidSpring(),
+                                label = "lyrics_line_offset_x"
                             )
 
                             val textColor by animateColorAsState(
-                                targetValue = if (isActive) colors.textPrimary else colors.textSecondary.copy(alpha = 0.35f),
-                                animationSpec = tween(280, easing = FastOutSlowInEasing),
+                                targetValue = if (isActive) colors.textPrimary else colors.textSecondary,
+                                animationSpec = tween(240, easing = FastOutSlowInEasing),
                                 label = "lyrics_color"
                             )
 
@@ -441,6 +465,8 @@ fun FullScreenLyricsSheet(
                                     .graphicsLayer {
                                         scaleX = lineScale
                                         scaleY = lineScale
+                                        alpha = lineAlpha
+                                        translationX = lineOffsetX
                                         transformOrigin = TransformOrigin(0f, 0.5f)
                                     }
                                     .clickable {

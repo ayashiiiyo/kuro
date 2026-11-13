@@ -1094,8 +1094,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             val playedSec = (System.currentTimeMillis() - trackStartTime) / 1000L
             if (playedSec in 1..14) {
                 tasteManager.recordTrackSkipped(current)
-            } else if (playedSec >= 25) {
-                tasteManager.recordTrackPlayed(current)
             }
         }
         if (repeatMode.value == Player.REPEAT_MODE_ONE && !userInitiated && !isErrorRecovery) {
@@ -1128,8 +1126,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         val current = _currentTrack.value
         if (current != null && trackStartTime > 0L) {
             val playedSec = (System.currentTimeMillis() - trackStartTime) / 1000L
-            if (playedSec >= 25) {
-                tasteManager.recordTrackPlayed(current)
+            if (playedSec in 1..14) {
+                tasteManager.recordTrackSkipped(current)
             }
         }
         val prevTrack = queueManager.getPreviousTrack()

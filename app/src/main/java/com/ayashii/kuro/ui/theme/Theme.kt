@@ -1,6 +1,8 @@
 package com.ayashii.kuro.ui.theme
 
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.SpringSpec
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
@@ -18,9 +20,25 @@ import com.ayashii.kuro.data.settings.SettingsManager
 import com.ayashii.kuro.data.settings.ThemeMode
 
 object KuroMotion {
-    val EmphasizedDecelerate = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1.0f)
-    val EmphasizedAccelerate = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)
-    val StandardEasing = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)
+    val EmphasizedDecelerate = CubicBezierEasing(0.22f, 1.0f, 0.36f, 1.0f)
+    val EmphasizedAccelerate = CubicBezierEasing(0.32f, 0.0f, 0.67f, 0.0f)
+    val StandardEasing = CubicBezierEasing(0.25f, 0.1f, 0.25f, 1.0f)
+    val AppleDecelerate = CubicBezierEasing(0.22f, 1.0f, 0.36f, 1.0f)
+
+    fun <T> appleFluidSpring(): SpringSpec<T> = spring(
+        dampingRatio = 0.78f,
+        stiffness = 380f
+    )
+
+    fun <T> appleSnappySpring(): SpringSpec<T> = spring(
+        dampingRatio = 0.82f,
+        stiffness = 520f
+    )
+
+    fun <T> appleInteractiveSpring(): SpringSpec<T> = spring(
+        dampingRatio = 0.86f,
+        stiffness = 680f
+    )
 }
 
 @Immutable

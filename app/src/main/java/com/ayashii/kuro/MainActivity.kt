@@ -205,9 +205,26 @@ fun MainAppScreen(viewModel: MusicViewModel) {
     }
 
     val colors = KuroAppTheme.colors
+    val bgRecedeScale by animateFloatAsState(
+        targetValue = if (isExpanded && currentTrack != null) 0.94f else 1.0f,
+        animationSpec = KuroMotion.appleFluidSpring(),
+        label = "apple_bg_recede_scale"
+    )
+    val bgRecedeAlpha by animateFloatAsState(
+        targetValue = if (isExpanded && currentTrack != null) 0.76f else 1.0f,
+        animationSpec = KuroMotion.appleFluidSpring(),
+        label = "apple_bg_recede_alpha"
+    )
 
     Box(modifier = Modifier.fillMaxSize().background(colors.background)) {
         Scaffold(
+            modifier = Modifier.graphicsLayer {
+                scaleX = bgRecedeScale
+                scaleY = bgRecedeScale
+                alpha = bgRecedeAlpha
+                clip = bgRecedeScale < 0.995f
+                shape = RoundedCornerShape(((1f - bgRecedeScale) * 420f).dp)
+            },
             containerColor = colors.background,
             bottomBar = {
                 Box(
@@ -262,12 +279,12 @@ fun MainAppScreen(viewModel: MusicViewModel) {
                             val selected = currentRoute == screen.route
                             val itemAlpha by animateFloatAsState(
                                 targetValue = if (selected) 1f else 0.56f,
-                                animationSpec = tween(durationMillis = 240, easing = KuroMotion.EmphasizedDecelerate),
+                                animationSpec = KuroMotion.appleSnappySpring(),
                                 label = "nav_item_alpha"
                             )
                             val itemScale by animateFloatAsState(
-                                targetValue = if (selected) 1.04f else 0.96f,
-                                animationSpec = tween(durationMillis = 240, easing = KuroMotion.EmphasizedDecelerate),
+                                targetValue = if (selected) 1.06f else 0.94f,
+                                animationSpec = KuroMotion.appleSnappySpring(),
                                 label = "nav_item_scale"
                             )
                             val interactionSource = remember { MutableInteractionSource() }

@@ -100,6 +100,11 @@ fun MiniPlayer(
         label = "mini_swipe_offset_y"
     )
 
+    val miniArtScale by animateFloatAsState(
+        targetValue = if (isPlaying) 1.0f else 0.90f,
+        animationSpec = KuroMotion.appleFluidSpring(),
+        label = "mini_art_breathing"
+    )
     val solidContainerColor = if (colors.isDark) Color(0xFF0A0A0A) else Color(0xFFFFFFFF)
     val shape = RoundedCornerShape(14.dp)
 
@@ -215,6 +220,10 @@ fun MiniPlayer(
                         contentDescription = animatedTrack.title,
                         modifier = Modifier
                             .size(44.dp)
+                            .graphicsLayer {
+                                scaleX = miniArtScale
+                                scaleY = miniArtScale
+                            }
                             .clip(RoundedCornerShape(10.dp))
                             .background(colors.card),
                         contentScale = ContentScale.Crop

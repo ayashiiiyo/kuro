@@ -45,7 +45,7 @@ class TasteManager private constructor(context: Context) {
     @Synchronized
     fun recordTrackPlayed(track: Track) {
         val now = System.currentTimeMillis()
-        if (track.id == lastRecordedPlayId && (now - lastRecordedPlayTimestamp) < 2500L) {
+        if (track.id == lastRecordedPlayId && (now - lastRecordedPlayTimestamp) < 20000L) {
             return
         }
         lastRecordedPlayId = track.id
@@ -69,6 +69,14 @@ class TasteManager private constructor(context: Context) {
 
     @Synchronized
     fun recordTrackSkipped(track: Track) {
+        val now = System.currentTimeMillis()
+        if (track.id == lastRecordedPlayId && (now - lastRecordedPlayTimestamp) < 15000L) {
+            val currentPlays = playsMap[track.id] ?: 0
+            if (currentPlays > 0) {
+                playsMap[track.id] = currentPlays - 1
+            }
+            lastRecordedPlayId = null
+        }
         updateTrackScore(track, deltaScore = -2, isPlay = false)
         refreshOnRepeat()
     }

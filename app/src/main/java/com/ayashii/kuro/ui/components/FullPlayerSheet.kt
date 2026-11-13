@@ -147,12 +147,18 @@ fun FullPlayerSheet(
     var artworkDragX by remember { mutableFloatStateOf(0f) }
     var showHeartBurst by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(track.id, showFullScreenLyrics) {
         dragOffsetY = 0f
         isDraggingSheet = false
         isDismissingSheet = false
         pullUpLyricsY = 0f
     }
+
+    val artworkBreathingScale by animateFloatAsState(
+        targetValue = if (isPlaying) 1.0f else 0.86f,
+        animationSpec = KuroMotion.appleFluidSpring(),
+        label = "apple_artwork_breathing"
+    )
 
     LaunchedEffect(showHeartBurst) {
         if (showHeartBurst) {
@@ -237,6 +243,8 @@ fun FullPlayerSheet(
                         pullUpLyricsY = (pullUpLyricsY - available.y).coerceAtMost(180f)
                         if (pullUpLyricsY > 72f && !showFullScreenLyrics) {
                             pullUpLyricsY = 0f
+                            dragOffsetY = 0f
+                            isDraggingSheet = false
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             showFullScreenLyrics = true
                         }
@@ -420,6 +428,8 @@ fun FullPlayerSheet(
                         .fillMaxWidth(0.92f)
                         .aspectRatio(1f)
                         .graphicsLayer {
+                            scaleX = artworkBreathingScale
+                            scaleY = artworkBreathingScale
                             translationX = animatedArtworkX * 0.45f
                             rotationZ = (animatedArtworkX / 38f).coerceIn(-6f, 6f)
                         }
