@@ -77,10 +77,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -89,6 +93,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.Player
@@ -98,6 +103,7 @@ import com.ayashii.kuro.R
 import com.ayashii.kuro.data.lyrics.LyricsData
 import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.ui.theme.KuroAppTheme
+import com.ayashii.kuro.ui.theme.KuroMotion
 import com.ayashii.kuro.ui.theme.Typography
 import com.ayashii.kuro.ui.theme.rememberDynamicDominantColor
 import com.ayashii.kuro.viewmodel.MusicViewModel
@@ -135,8 +141,18 @@ fun FullPlayerSheet(
     var showTranslationInPreview by rememberSaveable { mutableStateOf(true) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     var lastDragDeltaY by remember { mutableFloatStateOf(0f) }
+    var isDraggingSheet by remember { mutableStateOf(false) }
+    var isDismissingSheet by remember { mutableStateOf(false) }
+    var pullUpLyricsY by remember { mutableFloatStateOf(0f) }
     var artworkDragX by remember { mutableFloatStateOf(0f) }
     var showHeartBurst by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        dragOffsetY = 0f
+        isDraggingSheet = false
+        isDismissingSheet = false
+        pullUpLyricsY = 0f
+    }
 
     LaunchedEffect(showHeartBurst) {
         if (showHeartBurst) {
@@ -145,14 +161,15 @@ fun FullPlayerSheet(
         }
     }
 
-    val animatedDragY by animateFloatAsState(
+    val settledDragY by animateFloatAsState(
         targetValue = dragOffsetY,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMediumLow
+            stiffness = Spring.StiffnessMedium
         ),
         label = "sheet_drag_offset"
     )
+    val animatedDragY = if (isDraggingSheet || isDismissingSheet) dragOffsetY else settledDragY
 
     val animatedArtworkX by animateFloatAsState(
         targetValue = artworkDragX,
@@ -187,77 +204,121 @@ fun FullPlayerSheet(
         )
     }
 
-    val dismissProgress = (animatedDragY.coerceAtLeast(0f) / 520f).coerceIn(0f, 1f)
+    val hasLyricsAvailable = currentLyrics != null && currentLyrics!!.lines.isNotEmpty()
+    val sheetClipShape = remember { RoundedCornerShape(28.dp) }
+    val nestedScrollConnection = remember(scrollState, hasLyricsAvailable) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (source == NestedScrollSource.Drag && dragOffsetY > 0f) {
+                    val nextOffset = (dragOffsetY + available.y).coerceAtLeast(0f)
+                    val consumedY = nextOffset - dragOffsetY
+                    dragOffsetY = nextOffset
+                    lastDragDeltaY = available.y
+                    isDraggingSheet = nextOffset > 0f
+                    return Offset(0f, consumedY)
+                }
+                if (source == NestedScrollSource.Drag && pullUpLyricsY > 0f && available.y > 0f) {
+                    val nextPull = (pullUpLyricsY - available.y).coerceAtLeast(0f)
+                    val consumedY = pullUpLyricsY - nextPull
+                    pullUpLyricsY = nextPull
+                    return Offset(0f, consumedY)
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (source == NestedScrollSource.Drag) {
+                    if (available.y > 0f && scrollState.value == 0) {
+                        isDraggingSheet = true
+                        lastDragDeltaY = available.y
+                        dragOffsetY = (dragOffsetY + available.y).coerceAtLeast(0f)
+                        return Offset(0f, available.y)
+                    } else if (available.y < 0f && scrollState.value >= scrollState.maxValue && hasLyricsAvailable) {
+                        pullUpLyricsY = (pullUpLyricsY - available.y).coerceAtMost(180f)
+                        if (pullUpLyricsY > 72f && !showFullScreenLyrics) {
+                            pullUpLyricsY = 0f
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            showFullScreenLyrics = true
+                        }
+                        return Offset(0f, available.y)
+                    }
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                pullUpLyricsY = 0f
+                if (dragOffsetY > 0f) {
+                    val shouldDismiss = dragOffsetY > 105f || available.y > 620f || (dragOffsetY > 34f && lastDragDeltaY > 11f)
+                    isDraggingSheet = false
+                    lastDragDeltaY = 0f
+                    if (shouldDismiss) {
+                        isDismissingSheet = true
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onDismiss()
+                    } else {
+                        dragOffsetY = 0f
+                    }
+                    return available
+                }
+                if (available.y < -1100f && scrollState.value >= scrollState.maxValue && hasLyricsAvailable && !showFullScreenLyrics) {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    showFullScreenLyrics = true
+                    return available
+                }
+                return Velocity.Zero
+            }
+        }
+    }
 
     Box(
         modifier = modifier
             .fillMaxSize()
             .graphicsLayer {
-                translationY = animatedDragY.coerceAtLeast(0f)
+                val currentY = animatedDragY.coerceAtLeast(0f)
+                val dismissProgress = (currentY / 520f).coerceIn(0f, 1f)
+                translationY = currentY
                 val sheetScale = 1f - (dismissProgress * 0.07f)
                 scaleX = sheetScale
                 scaleY = sheetScale
                 alpha = 1f - (dismissProgress * 0.22f)
+                shape = sheetClipShape
+                clip = currentY > 0.5f
             }
-            .clip(RoundedCornerShape((dismissProgress * 28f).dp))
             .background(baseBg)
             .background(ambientGradient)
+            .nestedScroll(nestedScrollConnection)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .navigationBarsPadding()
-                .pointerInput(Unit) {
-                    detectVerticalDragGestures(
-                        onDragStart = {
-                            dragOffsetY = 0f
-                            lastDragDeltaY = 0f
-                        },
-                        onDragEnd = {
-                            val shouldDismiss = scrollState.value == 0 &&
-                                (dragOffsetY > 105f || (dragOffsetY > 36f && lastDragDeltaY > 13f))
-                            dragOffsetY = 0f
-                            lastDragDeltaY = 0f
-                            if (shouldDismiss) {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                onDismiss()
-                            }
-                        },
-                        onDragCancel = {
-                            dragOffsetY = 0f
-                            lastDragDeltaY = 0f
-                        },
-                        onVerticalDrag = { change, dragAmount ->
-                            if (scrollState.value == 0 && (dragAmount > 0 || dragOffsetY > 0f)) {
-                                lastDragDeltaY = dragAmount
-                                dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
-                                change.consume()
-                            }
-                        }
-                    )
-                }
                 .verticalScroll(scrollState)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .statusBarsPadding()
-                    .pointerInput(Unit) {
+                    .pointerInput(hasLyricsAvailable) {
                         detectVerticalDragGestures(
                             onDragStart = {
-                                dragOffsetY = 0f
+                                isDraggingSheet = true
                                 lastDragDeltaY = 0f
                             },
                             onDragEnd = {
                                 val shouldDismiss = dragOffsetY > 90f || (dragOffsetY > 30f && lastDragDeltaY > 11f)
-                                dragOffsetY = 0f
+                                isDraggingSheet = false
                                 lastDragDeltaY = 0f
                                 if (shouldDismiss) {
+                                    isDismissingSheet = true
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     onDismiss()
+                                } else {
+                                    dragOffsetY = 0f
                                 }
                             },
                             onDragCancel = {
+                                isDraggingSheet = false
                                 dragOffsetY = 0f
                                 lastDragDeltaY = 0f
                             },
@@ -265,6 +326,11 @@ fun FullPlayerSheet(
                                 if (dragAmount > 0 || dragOffsetY > 0f) {
                                     lastDragDeltaY = dragAmount
                                     dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
+                                    change.consume()
+                                } else if (dragAmount < -18f && hasLyricsAvailable && !showFullScreenLyrics) {
+                                    isDraggingSheet = false
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    showFullScreenLyrics = true
                                     change.consume()
                                 }
                             }
@@ -715,12 +781,12 @@ fun FullPlayerSheet(
 
         AnimatedVisibility(
             visible = showFullScreenLyrics,
-            enter = fadeIn(tween(220)) + slideInVertically(
-                animationSpec = tween(280),
+            enter = fadeIn(tween(200, easing = KuroMotion.EmphasizedDecelerate)) + slideInVertically(
+                animationSpec = tween(250, easing = KuroMotion.EmphasizedDecelerate),
                 initialOffsetY = { it }
             ),
-            exit = fadeOut(tween(200)) + slideOutVertically(
-                animationSpec = tween(260),
+            exit = fadeOut(tween(170, easing = KuroMotion.EmphasizedDecelerate)) + slideOutVertically(
+                animationSpec = tween(210, easing = KuroMotion.EmphasizedDecelerate),
                 targetOffsetY = { it }
             )
         ) {
@@ -856,6 +922,7 @@ private fun LyricsPreviewCard(
                 )
             )
             .border(1.dp, androidx.compose.ui.graphics.lerp(colors.border, dominantColor, 0.35f), RoundedCornerShape(20.dp))
+            .clickable(onClick = onExpandLyrics)
             .padding(18.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {

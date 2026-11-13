@@ -142,5 +142,12 @@ fn upgrade_thumbnail(raw: &str) -> String {
             return format!("{}=w1080-h1080-l90-rj", u);
         }
     }
+    if u.contains("ytimg.com") {
+        return u
+            .replace("/default.jpg", "/hqdefault.jpg")
+            .replace("/default.webp", "/hqdefault.webp")
+            .replace("/mqdefault.jpg", "/hqdefault.jpg")
+            .replace("/mqdefault.webp", "/hqdefault.webp");
+    }
     u
 }

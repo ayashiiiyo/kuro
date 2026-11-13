@@ -3,9 +3,13 @@ package com.ayashii.kuro.data.playlist
 import android.content.Context
 import android.content.SharedPreferences
 import com.ayashii.kuro.data.model.Track
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -20,6 +24,7 @@ data class Playlist(
 class PlaylistManager private constructor(context: Context) {
 
     private val prefs: SharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val _playlists = MutableStateFlow<List<Playlist>>(emptyList())
     val playlists: StateFlow<List<Playlist>> = _playlists.asStateFlow()
 
@@ -63,29 +68,34 @@ class PlaylistManager private constructor(context: Context) {
 
     private fun savePlaylists(list: List<Playlist>) {
         _playlists.value = list
-        val arr = JSONArray()
-        for (p in list) {
-            val pObj = JSONObject().apply {
-                put("id", p.id)
-                put("name", p.name)
-                put("createdAt", p.createdAt)
-                val tArr = JSONArray()
-                for (t in p.tracks) {
-                    val tObj = JSONObject().apply {
-                        put("id", t.id)
-                        put("url", t.url)
-                        put("title", t.title)
-                        put("artist", t.artist)
-                        put("thumbnailUrl", t.thumbnailUrl)
-                        put("durationSeconds", t.durationSeconds)
+        val snapshot = ArrayList(list)
+        ioScope.launch {
+            try {
+                val arr = JSONArray()
+                for (p in snapshot) {
+                    val pObj = JSONObject().apply {
+                        put("id", p.id)
+                        put("name", p.name)
+                        put("createdAt", p.createdAt)
+                        val tArr = JSONArray()
+                        for (t in p.tracks) {
+                            val tObj = JSONObject().apply {
+                                put("id", t.id)
+                                put("url", t.url)
+                                put("title", t.title)
+                                put("artist", t.artist)
+                                put("thumbnailUrl", t.thumbnailUrl)
+                                put("durationSeconds", t.durationSeconds)
+                            }
+                            tArr.put(tObj)
+                        }
+                        put("tracks", tArr)
                     }
-                    tArr.put(tObj)
+                    arr.put(pObj)
                 }
-                put("tracks", tArr)
-            }
-            arr.put(pObj)
+                prefs.edit().putString(KEY_PLAYLISTS, arr.toString()).apply()
+            } catch (_: Exception) {}
         }
-        prefs.edit().putString(KEY_PLAYLISTS, arr.toString()).apply()
     }
 
     @Synchronized

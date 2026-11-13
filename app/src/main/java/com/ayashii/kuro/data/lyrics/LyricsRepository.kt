@@ -146,8 +146,10 @@ class LyricsRepository(private val context: Context) {
             }
 
             synchronized(memCache) {
-                memCache.put(cacheKey, lyrics)
                 memCache.put(trackId, lyrics)
+                if (autoTranslate) {
+                    memCache.put(cacheKey, lyrics)
+                }
             }
         } else {
             val liriqoVerifiedEmpty = liriqoResult is LyricsFetchResult.Empty
@@ -242,9 +244,9 @@ class LyricsRepository(private val context: Context) {
                 .get()
                 .build()
 
-            val response = httpClient.newCall(request).execute()
-            val code = response.code
-            val body = response.body?.string()
+            val (code, body) = httpClient.newCall(request).execute().use { resp ->
+                resp.code to resp.body?.string()
+            }
 
             if (code == 200 && !body.isNullOrBlank()) {
                 val lyricsData = com.ayashii.kuro.data.native.KuroNativeCore.parseLiriqo(

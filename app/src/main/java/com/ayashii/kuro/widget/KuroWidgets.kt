@@ -379,10 +379,11 @@ class KuroWidgetActionReceiver : android.content.BroadcastReceiver() {
     }
 
     private fun toggleFavorite(context: Context, controller: MediaController) {
-        val metadata = controller.currentMediaItem?.mediaMetadata ?: return
+        val persisted = loadPersistedTrack(context)
+        val metadata = controller.currentMediaItem?.mediaMetadata
+        val id = controller.currentMediaItem?.mediaId?.takeIf { it.isNotBlank() } ?: persisted?.id ?: return
         val prefs = context.getSharedPreferences("kuro_favorites", Context.MODE_PRIVATE)
         val array = try { org.json.JSONArray(prefs.getString("fav_list", "[]")) } catch (_: Exception) { org.json.JSONArray() }
-        val id = controller.currentMediaItem?.mediaId ?: return
         val match = (0 until array.length()).firstOrNull { array.optJSONObject(it)?.optString("id") == id }
         val isNowLiked = match == null
         if (match != null) {
@@ -390,16 +391,26 @@ class KuroWidgetActionReceiver : android.content.BroadcastReceiver() {
             for (index in 0 until array.length()) if (index != match) next.put(array.getJSONObject(index))
             prefs.edit().putString("fav_list", next.toString()).apply()
         } else {
-            array.put(org.json.JSONObject().apply {
+            val newEntry = org.json.JSONObject().apply {
                 put("id", id)
-                put("url", metadata.extras?.getString(WIDGET_SOURCE_URL_KEY)
-                    ?: controller.currentMediaItem?.localConfiguration?.uri?.toString().orEmpty())
-                put("title", metadata.title?.toString().orEmpty())
-                put("artist", metadata.artist?.toString().orEmpty())
-                put("thumbnailUrl", metadata.artworkUri?.toString().orEmpty())
-                put("durationSeconds", (controller.duration.coerceAtLeast(0) / 1000L))
-            })
-            prefs.edit().putString("fav_list", array.toString()).apply()
+                put("url", metadata?.extras?.getString(WIDGET_SOURCE_URL_KEY)
+                    ?: controller.currentMediaItem?.localConfiguration?.uri?.toString()
+                    ?: persisted?.url.orEmpty())
+                put("title", metadata?.title?.toString() ?: persisted?.title.orEmpty())
+                put("artist", metadata?.artist?.toString() ?: persisted?.artist.orEmpty())
+                put("thumbnailUrl", metadata?.artworkUri?.toString() ?: persisted?.thumbnailUrl.orEmpty())
+                put("durationSeconds", (controller.duration.takeIf { it > 0 }?.div(1000L)) ?: persisted?.durationSeconds ?: 0L)
+            }
+            val next = org.json.JSONArray()
+            next.put(newEntry)
+            for (index in 0 until array.length()) next.put(array.getJSONObject(index))
+            prefs.edit().putString("fav_list", next.toString()).apply()
+        }
+        if (persisted != null && persisted.id == id) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_TRACK, encodeTrack(persisted.copy(isFavorite = isNowLiked)))
+                .apply()
         }
         context.sendBroadcast(Intent(WIDGET_FAVORITES_CHANGED).setPackage(context.packageName))
         WidgetRenderer.scope.launch(Dispatchers.IO) {

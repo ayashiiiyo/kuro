@@ -25,6 +25,9 @@ class TasteManager private constructor(context: Context) {
     private val _onRepeatTracks = MutableStateFlow<List<Track>>(emptyList())
     val onRepeatTracks: StateFlow<List<Track>> = _onRepeatTracks.asStateFlow()
 
+    private val _statsVersion = MutableStateFlow(0L)
+    val statsVersion: StateFlow<Long> = _statsVersion.asStateFlow()
+
     private val scoresMap = ConcurrentHashMap<String, Int>()
     private val playsMap = ConcurrentHashMap<String, Int>()
     private val trackDataMap = ConcurrentHashMap<String, Track>()
@@ -93,6 +96,7 @@ class TasteManager private constructor(context: Context) {
             }
         }
 
+        _statsVersion.value = _statsVersion.value + 1L
         persistTasteDataAsync()
     }
 
@@ -241,6 +245,7 @@ class TasteManager private constructor(context: Context) {
             }
 
             refreshOnRepeat()
+            _statsVersion.value = _statsVersion.value + 1L
         } catch (_: Exception) {}
     }
 
@@ -299,9 +304,12 @@ class TasteManager private constructor(context: Context) {
 
     fun getUniqueArtistsCount(): Int {
         val artists = mutableSetOf<String>()
-        trackDataMap.values.forEach {
-            val a = it.artist.trim()
-            if (a.isNotBlank()) artists.add(a)
+        trackDataMap.forEach { (id, track) ->
+            val count = playsMap[id] ?: 0
+            val a = track.artist.trim()
+            if (count > 0 && a.isNotBlank() && a != "Unknown Artist") {
+                artists.add(a.lowercase())
+            }
         }
         return artists.size
     }

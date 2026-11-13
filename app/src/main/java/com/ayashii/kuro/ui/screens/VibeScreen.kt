@@ -113,9 +113,10 @@ fun VibeScreen(
         viewModel.tasteManager.rankRadioTracks(base).ifEmpty { trendingTracks }
     }
 
-    val totalPlays = remember(recentlyPlayed, onRepeatTracks) { viewModel.tasteManager.getTotalPlays() }
-    val uniqueArtists = remember(recentlyPlayed, onRepeatTracks) { viewModel.tasteManager.getUniqueArtistsCount() }
-    val topArtists = remember(recentlyPlayed, onRepeatTracks) { viewModel.tasteManager.getTopArtists(5) }
+    val statsVersion by viewModel.tasteManager.statsVersion.collectAsState()
+    val totalPlays = remember(statsVersion, recentlyPlayed, onRepeatTracks) { viewModel.tasteManager.getTotalPlays() }
+    val uniqueArtists = remember(statsVersion, recentlyPlayed, onRepeatTracks) { viewModel.tasteManager.getUniqueArtistsCount() }
+    val topArtists = remember(statsVersion, recentlyPlayed, onRepeatTracks) { viewModel.tasteManager.getTopArtists(5) }
 
     LazyColumn(
         modifier = modifier

@@ -291,10 +291,12 @@ fun ProfileMenuSheet(
         }
     }
 
+    val statsVersion by viewModel.tasteManager.statsVersion.collectAsState()
+
     if (showStatsDialog) {
-        val totalPlays = remember(showStatsDialog) { viewModel.tasteManager.getTotalPlays() }
-        val uniqueArtists = remember(showStatsDialog) { viewModel.tasteManager.getUniqueArtistsCount() }
-        val topArtists = remember(showStatsDialog) { viewModel.tasteManager.getTopArtists(5) }
+        val totalPlays = remember(showStatsDialog, statsVersion) { viewModel.tasteManager.getTotalPlays() }
+        val uniqueArtists = remember(showStatsDialog, statsVersion) { viewModel.tasteManager.getUniqueArtistsCount() }
+        val topArtists = remember(showStatsDialog, statsVersion) { viewModel.tasteManager.getTopArtists(5) }
 
         AlertDialog(
             onDismissRequest = { showStatsDialog = false },

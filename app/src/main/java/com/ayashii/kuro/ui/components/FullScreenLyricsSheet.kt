@@ -49,15 +49,21 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -66,6 +72,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ayashii.kuro.R
@@ -106,8 +113,6 @@ fun FullScreenLyricsSheet(
         )
     }
 
-    val currentPositionMs by viewModel.playbackPosition.collectAsState()
-
     val settingsManager = remember { SettingsManager.getInstance() }
     val currentLyricsLanguage by settingsManager.lyricsLanguage.collectAsState()
     var showTranslation by remember { mutableStateOf(true) }
@@ -117,15 +122,24 @@ fun FullScreenLyricsSheet(
     var userScrolledRecently by remember { mutableStateOf(false) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     var lastDragDeltaY by remember { mutableFloatStateOf(0f) }
+    var isDraggingSheet by remember { mutableStateOf(false) }
+    var isDismissingSheet by remember { mutableStateOf(false) }
 
-    val animatedDragY by animateFloatAsState(
+    LaunchedEffect(Unit) {
+        dragOffsetY = 0f
+        isDraggingSheet = false
+        isDismissingSheet = false
+    }
+
+    val settledDragY by animateFloatAsState(
         targetValue = dragOffsetY,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMediumLow
+            stiffness = Spring.StiffnessMedium
         ),
         label = "lyrics_drag_offset"
     )
+    val animatedDragY = if (isDraggingSheet || isDismissingSheet) dragOffsetY else settledDragY
 
     BackHandler {
         onDismiss()
@@ -139,9 +153,16 @@ fun FullScreenLyricsSheet(
         }
     }
 
-    val activeIndex by remember(lyricsData) {
-        derivedStateOf {
-            lyricsData?.getCurrentLineIndex(currentPositionMs) ?: -1
+    var activeIndex by remember(lyricsData) {
+        mutableIntStateOf(lyricsData?.getCurrentLineIndex(viewModel.getPositionMs()) ?: -1)
+    }
+
+    LaunchedEffect(lyricsData, viewModel) {
+        viewModel.playbackPosition.collect { posMs ->
+            val nextIdx = lyricsData?.getCurrentLineIndex(posMs) ?: -1
+            if (nextIdx != activeIndex) {
+                activeIndex = nextIdx
+            }
         }
     }
 
@@ -152,10 +173,52 @@ fun FullScreenLyricsSheet(
         }
     }
 
-    val dismissProgress = (animatedDragY.coerceAtLeast(0f) / 500f).coerceIn(0f, 1f)
     val isAtTop by remember {
         derivedStateOf {
             listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+        }
+    }
+    val lyricsClipShape = remember { RoundedCornerShape(28.dp) }
+    val lyricsNestedScroll = remember(listState) {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (source == NestedScrollSource.Drag && dragOffsetY > 0f) {
+                    val nextOffset = (dragOffsetY + available.y).coerceAtLeast(0f)
+                    val consumedY = nextOffset - dragOffsetY
+                    dragOffsetY = nextOffset
+                    lastDragDeltaY = available.y
+                    isDraggingSheet = nextOffset > 0f
+                    return Offset(0f, consumedY)
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                if (source == NestedScrollSource.Drag && available.y > 0f && isAtTop) {
+                    isDraggingSheet = true
+                    lastDragDeltaY = available.y
+                    dragOffsetY = (dragOffsetY + available.y).coerceAtLeast(0f)
+                    return Offset(0f, available.y)
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (dragOffsetY > 0f) {
+                    val shouldDismiss = dragOffsetY > 100f || available.y > 600f || (dragOffsetY > 34f && lastDragDeltaY > 12f)
+                    isDraggingSheet = false
+                    lastDragDeltaY = 0f
+                    if (shouldDismiss) {
+                        isDismissingSheet = true
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onDismiss()
+                    } else {
+                        dragOffsetY = 0f
+                    }
+                    return available
+                }
+                return Velocity.Zero
+            }
         }
     }
 
@@ -163,31 +226,39 @@ fun FullScreenLyricsSheet(
         modifier = modifier
             .fillMaxSize()
             .graphicsLayer {
-                translationY = animatedDragY.coerceAtLeast(0f)
+                val currentY = animatedDragY.coerceAtLeast(0f)
+                val dismissProgress = (currentY / 500f).coerceIn(0f, 1f)
+                translationY = currentY
                 val s = 1f - (dismissProgress * 0.06f)
                 scaleX = s
                 scaleY = s
                 alpha = 1f - (dismissProgress * 0.22f)
+                shape = lyricsClipShape
+                clip = currentY > 0.5f
             }
-            .clip(RoundedCornerShape((dismissProgress * 28f).dp))
             .background(baseBg)
             .background(lyricsGradient)
+            .nestedScroll(lyricsNestedScroll)
             .pointerInput(isAtTop) {
                 detectVerticalDragGestures(
                     onDragStart = {
-                        dragOffsetY = 0f
+                        isDraggingSheet = true
                         lastDragDeltaY = 0f
                     },
                     onDragEnd = {
                         val shouldDismiss = dragOffsetY > 100f || (dragOffsetY > 34f && lastDragDeltaY > 12f)
-                        dragOffsetY = 0f
+                        isDraggingSheet = false
                         lastDragDeltaY = 0f
                         if (shouldDismiss) {
+                            isDismissingSheet = true
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             onDismiss()
+                        } else {
+                            dragOffsetY = 0f
                         }
                     },
                     onDragCancel = {
+                        isDraggingSheet = false
                         dragOffsetY = 0f
                         lastDragDeltaY = 0f
                     },
@@ -213,19 +284,23 @@ fun FullScreenLyricsSheet(
                     .pointerInput(Unit) {
                         detectVerticalDragGestures(
                             onDragStart = {
-                                dragOffsetY = 0f
+                                isDraggingSheet = true
                                 lastDragDeltaY = 0f
                             },
                             onDragEnd = {
                                 val shouldDismiss = dragOffsetY > 90f || (dragOffsetY > 30f && lastDragDeltaY > 11f)
-                                dragOffsetY = 0f
+                                isDraggingSheet = false
                                 lastDragDeltaY = 0f
                                 if (shouldDismiss) {
+                                    isDismissingSheet = true
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     onDismiss()
+                                } else {
+                                    dragOffsetY = 0f
                                 }
                             },
                             onDragCancel = {
+                                isDraggingSheet = false
                                 dragOffsetY = 0f
                                 lastDragDeltaY = 0f
                             },
@@ -343,23 +418,31 @@ fun FullScreenLyricsSheet(
                         contentPadding = PaddingValues(vertical = 24.dp),
                         verticalArrangement = Arrangement.spacedBy(22.dp)
                     ) {
-                        itemsIndexed(lyricsData.lines) { index, line ->
+                        itemsIndexed(
+                            items = lyricsData.lines,
+                            key = { idx, item -> "${idx}_${item.timeMs}" }
+                        ) { index, line ->
                             val isActive = index == activeIndex
-                            val animatedFontSize by animateFloatAsState(
-                                targetValue = if (isActive) 26f else 20f,
-                                animationSpec = tween(320, easing = FastOutSlowInEasing),
+                            val lineScale by animateFloatAsState(
+                                targetValue = if (isActive) 1.0f else 0.80f,
+                                animationSpec = tween(260, easing = FastOutSlowInEasing),
                                 label = "lyrics_font_size"
                             )
 
                             val textColor by animateColorAsState(
                                 targetValue = if (isActive) colors.textPrimary else colors.textSecondary.copy(alpha = 0.35f),
-                                animationSpec = tween(350, easing = FastOutSlowInEasing),
+                                animationSpec = tween(280, easing = FastOutSlowInEasing),
                                 label = "lyrics_color"
                             )
 
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .graphicsLayer {
+                                        scaleX = lineScale
+                                        scaleY = lineScale
+                                        transformOrigin = TransformOrigin(0f, 0.5f)
+                                    }
                                     .clickable {
                                         viewModel.seekTo(line.timeMs)
                                     }
@@ -367,10 +450,10 @@ fun FullScreenLyricsSheet(
                             ) {
                                 Text(
                                     text = line.text,
-                                    fontSize = animatedFontSize.sp,
+                                    fontSize = 25.sp,
                                     fontWeight = if (isActive) FontWeight.ExtraBold else FontWeight.Bold,
                                     color = textColor,
-                                    lineHeight = (animatedFontSize * 1.35f).sp
+                                    lineHeight = 33.sp
                                 )
 
                                 if (showTranslation && !line.translation.isNullOrBlank()) {

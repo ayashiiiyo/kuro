@@ -67,6 +67,7 @@ private class KuroNotificationBitmapLoader(
 ) : BitmapLoader {
 
     private val bitmapCache = LruCache<String, Bitmap>(24)
+    private val inFlightRequests = HashMap<String, ListenableFuture<Bitmap>>()
 
     override fun supportsMimeType(mimeType: String): Boolean = true
 
@@ -101,6 +102,12 @@ private class KuroNotificationBitmapLoader(
                     return future
                 }
             }
+            inFlightRequests[url]?.let { existing ->
+                if (!existing.isDone) {
+                    return existing
+                }
+            }
+            inFlightRequests[url] = future
         }
         scope.launch(Dispatchers.IO) {
             try {
@@ -109,12 +116,19 @@ private class KuroNotificationBitmapLoader(
                     val badged = badgeNotificationArtwork(loaded)
                     synchronized(bitmapCache) {
                         bitmapCache.put(url, badged)
+                        inFlightRequests.remove(url)
                     }
                     future.set(badged)
                 } else {
+                    synchronized(bitmapCache) {
+                        inFlightRequests.remove(url)
+                    }
                     future.setException(IllegalStateException("Artwork load returned null for $url"))
                 }
             } catch (t: Throwable) {
+                synchronized(bitmapCache) {
+                    inFlightRequests.remove(url)
+                }
                 future.setException(t)
             }
         }
@@ -319,11 +333,17 @@ class PlaybackService : MediaSessionService() {
                         repository.evictStreamUrl(current.url)
                     } catch (_: Throwable) {}
                 }
-                val failureCount = PlayerQueueManager.recordPlaybackFailure()
-                if (failureCount < 3) {
-                    val nextTrack = PlayerQueueManager.getNextTrack(userInitiated = false, isErrorRecovery = true)
-                    if (nextTrack != null) {
-                        playTrack(nextTrack)
+                servicePlayJob?.cancel()
+                servicePlayJob = serviceScope.launch {
+                    delay(650L)
+                    if (exoPlayer.playbackState == Player.STATE_IDLE && !exoPlayer.isPlaying) {
+                        val failureCount = PlayerQueueManager.recordPlaybackFailure()
+                        if (failureCount < 3) {
+                            val nextTrack = PlayerQueueManager.getNextTrack(userInitiated = false, isErrorRecovery = true)
+                            if (nextTrack != null) {
+                                playTrack(nextTrack)
+                            }
+                        }
                     }
                 }
             }
@@ -529,6 +549,7 @@ class PlaybackService : MediaSessionService() {
                 )
                 PlayerQueueManager.updateCurrentTrack(updatedTrack)
                 PlayerQueueManager.recordPlaybackSuccess()
+                TasteManager.getInstance(this@PlaybackService).recordTrackPlayed(updatedTrack)
 
                 val metadata = buildTrackMediaMetadata(updatedTrack)
 
@@ -650,6 +671,11 @@ class PlaybackService : MediaSessionService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
+        when (intent?.action) {
+            ACTION_PLAY_PAUSE -> player?.let { if (it.playWhenReady) it.pause() else it.play() }
+            ACTION_NEXT -> player?.seekToNext()
+            ACTION_PREV -> player?.seekToPrevious()
+        }
         return START_STICKY
     }
 

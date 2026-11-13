@@ -109,17 +109,18 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.8.10 — Ultra-Compact APK, Touchscreen Gestures, Widget Polish, Fade-In UI & Full YT Music Search
+          ## Kuro v3.8.11 — Playback Recovery, Gesture Polish & Stability Fixes
 
-          - **Ultra-Compact APK & Smart Auto-Update (`< 5 MB` Per-ABI)**:
-            - Added `arm64-v8a` (64-bit) and `armeabi-v7a` (32-bit) split APKs alongside the Universal release APK, with automatic CPU architecture detection in `UpdateManager`.
-            - Replaced heavy Rust `regex` (`unicode-perl`) with zero-dependency ASCII title sanitization and tightened R8 tree-shaking on unused extractor services.
-          - **Touchscreen Gestures & `BackHandler` Fix**:
-            - Fixed LIFO `BackHandler` priority when `FullPlayerSheet` is open, unified `SearchScreen` back navigation, and added swipe-down on `FullScreenLyricsSheet`, swipe-up/down on `MiniPlayer`, horizontal artwork swipe & double-tap heart burst on `FullPlayerSheet`, and swipe-to-queue / long-press on `TrackItem`.
-          - **Widget Corner & Backdrop Fix**:
-            - Eliminated double-stroke corner peeling by rendering widget backdrops at exact launcher cell aspect ratios and 24dp density-matched radii with `clipToOutline`.
-          - **Complete YouTube Music Search Parity & Multi-Account Profile**:
-            - Combined unfiltered YT Music search (`musicCardShelfRenderer` Top Result), Songs, and Videos/Montage streams with 4-stage Google account discovery and branded Kuro media notifications.
+          - **Playback Reliability**:
+            - Added failure counting and automatic error recovery to skip broken tracks and continue the queue.
+            - Hardened media notification actions and artwork loading with in-flight request deduplication and thumbnail fallbacks.
+          - **Sheet & Lyric Gestures**:
+            - Added drag-to-dismiss with nested scroll handling to the player and full-screen lyrics sheets, plus pull-up lyrics from the player.
+          - **Library & Stats**:
+            - Made playlist and download persistence thread-safe, and refresh listening stats reactively after playback.
+          - **Widgets & Thumbnails**:
+            - Improved widget persistence/refresh and upgraded low-resolution InnerTube thumbnails to `hqdefault`.
+          - Published signed release, per-ABI, and debug APKs.
           EOF
           gh release delete "$RELEASE_TAG" --yes --cleanup-tag 2>/dev/null || true
           gh release create "$RELEASE_TAG" \

@@ -421,13 +421,13 @@ fun MainAppScreen(viewModel: MusicViewModel) {
         AnimatedVisibility(
             visible = isExpanded && currentTrack != null,
             enter = slideInVertically(
-                animationSpec = tween(durationMillis = 340, easing = KuroMotion.EmphasizedDecelerate),
+                animationSpec = tween(durationMillis = 320, easing = KuroMotion.EmphasizedDecelerate),
                 initialOffsetY = { it }
-            ) + fadeIn(animationSpec = tween(240, easing = KuroMotion.EmphasizedDecelerate)),
+            ) + fadeIn(animationSpec = tween(220, easing = KuroMotion.EmphasizedDecelerate)),
             exit = slideOutVertically(
-                animationSpec = tween(durationMillis = 280, easing = KuroMotion.EmphasizedAccelerate),
+                animationSpec = tween(durationMillis = 220, easing = KuroMotion.EmphasizedDecelerate),
                 targetOffsetY = { it }
-            ) + fadeOut(animationSpec = tween(200, easing = KuroMotion.EmphasizedAccelerate))
+            ) + fadeOut(animationSpec = tween(180, easing = KuroMotion.EmphasizedDecelerate))
         ) {
             currentTrack?.let { track ->
                 FullPlayerSheet(

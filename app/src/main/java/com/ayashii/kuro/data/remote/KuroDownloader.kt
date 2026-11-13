@@ -74,17 +74,17 @@ class KuroDownloader private constructor(context: Context? = null) : Downloader(
 
         reqBuilder.method(httpMethod, requestBody)
 
-        val response = client.newCall(reqBuilder.build()).execute()
-        val responseBody = response.body?.string() ?: ""
-        val responseHeaders = response.headers.toMultimap()
-
-        return Response(
-            response.code,
-            response.message,
-            responseHeaders,
-            responseBody,
-            response.request.url.toString()
-        )
+        return client.newCall(reqBuilder.build()).execute().use { response ->
+            val responseBody = response.body?.string() ?: ""
+            val responseHeaders = response.headers.toMultimap()
+            Response(
+                response.code,
+                response.message,
+                responseHeaders,
+                responseBody,
+                response.request.url.toString()
+            )
+        }
     }
 
     companion object {

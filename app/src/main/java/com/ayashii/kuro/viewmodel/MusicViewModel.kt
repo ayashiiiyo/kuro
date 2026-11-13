@@ -541,7 +541,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                                                             trackId = currentTrk.id,
                                                             title = currentTrk.title,
                                                             artist = currentTrk.artist,
-                                                            durationSeconds = realDurSec
+                                                            durationSeconds = realDurSec,
+                                                            autoTranslate = settingsManager.autoTranslate.value
                                                         )
                                                         if (refreshed != null && refreshed.isSynced && _currentTrack.value?.id == currentTrk.id) {
                                                             _currentLyrics.value = refreshed
@@ -614,13 +615,16 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                                         _currentTrack.value = fallbackTrack
                                         queueManager.updateCurrentTrack(fallbackTrack)
                                         mediaController?.let { ctrl ->
+                                            val fallbackArt = fallbackTrack.thumbnailUrlForDisplay(512).ifBlank { fallbackTrack.highResThumbnailUrl }
                                             val meta = MediaMetadata.Builder()
                                                 .setTitle(fallbackTrack.title)
                                                 .setArtist(fallbackTrack.artist)
-                                                .setArtworkUri(Uri.parse(fallbackTrack.highResThumbnailUrl))
+                                                .setAlbumTitle(fallbackTrack.artist)
+                                                .setArtworkUri(if (fallbackArt.isNotBlank()) Uri.parse(fallbackArt) else null)
                                                 .setDisplayTitle(fallbackTrack.title)
                                                 .setExtras(Bundle().apply {
                                                     putString(WIDGET_SOURCE_URL_KEY, fallbackTrack.url)
+                                                    putString("track_id", fallbackTrack.id)
                                                 })
                                                 .build()
 
@@ -652,11 +656,17 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     }
 
                     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                        anchorPosition = 0L
-                        val now = SystemClock.elapsedRealtime()
-                        anchorTimestamp = now
-                        lastGroundTruthSync = now
-                        _playbackPosition.value = 0L
+                        val incomingId = mediaItem?.mediaId
+                        val isMetadataRefreshForSameTrack = !incomingId.isNullOrBlank() &&
+                            incomingId == _currentTrack.value?.id &&
+                            reason == Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED
+                        if (!isMetadataRefreshForSameTrack) {
+                            anchorPosition = 0L
+                            val now = SystemClock.elapsedRealtime()
+                            anchorTimestamp = now
+                            lastGroundTruthSync = now
+                            _playbackPosition.value = 0L
+                        }
                         syncCurrentTrackFromController()
                         syncWidgetState()
                     }
@@ -955,15 +965,20 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 _currentTrack.value = updatedTrack
                 queueManager.updateCurrentTrack(updatedTrack)
 
+                tasteManager.recordTrackPlayed(updatedTrack)
+
                 val controller = mediaController
                 if (controller != null) {
+                    val artworkUrl = updatedTrack.thumbnailUrlForDisplay(512).ifBlank { updatedTrack.highResThumbnailUrl }
                     val mediaMetadata = MediaMetadata.Builder()
                         .setTitle(updatedTrack.title)
                         .setArtist(updatedTrack.artist)
-                        .setArtworkUri(Uri.parse(updatedTrack.highResThumbnailUrl))
+                        .setAlbumTitle(updatedTrack.artist)
+                        .setArtworkUri(if (artworkUrl.isNotBlank()) Uri.parse(artworkUrl) else null)
                         .setDisplayTitle(updatedTrack.title)
                         .setExtras(Bundle().apply {
                             putString(WIDGET_SOURCE_URL_KEY, updatedTrack.url)
+                            putString("track_id", updatedTrack.id)
                         })
                         .build()
 
@@ -1001,10 +1016,12 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                                 val ctrl = mediaController
                                 val curItem = ctrl?.currentMediaItem
                                 if (ctrl != null && curItem != null && curItem.mediaId == activeTrack.id && ctrl.mediaItemCount > 0) {
+                                    val bestArtUrl = withBestThumb.thumbnailUrlForDisplay(512).ifBlank { withBestThumb.highResThumbnailUrl }
                                     val newMeta = curItem.mediaMetadata.buildUpon()
                                         .setTitle(withBestThumb.title)
                                         .setArtist(withBestThumb.artist)
-                                        .setArtworkUri(Uri.parse(withBestThumb.highResThumbnailUrl))
+                                        .setAlbumTitle(withBestThumb.artist)
+                                        .setArtworkUri(if (bestArtUrl.isNotBlank()) Uri.parse(bestArtUrl) else null)
                                         .setDisplayTitle(withBestThumb.title)
                                         .build()
                                     val replaced = curItem.buildUpon().setMediaMetadata(newMeta).build()
