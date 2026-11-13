@@ -189,6 +189,42 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val _isLoadingLyrics = MutableStateFlow(false)
     val isLoadingLyrics = _isLoadingLyrics.asStateFlow()
 
+    private var sleepTimerJob: Job? = null
+    private val _sleepTimerMinutes = MutableStateFlow<Int?>(null)
+    val sleepTimerMinutes: StateFlow<Int?> = _sleepTimerMinutes.asStateFlow()
+
+    private val _sleepTimerEndOfTrack = MutableStateFlow(false)
+    val sleepTimerEndOfTrack: StateFlow<Boolean> = _sleepTimerEndOfTrack.asStateFlow()
+
+    fun setSleepTimer(minutes: Int?, pauseAtEndOfTrack: Boolean = false) {
+        sleepTimerJob?.cancel()
+        _sleepTimerEndOfTrack.value = pauseAtEndOfTrack
+        if (pauseAtEndOfTrack || minutes == null || minutes <= 0) {
+            _sleepTimerMinutes.value = null
+            return
+        }
+        _sleepTimerMinutes.value = minutes
+        sleepTimerJob = viewModelScope.launch {
+            var remaining = minutes
+            while (remaining > 0) {
+                delay(60_000L)
+                remaining -= 1
+                _sleepTimerMinutes.value = if (remaining > 0) remaining else null
+            }
+            _sleepTimerMinutes.value = null
+            _sleepTimerEndOfTrack.value = false
+            mediaController?.pause()
+            _isPlaying.value = false
+        }
+    }
+
+    fun cancelSleepTimer() {
+        sleepTimerJob?.cancel()
+        sleepTimerJob = null
+        _sleepTimerMinutes.value = null
+        _sleepTimerEndOfTrack.value = false
+    }
+
     private val playlistQueue = Collections.synchronizedList(mutableListOf<Track>())
     private var currentIndex = -1
 
@@ -468,6 +504,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                             Player.STATE_ENDED -> {
                                 _isLoadingTrack.value = false
                                 _currentTrack.value?.let { tasteManager.recordTrackPlayed(it) }
+                                if (_sleepTimerEndOfTrack.value) {
+                                    _sleepTimerEndOfTrack.value = false
+                                    mediaController?.pause()
+                                    _isPlaying.value = false
+                                }
                             }
                             Player.STATE_IDLE -> {
                                 _isLoadingTrack.value = false
@@ -1085,6 +1126,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             getApplication<Application>().unregisterReceiver(mediaActionReceiver)
         } catch (_: Exception) {}
         stopProgressTracking()
+        sleepTimerJob?.cancel()
         suggestJob?.cancel()
         genreJob?.cancel()
         searchJob?.cancel()

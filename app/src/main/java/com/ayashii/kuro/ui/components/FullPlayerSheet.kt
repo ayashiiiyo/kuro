@@ -44,18 +44,21 @@ import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.outlined.AddCircleOutline
+import androidx.compose.material.icons.outlined.Bedtime
 import androidx.compose.material.icons.outlined.BluetoothAudio
 import androidx.compose.material.icons.outlined.Headphones
 import androidx.compose.material.icons.outlined.QueueMusic
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Speaker
 import androidx.compose.material.icons.outlined.Translate
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -843,6 +846,117 @@ fun PlayerScrubber(
             Text(text = totalFormatted, style = Typography.bodyMedium, color = colors.textSecondary)
         }
     }
+}
+
+@Composable
+fun SleepTimerDialog(
+    viewModel: MusicViewModel,
+    onDismiss: () -> Unit
+) {
+    val colors = KuroAppTheme.colors
+    val activeMinutes by viewModel.sleepTimerMinutes.collectAsState()
+    val endOfTrack by viewModel.sleepTimerEndOfTrack.collectAsState()
+    val presets = listOf(15, 30, 45, 60)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Outlined.Bedtime,
+                    contentDescription = null,
+                    tint = colors.textPrimary,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = stringResource(R.string.sleep_timer_title),
+                    style = Typography.titleLarge,
+                    color = colors.textPrimary
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                presets.forEach { mins ->
+                    val isSelected = activeMinutes == mins && !endOfTrack
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (isSelected) colors.accent else colors.card)
+                            .border(1.dp, if (isSelected) colors.accent else colors.border, RoundedCornerShape(12.dp))
+                            .clickable {
+                                viewModel.setSleepTimer(mins, pauseAtEndOfTrack = false)
+                                onDismiss()
+                            }
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(R.string.sleep_timer_minutes, mins),
+                            style = Typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                            color = if (isSelected) colors.background else colors.textPrimary
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (endOfTrack) colors.accent else colors.card)
+                        .border(1.dp, if (endOfTrack) colors.accent else colors.border, RoundedCornerShape(12.dp))
+                        .clickable {
+                            viewModel.setSleepTimer(null, pauseAtEndOfTrack = true)
+                            onDismiss()
+                        }
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.sleep_timer_end_track),
+                        style = Typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                        color = if (endOfTrack) colors.background else colors.textPrimary
+                    )
+                }
+
+                if (activeMinutes != null || endOfTrack) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(colors.surface)
+                            .border(1.dp, Color(0xFFFF3B30), RoundedCornerShape(12.dp))
+                            .clickable {
+                                viewModel.cancelSleepTimer()
+                                onDismiss()
+                            }
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(R.string.sleep_timer_off),
+                            style = Typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            color = Color(0xFFFF3B30)
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_close), color = colors.textPrimary)
+            }
+        },
+        containerColor = colors.background
+    )
 }
 
 private fun formatMs(ms: Long): String {
