@@ -360,8 +360,7 @@ class LyricsRepository(private val context: Context) {
         try {
             val textToTranslate = lines.mapIndexed { idx, line ->
                 "[[[$idx]]] ${line.text}"
-            }.joinToString("
-")
+            }.joinToString("\n")
 
             val formBody = ("client=gtx&sl=auto&tl=${targetLang.googleCode}&dt=t&q=" + encode(textToTranslate))
                 .toRequestBody("application/x-www-form-urlencoded".toMediaType())

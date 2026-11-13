@@ -214,7 +214,7 @@ You</string>
 
     <!-- Update Dialog -->
     <string name="update_available">Update Available</string>
-    <string name="update_whats_new">What's new:</string>
+    <string name="update_whats_new">What\'s new:</string>
     <string name="update_later">Later</string>
     <string name="update_now">Update</string>
 

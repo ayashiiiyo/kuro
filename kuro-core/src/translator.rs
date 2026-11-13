@@ -36,7 +36,7 @@ pub fn build_payload(texts: &[String], target_lang: &str) -> String {
         target_lang: normalized_lang,
     };
 
-    serde_json::to_string(&req).unwrap_or_else(|_| "{"text":[],"target_lang":"id"}".to_string())
+    serde_json::to_string(&req).unwrap_or_else(|_| "{\"text\":[],\"target_lang\":\"id\"}".to_string())
 }
 
 /** Parses DeepL API response JSON and extracts translated strings. */
@@ -65,12 +65,12 @@ mod tests {
     fn test_build_payload() {
         let lines = vec!["Hello".to_string(), "World".to_string()];
         let json = build_payload(&lines, "id");
-        assert!(json.contains(""target_lang":"id""));
+        assert!(json.contains("\"target_lang\":\"id\""));
         assert!(json.contains("Hello"));
         assert!(json.contains("World"));
 
         let json_ja = build_payload(&lines, "JA");
-        assert!(json_ja.contains(""target_lang":"ja""));
+        assert!(json_ja.contains("\"target_lang\":\"ja\""));
     }
 
     #[test]

@@ -8,7 +8,7 @@
     <string name="common_calculating">Calcul…</string>
     <string name="common_song_count">%1$d titres</string>
     <string name="home_genre_all">Tout</string>
-    <string name="home_start_listening">Commencer l'écoute</string>
+    <string name="home_start_listening">Commencer l\'écoute</string>
     <string name="home_start_listening_sub">Une session adaptée à vos goûts</string>
     <string name="home_to_get_you_started">Pour bien démarrer</string>
     <string name="home_play_again">Réécouter</string>
@@ -43,12 +43,12 @@
     <string name="player_share">Partager</string>
     <string name="player_translate_lyrics">Traduire</string>
     <string name="player_select_lyrics_lang">Langue de traduction des paroles</string>
-    <string name="player_queue">File d'attente</string>
+    <string name="player_queue">File d\'attente</string>
     <string name="player_queue_up_next">À SUIVRE</string>
     <string name="player_queue_clear">Vider la file</string>
     <string name="settings_title">Paramètres</string>
-    <string name="settings_language">Langue de l'application</string>
-    <string name="settings_language_desc">Choisissez la langue d'affichage</string>
+    <string name="settings_language">Langue de l\'application</string>
+    <string name="settings_language_desc">Choisissez la langue d\'affichage</string>
     <string name="settings_choose_language">Choisir la langue</string>
     <string name="lang_system">Par défaut du système</string>
     <string name="settings_lyrics_trans">Traduction des paroles</string>
