@@ -18,7 +18,7 @@ object KuroNativeCore {
     } catch (e: UnsatisfiedLinkError) {
         Log.w(TAG, "Native kuro_core library not available, using Kotlin fallback: ${e.message}")
         false
-    } catch (e: Exception) {
+    } catch (e: Throwable) {
         Log.w(TAG, "Failed to load kuro_core library: ${e.message}")
         false
     }

@@ -10,6 +10,16 @@ use jni::JNIEnv;
 
 /** JNI bridge matching package: com.ayashii.kuro.data.native.KuroNativeCore */
 
+fn to_jstring(env: &mut JNIEnv, s: &str) -> jstring {
+    match env.new_string(s) {
+        Ok(js) => js.into_raw(),
+        Err(_) => match env.new_string("") {
+            Ok(empty) => empty.into_raw(),
+            Err(_) => std::ptr::null_mut(),
+        },
+    }
+}
+
 #[no_mangle]
 pub extern "system" fn Java_com_ayashii_kuro_data_native_KuroNativeCore_cleanTrackTitle(
     mut env: JNIEnv,
@@ -18,11 +28,11 @@ pub extern "system" fn Java_com_ayashii_kuro_data_native_KuroNativeCore_cleanTra
 ) -> jstring {
     let input: String = match env.get_string(&raw_title) {
         Ok(s) => s.into(),
-        Err(_) => return env.new_string("").unwrap().into_raw(),
+        Err(_) => return to_jstring(&mut env, ""),
     };
 
     let cleaned = sanitizer::clean_title(&input);
-    env.new_string(cleaned).unwrap().into_raw()
+    to_jstring(&mut env, &cleaned)
 }
 
 #[no_mangle]
@@ -34,29 +44,27 @@ pub extern "system" fn Java_com_ayashii_kuro_data_native_KuroNativeCore_rankCand
 ) -> jstring {
     let cand_str: String = match env.get_string(&candidates_json) {
         Ok(s) => s.into(),
-        Err(_) => return env.new_string("[]").unwrap().into_raw(),
+        Err(_) => return to_jstring(&mut env, "[]"),
     };
 
     let prof_str: String = match env.get_string(&profile_json) {
         Ok(s) => s.into(),
-        Err(_) => return env.new_string("[]").unwrap().into_raw(),
+        Err(_) => return to_jstring(&mut env, "[]"),
     };
 
     let candidates: Vec<recommendation::CandidateTrack> = match serde_json::from_str(&cand_str) {
         Ok(c) => c,
-        Err(_) => return env.new_string(&cand_str).unwrap().into_raw(),
+        Err(_) => return to_jstring(&mut env, &cand_str),
     };
 
     let profile: recommendation::TasteProfile = match serde_json::from_str(&prof_str) {
         Ok(p) => p,
-        Err(_) => {
-            return env.new_string(&cand_str).unwrap().into_raw();
-        }
+        Err(_) => return to_jstring(&mut env, &cand_str),
     };
 
     let ranked = recommendation::rank_candidates(candidates, &profile);
     let output = serde_json::to_string(&ranked).unwrap_or_else(|_| "[]".to_string());
-    env.new_string(output).unwrap().into_raw()
+    to_jstring(&mut env, &output)
 }
 
 #[no_mangle]
@@ -68,7 +76,7 @@ pub extern "system" fn Java_com_ayashii_kuro_data_native_KuroNativeCore_parseAut
 ) -> jstring {
     let json_str: String = match env.get_string(&raw_json) {
         Ok(s) => s.into(),
-        Err(_) => return env.new_string("[]").unwrap().into_raw(),
+        Err(_) => return to_jstring(&mut env, "[]"),
     };
 
     let video_id_str: String = match env.get_string(&current_video_id) {
@@ -78,7 +86,7 @@ pub extern "system" fn Java_com_ayashii_kuro_data_native_KuroNativeCore_parseAut
 
     let tracks = innertube::parse_automix_radio(&json_str, &video_id_str);
     let output = serde_json::to_string(&tracks).unwrap_or_else(|_| "[]".to_string());
-    env.new_string(output).unwrap().into_raw()
+    to_jstring(&mut env, &output)
 }
 
 #[no_mangle]
@@ -90,7 +98,7 @@ pub extern "system" fn Java_com_ayashii_kuro_data_native_KuroNativeCore_buildDee
 ) -> jstring {
     let lines_str: String = match env.get_string(&lines_json) {
         Ok(s) => s.into(),
-        Err(_) => return env.new_string("").unwrap().into_raw(),
+        Err(_) => return to_jstring(&mut env, ""),
     };
 
     let lang_str: String = match env.get_string(&target_lang) {
@@ -104,7 +112,7 @@ pub extern "system" fn Java_com_ayashii_kuro_data_native_KuroNativeCore_buildDee
     };
 
     let payload = translator::build_payload(&lines, &lang_str);
-    env.new_string(payload).unwrap().into_raw()
+    to_jstring(&mut env, &payload)
 }
 
 #[no_mangle]
@@ -115,12 +123,12 @@ pub extern "system" fn Java_com_ayashii_kuro_data_native_KuroNativeCore_parseDee
 ) -> jstring {
     let resp_str: String = match env.get_string(&response_json) {
         Ok(s) => s.into(),
-        Err(_) => return env.new_string("[]").unwrap().into_raw(),
+        Err(_) => return to_jstring(&mut env, "[]"),
     };
 
     let translations = translator::parse_response(&resp_str);
     let output = serde_json::to_string(&translations).unwrap_or_else(|_| "[]".to_string());
-    env.new_string(output).unwrap().into_raw()
+    to_jstring(&mut env, &output)
 }
 
 #[no_mangle]
@@ -132,7 +140,7 @@ pub extern "system" fn Java_com_ayashii_kuro_data_native_KuroNativeCore_parseLir
 ) -> jstring {
     let json_str: String = match env.get_string(&raw_json) {
         Ok(s) => s.into(),
-        Err(_) => return env.new_string("").unwrap().into_raw(),
+        Err(_) => return to_jstring(&mut env, ""),
     };
 
     let result = liriqo::parse_liriqo_response(&json_str, duration_ms);
@@ -140,5 +148,5 @@ pub extern "system" fn Java_com_ayashii_kuro_data_native_KuroNativeCore_parseLir
         Some(lyrics) => serde_json::to_string(&lyrics).unwrap_or_default(),
         None => String::new(),
     };
-    env.new_string(output).unwrap().into_raw()
+    to_jstring(&mut env, &output)
 }

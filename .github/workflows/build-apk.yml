@@ -51,7 +51,7 @@ jobs:
       - name: Set up Rust Toolchain and Targets
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
 
       - name: Install cargo-ndk
         run: cargo install cargo-ndk
@@ -61,7 +61,8 @@ jobs:
           mkdir -p app/src/main/jniLibs/arm64-v8a
           mkdir -p app/src/main/jniLibs/armeabi-v7a
           mkdir -p app/src/main/jniLibs/x86_64
-          cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -o app/src/main/jniLibs build --release --manifest-path kuro-core/Cargo.toml
+          mkdir -p app/src/main/jniLibs/x86
+          cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -t x86 -o app/src/main/jniLibs build --release --manifest-path kuro-core/Cargo.toml
 
       - name: Build Release and Debug APKs
         run: ./gradlew assembleRelease assembleDebug --stacktrace || (echo "=== GRADLE BUILD FAILED ===" && exit 1)
@@ -86,35 +87,26 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.8.6 — Vibe Radar, Sleep Timer, MiniPlayer Gestures & Widget Redesign
+          ## Kuro v3.8.5 — 32-Bit & 64-Bit Universal Compatibility, Two-Way YTM Like Sync & APK Compression
 
-          - **Vibe Radar Screen**:
-            - Added dynamic 4th bottom navigation tab with personalized smart frequency and local taste ranking.
-            - Curated mood filters (All Vibes, Late Night, Deep Focus, High Energy, On Repeat) and instant smart radio.
-          - **Sleep Timer**:
-            - Configurable countdown timer (5 to 60 minutes) or auto-pause at the end of the current track.
-            - Accessible directly from full player and track options bottom sheet.
-          - **MiniPlayer Enhancements**:
-            - Horizontal drag gestures to skip tracks (swipe left for next, swipe right for previous) with haptic feedback.
-            - Direct favorite toggle button on the mini player.
-            - Optimized low-overhead progress rendering with `drawBehind`.
-          - **UI Polish & Animations**:
-            - Floating bottom dock navigation with spring pill animations.
-            - Full player artwork breathing animation (dynamic scale between playing and paused states).
-            - Drag-to-dismiss scale and alpha animations for player sheets.
-            - Kinetic canvas animated splash screen.
-            - Instant shuffle mix button on Search screen.
-          - **Widgets & Launcher**:
-            - Palette API gradient backdrops for both compact and square home screen widgets.
-            - Replaced text glyphs with clean vector drawables in widget controls.
-            - Android 13+ themed monochrome launcher icon support.
-          - **Codebase Hygiene**:
-            - Maintained zero single-line `//` and `///` comment compliance.
+          - **32-Bit (`armeabi-v7a` / `x86`) Startup Force Close Fixes**:
+            - Enabled Core Library Desugaring (`desugar_jdk_libs_nio`) so Java 8/11 APIs in `NewPipeExtractor v0.26.5` run without `NoClassDefFoundError` on 32-bit Android 8–12 devices.
+            - Fixed `NullPointerException` in `MainActivity.attachBaseContext()` where `newBase.applicationContext` was null prior to Activity attachment.
+            - Disabled hardware bitmaps (`Bitmap.Config.HARDWARE`) and switched to `RGB_565` on 32-bit runtimes to prevent `RenderThread` GPU crashes and OOM on 32-bit devices.
+            - Preserved `NewPipeExtractor`, `nanojson`, and `jsoup` classes under R8 FullMode and eliminated `.unwrap()` across Rust JNI boundaries.
+          - **APK Size Compression**:
+            - Enabled `jniLibs.useLegacyPackaging = true` and `android:extractNativeLibs="true"` to Deflate-compress native `.so` binaries inside the APK.
+            - Added Rust release profile size optimizations (`opt-level = "z"`, `lto = true`, `codegen-units = 1`, `strip = true`, `panic = "abort"`) and trimmed unused Unicode regex tables.
+          - **Two-Way YouTube Music Like Sync & 120 FPS Player Polish**:
+            - Added two-way InnerTube `like/like` and `like/removelike` synchronization when liking tracks in Kuro or from the homescreen widget.
+            - Fixed `STATE_ENDED` double-skip bug, shared `MusicRepository` singleton caches with `PlaybackService`, fixed Light Mode contrast in `FullPlayerSheet` / `FullScreenLyricsSheet`, and eliminated 30 FPS recomposition overhead.
+          - Published signed release and debug APKs.
           EOF
+          gh release delete "$RELEASE_TAG" --yes --cleanup-tag 2>/dev/null || true
           gh release create "$RELEASE_TAG" \
             "${{ steps.apk.outputs.release_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (Vibe Radar, Sleep Timer & Widget Redesign)" \
+            --title "Kuro $RELEASE_TAG (32-Bit Fix, Two-Way YTM Sync & Compressed APK)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 

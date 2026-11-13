@@ -24,7 +24,7 @@ data class AudioDeviceState(
 
 class AudioOutputManager(private val context: Context) {
 
-    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
     private val _deviceState = MutableStateFlow(AudioDeviceState("Phone Speaker", OutputType.SPEAKER))
     val deviceState: StateFlow<AudioDeviceState> = _deviceState.asStateFlow()
 
@@ -49,7 +49,7 @@ class AudioOutputManager(private val context: Context) {
     init {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && audioCallback != null) {
-                audioManager.registerAudioDeviceCallback(audioCallback, null)
+                audioManager?.registerAudioDeviceCallback(audioCallback, null)
             }
             val filter = IntentFilter().apply {
                 addAction(Intent.ACTION_HEADSET_PLUG)
@@ -62,14 +62,15 @@ class AudioOutputManager(private val context: Context) {
                 filter,
                 androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
             )
-        } catch (_: Exception) {}
+        } catch (_: Throwable) {}
         updateState()
     }
 
     fun updateState() {
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            val mgr = audioManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && mgr != null) {
+                val devices = mgr.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
                 val btDevice = devices.firstOrNull {
                     it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
                     it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
@@ -95,7 +96,7 @@ class AudioOutputManager(private val context: Context) {
             }
 
             _deviceState.value = AudioDeviceState("Phone Speaker", OutputType.SPEAKER)
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             _deviceState.value = AudioDeviceState("Phone Speaker", OutputType.SPEAKER)
         }
     }
@@ -106,13 +107,13 @@ class AudioOutputManager(private val context: Context) {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
             context.startActivity(intent)
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             try {
                 val btIntent = Intent(Settings.ACTION_BLUETOOTH_SETTINGS).apply {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 }
                 context.startActivity(btIntent)
-            } catch (_: Exception) {}
+            } catch (_: Throwable) {}
         }
     }
 
@@ -122,7 +123,8 @@ class AudioOutputManager(private val context: Context) {
 
         fun getInstance(context: Context): AudioOutputManager {
             return INSTANCE ?: synchronized(this) {
-                INSTANCE ?: AudioOutputManager(context.applicationContext).also { INSTANCE = it }
+                val safeCtx = context.applicationContext ?: context
+                INSTANCE ?: AudioOutputManager(safeCtx).also { INSTANCE = it }
             }
         }
     }

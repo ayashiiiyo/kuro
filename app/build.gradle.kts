@@ -11,17 +11,17 @@ android {
         applicationId = "com.ayashii.kuro"
         minSdk = 26
         targetSdk = 34
-        versionCode = 48
-        versionName = "3.8.6"
+        versionCode = 49
+        versionName = "3.8.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
         }
-        resourceConfigurations += listOf("en", "id")
+        resourceConfigurations += listOf("en", "id", "in")
 
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
         }
     }
 
@@ -49,6 +49,7 @@ android {
         }
     }
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -63,17 +64,28 @@ android {
         kotlinCompilerExtensionVersion = "1.5.14"
     }
     packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             excludes += "META-INF/INDEX.LIST"
             excludes += "META-INF/DEPENDENCIES"
             excludes += "META-INF/LICENSE*"
             excludes += "META-INF/NOTICE*"
+            excludes += "META-INF/*.kotlin_module"
+            excludes += "META-INF/*.version"
+            excludes += "META-INF/proguard/*"
+            excludes += "META-INF/maven/**"
+            excludes += "DebugProbesKt.bin"
+            excludes += "kotlin-tooling-metadata.json"
         }
     }
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.0.4")
+
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.0")

@@ -81,7 +81,7 @@ class SettingsManager private constructor(private val context: Context) {
                 LocaleListCompat.forLanguageTags(lang.code)
             }
             AppCompatDelegate.setApplicationLocales(appLocales)
-        } catch (_: Exception) {}
+        } catch (_: Throwable) {}
     }
 
     fun setAudioQuality(quality: AudioQuality) {
@@ -207,7 +207,8 @@ class SettingsManager private constructor(private val context: Context) {
 
         fun init(context: Context): SettingsManager {
             return instance ?: synchronized(this) {
-                instance ?: SettingsManager(context.applicationContext).also { instance = it }
+                val safeCtx = context.applicationContext ?: context
+                instance ?: SettingsManager(safeCtx).also { instance = it }
             }
         }
 

@@ -189,42 +189,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val _isLoadingLyrics = MutableStateFlow(false)
     val isLoadingLyrics = _isLoadingLyrics.asStateFlow()
 
-    private var sleepTimerJob: Job? = null
-    private val _sleepTimerMinutes = MutableStateFlow<Int?>(null)
-    val sleepTimerMinutes: StateFlow<Int?> = _sleepTimerMinutes.asStateFlow()
-
-    private val _sleepTimerEndOfTrack = MutableStateFlow(false)
-    val sleepTimerEndOfTrack: StateFlow<Boolean> = _sleepTimerEndOfTrack.asStateFlow()
-
-    fun setSleepTimer(minutes: Int?, pauseAtEndOfTrack: Boolean = false) {
-        sleepTimerJob?.cancel()
-        _sleepTimerEndOfTrack.value = pauseAtEndOfTrack
-        if (pauseAtEndOfTrack || minutes == null || minutes <= 0) {
-            _sleepTimerMinutes.value = null
-            return
-        }
-        _sleepTimerMinutes.value = minutes
-        sleepTimerJob = viewModelScope.launch {
-            var remaining = minutes
-            while (remaining > 0) {
-                delay(60_000L)
-                remaining -= 1
-                _sleepTimerMinutes.value = if (remaining > 0) remaining else null
-            }
-            _sleepTimerMinutes.value = null
-            _sleepTimerEndOfTrack.value = false
-            mediaController?.pause()
-            _isPlaying.value = false
-        }
-    }
-
-    fun cancelSleepTimer() {
-        sleepTimerJob?.cancel()
-        sleepTimerJob = null
-        _sleepTimerMinutes.value = null
-        _sleepTimerEndOfTrack.value = false
-    }
-
     private val playlistQueue = Collections.synchronizedList(mutableListOf<Track>())
     private var currentIndex = -1
 
@@ -504,11 +468,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                             Player.STATE_ENDED -> {
                                 _isLoadingTrack.value = false
                                 _currentTrack.value?.let { tasteManager.recordTrackPlayed(it) }
-                                if (_sleepTimerEndOfTrack.value) {
-                                    _sleepTimerEndOfTrack.value = false
-                                    mediaController?.pause()
-                                    _isPlaying.value = false
-                                }
                             }
                             Player.STATE_IDLE -> {
                                 _isLoadingTrack.value = false
@@ -1087,31 +1046,30 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             _isLoadingTrending.value = true
             val liked = repository.getLikedTracks()
             if (liked.isNotEmpty()) {
-                val existingById = _favorites.value.associateBy { it.id }
-                val syncedFavs = liked.map { remoteTrack ->
-                    val local = existingById[remoteTrack.id]
-                    val resolvedDuration = if (remoteTrack.durationSeconds > 0L) {
-                        remoteTrack.durationSeconds
-                    } else {
-                        local?.durationSeconds ?: 0L
+                val currentFavs = _favorites.value.toMutableList()
+                val existingIndexById = currentFavs.mapIndexed { idx, t -> t.id to idx }.toMap().toMutableMap()
+                liked.forEach { track ->
+                    val existingIdx = existingIndexById[track.id]
+                    if (existingIdx == null) {
+                        currentFavs.add(track.copy(isFavorite = true))
+                    } else if (currentFavs[existingIdx].durationSeconds <= 0L && track.durationSeconds > 0L) {
+                        currentFavs[existingIdx] = currentFavs[existingIdx].copy(
+                            durationSeconds = track.durationSeconds,
+                            isFavorite = true
+                        )
                     }
-                    remoteTrack.copy(
-                        durationSeconds = resolvedDuration,
-                        isFavorite = true
-                    )
                 }
-                _favorites.value = syncedFavs
-                saveStoredFavorites(syncedFavs)
+                _favorites.value = currentFavs
+                saveStoredFavorites(currentFavs)
                 val cur = _currentTrack.value
                 if (cur != null) {
-                    val isFav = syncedFavs.any { it.id == cur.id }
+                    val isFav = currentFavs.any { it.id == cur.id }
                     if (cur.isFavorite != isFav) {
                         val updated = cur.copy(isFavorite = isFav)
                         _currentTrack.value = updated
                         queueManager.updateCurrentTrack(updated)
                     }
                 }
-                syncWidgetState()
             }
             _isLoadingTrending.value = false
         }
@@ -1127,7 +1085,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             getApplication<Application>().unregisterReceiver(mediaActionReceiver)
         } catch (_: Exception) {}
         stopProgressTracking()
-        sleepTimerJob?.cancel()
         suggestJob?.cancel()
         genreJob?.cancel()
         searchJob?.cancel()

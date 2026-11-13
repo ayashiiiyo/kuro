@@ -16,11 +16,13 @@
 -dontwarn androidx.media3.**
 -dontwarn android.support.v4.media.**
 
-# NewPipeExtractor & Dependencies
+# NewPipeExtractor & Dependencies (Prevent R8 FullMode from stripping extractor services)
 -dontwarn org.schabi.newpipe.extractor.**
--keep class org.schabi.newpipe.extractor.** { <init>(...); }
+-keep class org.schabi.newpipe.extractor.** { *; }
 -dontwarn com.grack.nanojson.**
+-keep class com.grack.nanojson.** { *; }
 -dontwarn org.jsoup.**
+-keep class org.jsoup.** { *; }
 -dontwarn org.mozilla.javascript.**
 -keep class org.mozilla.javascript.** { *; }
 -dontwarn com.google.protobuf.**
