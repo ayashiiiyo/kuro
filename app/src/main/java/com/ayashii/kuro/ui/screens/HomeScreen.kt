@@ -7,13 +7,11 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
-import com.ayashii.kuro.ui.theme.KuroMotion
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,7 +44,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -54,14 +51,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
@@ -82,6 +74,7 @@ import com.ayashii.kuro.ui.components.SettingsDialog
 import com.ayashii.kuro.ui.components.TrackItem
 import com.ayashii.kuro.ui.components.TrackOptionsBottomSheet
 import com.ayashii.kuro.ui.theme.KuroAppTheme
+import com.ayashii.kuro.ui.theme.KuroMotion
 import com.ayashii.kuro.ui.theme.PureBlack
 import com.ayashii.kuro.ui.theme.PureWhite
 import com.ayashii.kuro.ui.theme.Typography
@@ -126,14 +119,11 @@ fun HomeScreen(
     var showQueueSheet by rememberSaveable { mutableStateOf(false) }
     var trackForPlaylist by remember { mutableStateOf<Track?>(null) }
     var trackForOptions by remember { mutableStateOf<Track?>(null) }
-    var genreSwipeX by remember { mutableFloatStateOf(0f) }
 
     val haptic = LocalHapticFeedback.current
     var selectedGenre by rememberSaveable { mutableStateOf("Semua") }
     val genres = listOf("Semua", "Pop", "Lo-Fi", "Rock", "Acoustic", "Anime", "Hip-Hop", "R&B", "Top Global")
     val genreRowState = rememberLazyListState()
-    val canScrollGenreBack by remember { derivedStateOf { genreRowState.canScrollBackward } }
-    val canScrollGenreForward by remember { derivedStateOf { genreRowState.canScrollForward } }
 
     BackHandler(enabled = !isPlayerExpanded && selectedGenre != "Semua") {
         selectedGenre = "Semua"
@@ -168,29 +158,9 @@ fun HomeScreen(
                     state = genreRowState,
                     contentPadding = PaddingValues(start = 2.dp, end = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .graphicsLayer {
-                            compositingStrategy = CompositingStrategy.Offscreen
-                        }
-                        .drawWithContent {
-                            drawContent()
-                            val leftStop = if (canScrollGenreBack) 0.04f else 0.0f
-                            val rightStop = if (canScrollGenreForward) 0.94f else 1.0f
-                            if (leftStop > 0f || rightStop < 1f) {
-                                drawRect(
-                                    brush = Brush.horizontalGradient(
-                                        0.0f to if (leftStop > 0f) Color.Transparent else Color.White,
-                                        leftStop to Color.White,
-                                        rightStop to Color.White,
-                                        1.0f to if (rightStop < 1f) Color.Transparent else Color.White
-                                    ),
-                                    blendMode = BlendMode.DstIn
-                                )
-                            }
-                        }
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    items(genres) { genre ->
+                    items(genres, key = { it }) { genre ->
                         val isSelected = selectedGenre == genre
                         val chipBg = if (isSelected) colors.accent else colors.card
                         Box(
@@ -229,472 +199,441 @@ fun HomeScreen(
         AnimatedContent(
             targetState = selectedGenre,
             transitionSpec = {
-                (fadeIn(tween(260, easing = KuroMotion.EmphasizedDecelerate)) +
-                    slideInVertically(animationSpec = tween(260, easing = KuroMotion.EmphasizedDecelerate)) { it / 18 })
-                    .togetherWith(fadeOut(tween(180, easing = KuroMotion.EmphasizedAccelerate)))
+                (fadeIn(tween(240, easing = KuroMotion.EmphasizedDecelerate)) +
+                    slideInVertically(animationSpec = tween(240, easing = KuroMotion.EmphasizedDecelerate)) { it / 20 })
+                    .togetherWith(fadeOut(tween(160, easing = KuroMotion.EmphasizedAccelerate)))
             },
             label = "home_genre_transition",
-            modifier = Modifier
-                .fillMaxSize()
-                .then(
-                    if (selectedGenre != "Semua") {
-                        Modifier.pointerInput(selectedGenre) {
-                            detectHorizontalDragGestures(
-                                onDragStart = { genreSwipeX = 0f },
-                                onDragEnd = {
-                                    val idx = genres.indexOf(selectedGenre)
-                                    if (genreSwipeX > 95f && idx > 0) {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        val prev = genres[idx - 1]
-                                        selectedGenre = prev
-                                        if (prev == "Semua") viewModel.loadTrending() else viewModel.loadGenreTracks(prev)
-                                    } else if (genreSwipeX < -95f && idx >= 0 && idx + 1 < genres.size) {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        val next = genres[idx + 1]
-                                        selectedGenre = next
-                                        viewModel.loadGenreTracks(next)
-                                    }
-                                    genreSwipeX = 0f
-                                },
-                                onDragCancel = { genreSwipeX = 0f },
-                                onHorizontalDrag = { _, dragAmount ->
-                                    genreSwipeX += dragAmount
-                                }
+            modifier = Modifier.fillMaxSize()
+        ) { activeGenre ->
+            if (activeGenre != "Semua") {
+                if (isLoadingGenre || isSearching) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = colors.textPrimary)
+                    }
+                } else if (genreTracks.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = stringResource(R.string.home_no_songs_genre, activeGenre),
+                            style = Typography.bodyMedium,
+                            color = colors.textMuted
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(top = 6.dp)
+                    ) {
+                        items(genreTracks, key = { it.id }, contentType = { "track" }) { track ->
+                            val isFav = track.id in favoriteIds
+                            TrackItem(
+                                track = track.copy(isFavorite = isFav),
+                                isPlaying = currentTrack?.id == track.id,
+                                isLoading = isLoadingTrack && currentTrack?.id == track.id,
+                                onClick = { viewModel.playTrack(track, genreTracks) },
+                                onFavoriteClick = { viewModel.toggleFavorite(track) },
+                                onMoreClick = { trackForOptions = track },
+                                onSwipeAddToQueue = { viewModel.addToQueue(track) }
                             )
                         }
-                    } else {
-                        Modifier
+                        item {
+                            Spacer(modifier = Modifier.height(130.dp))
+                        }
                     }
-                )
-        ) { activeGenre ->
-        if (activeGenre != "Semua") {
-            if (isLoadingGenre || isSearching) {
+                }
+            } else if (isLoadingTrending) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
                     CircularProgressIndicator(color = colors.textPrimary)
                 }
-            } else if (genreTracks.isEmpty()) {
-                Box(
+            } else if (homeSections.isNotEmpty() || trendingTracks.isNotEmpty()) {
+                LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
+                    contentPadding = PaddingValues(top = 6.dp)
                 ) {
-                    Text(
-                        text = stringResource(R.string.home_no_songs_genre, activeGenre),
-                        style = Typography.bodyMedium,
-                        color = colors.textMuted
-                    )
+                    val homeTracks = trendingTracks.ifEmpty { homeSections.flatMap { it.tracks } }.distinctBy { it.id }
+
+                    val startListeningTracks = (recentlyPlayed.ifEmpty { homeTracks }).distinctBy { it.id }.take(3)
+                    if (startListeningTracks.isNotEmpty()) {
+                        item(key = "start_listening_header") {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 4.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.home_start_listening_sub),
+                                    style = Typography.bodySmall.copy(fontSize = 12.sp),
+                                    color = colors.textMuted
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = stringResource(R.string.home_start_listening),
+                                    style = Typography.headlineMedium.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold),
+                                    color = colors.textPrimary
+                                )
+                            }
+                        }
+
+                        items(startListeningTracks, key = { "start_listen_${it.id}" }, contentType = { "start_track" }) { track ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .combinedClickable(
+                                        onClick = { viewModel.playTrack(track, startListeningTracks) },
+                                        onLongClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            trackForOptions = track
+                                        }
+                                    )
+                                    .padding(horizontal = 20.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                AsyncImage(
+                                    model = track.thumbnailUrlForDisplay(192),
+                                    contentDescription = track.title,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(52.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(colors.card)
+                                )
+                                Spacer(modifier = Modifier.width(14.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = track.title,
+                                        style = Typography.titleMedium.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
+                                        color = colors.textPrimary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = track.artist,
+                                        style = Typography.bodySmall.copy(fontSize = 13.sp),
+                                        color = colors.textMuted,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { trackForOptions = track },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.MoreVert,
+                                        contentDescription = "Options",
+                                        tint = colors.textMuted,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    val startIds = startListeningTracks.mapTo(HashSet()) { it.id }
+                    val mixTracks = homeTracks.filter { it.id !in startIds }.take(8).ifEmpty { homeTracks.drop(3).take(8) }
+                    if (mixTracks.isNotEmpty()) {
+                        item(key = "to_get_you_started_header") {
+                            Text(
+                                text = stringResource(R.string.home_to_get_you_started),
+                                style = Typography.headlineMedium.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold),
+                                color = colors.textPrimary,
+                                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 12.dp)
+                            )
+                        }
+                        item(key = "to_get_you_started_carousel", contentType = "carousel") {
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 20.dp),
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                items(mixTracks, key = { "mix_${it.id}" }, contentType = { "mix_card" }) { track ->
+                                    Column(
+                                        modifier = Modifier
+                                            .width(152.dp)
+                                            .combinedClickable(
+                                                onClick = { viewModel.playTrack(track, mixTracks) },
+                                                onLongClick = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    trackForOptions = track
+                                                }
+                                            )
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(152.dp)
+                                                .clip(RoundedCornerShape(14.dp))
+                                                .background(colors.card)
+                                        ) {
+                                            AsyncImage(
+                                                model = track.thumbnailUrlForDisplay(512),
+                                                contentDescription = track.title,
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(64.dp)
+                                                    .align(Alignment.BottomCenter)
+                                                    .background(
+                                                        Brush.verticalGradient(
+                                                            listOf(
+                                                                Color.Transparent,
+                                                                PureBlack.copy(alpha = 0.82f)
+                                                            )
+                                                        )
+                                                    )
+                                            )
+                                            Text(
+                                                text = formatMixBadgeLabel(track.artist),
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = PureWhite,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier
+                                                    .align(Alignment.BottomStart)
+                                                    .padding(horizontal = 10.dp, vertical = 9.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(
+                                            text = "${track.title} • ${track.artist}",
+                                            style = Typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 16.sp),
+                                            color = colors.textMuted,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    val quickPicks = (recentlyPlayed.ifEmpty { homeTracks }).distinctBy { it.id }.take(4)
+                    if (quickPicks.isNotEmpty()) {
+                        item(key = "quick_picks_title") {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(stringResource(R.string.home_play_again), style = Typography.titleLarge, color = colors.textPrimary)
+                                Text(
+                                    text = stringResource(R.string.home_view_all),
+                                    style = Typography.bodySmall,
+                                    color = colors.textMuted,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { showRecentsDialog = true }
+                                        .padding(horizontal = 6.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                        item(key = "quick_picks_grid", contentType = "quick_grid") {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 20.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                quickPicks.chunked(2).forEach { rowTracks ->
+                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        rowTracks.forEach { track ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(62.dp)
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .background(colors.card)
+                                                    .combinedClickable(
+                                                        onClick = { viewModel.playTrack(track, quickPicks) },
+                                                        onLongClick = {
+                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                            trackForOptions = track
+                                                        }
+                                                    ),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                AsyncImage(
+                                                    model = track.thumbnailUrlForDisplay(192),
+                                                    contentDescription = null,
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier
+                                                        .size(62.dp)
+                                                        .clip(RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp))
+                                                )
+                                                Text(
+                                                    text = track.title,
+                                                    style = Typography.bodyMedium,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = colors.textPrimary,
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier.padding(horizontal = 10.dp)
+                                                )
+                                            }
+                                        }
+                                        if (rowTracks.size == 1) Spacer(Modifier.weight(1f))
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(24.dp))
+                        }
+                    }
+
+                    val usedIds = (startIds + mixTracks.map { it.id } + quickPicks.map { it.id }).toHashSet()
+                    val featuredTrack = homeSections.firstNotNullOfOrNull { sec ->
+                        sec.tracks.firstOrNull { it.id !in usedIds }
+                    } ?: homeTracks.firstOrNull { it.id !in usedIds }
+                        ?: homeSections.firstNotNullOfOrNull { it.tracks.firstOrNull() }
+                        ?: homeTracks.firstOrNull()
+                    if (featuredTrack != null) {
+                        item(key = "featured_title") {
+                            Text(
+                                text = stringResource(R.string.home_picks_for_you),
+                                style = Typography.titleLarge,
+                                color = colors.textPrimary,
+                                modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 10.dp)
+                            )
+                        }
+                        item(key = "featured_card", contentType = "featured") {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 20.dp)
+                                    .height(142.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .combinedClickable(
+                                        onClick = { viewModel.playTrack(featuredTrack, homeSections.firstOrNull { it.tracks.contains(featuredTrack) }?.tracks ?: homeTracks) },
+                                        onLongClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            trackForOptions = featuredTrack
+                                        }
+                                    )
+                            ) {
+                                AsyncImage(
+                                    model = featuredTrack.thumbnailUrlForDisplay(640),
+                                    contentDescription = featuredTrack.title,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(Brush.horizontalGradient(listOf(PureBlack.copy(alpha = 0.82f), PureBlack.copy(alpha = 0.08f))))
+                                )
+                                Column(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomStart)
+                                        .padding(15.dp)
+                                        .fillMaxWidth(0.72f)
+                                ) {
+                                    Text(stringResource(R.string.home_mix_personal), style = Typography.labelSmall.copy(fontSize = 9.sp, letterSpacing = 1.2.sp), color = PureWhite.copy(alpha = 0.72f))
+                                    Text(featuredTrack.title, style = Typography.titleLarge, color = PureWhite, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(featuredTrack.artist, style = Typography.bodySmall, color = PureWhite.copy(alpha = 0.8f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .padding(15.dp)
+                                        .size(38.dp)
+                                        .clip(CircleShape)
+                                        .background(PureWhite),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_kuro_play),
+                                        contentDescription = "Putar ${featuredTrack.title}",
+                                        tint = PureBlack,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(24.dp))
+                        }
+                    }
+
+                    homeSections.forEachIndexed { sIndex, section ->
+                        item(key = "header_${sIndex}_${section.title}", contentType = "section_header") {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 20.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = section.title,
+                                    style = Typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 20.sp,
+                                    color = colors.textPrimary
+                                )
+                                if (section.subtitle.isNotBlank()) {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = section.subtitle,
+                                        style = Typography.bodySmall,
+                                        color = colors.textMuted
+                                    )
+                                }
+                            }
+                        }
+
+                        item(key = "shelf_${sIndex}_${section.title}", contentType = "shelf_row") {
+                            LazyRow(
+                                contentPadding = PaddingValues(horizontal = 20.dp),
+                                horizontalArrangement = Arrangement.spacedBy(13.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                itemsIndexed(section.tracks, key = { tIndex, track -> "shelf_${sIndex}_${track.id}_$tIndex" }, contentType = { _, _ -> "ytm_card" }) { _, track ->
+                                    YtmMusicCard(
+                                        track = track,
+                                        isPlaying = currentTrack?.id == track.id,
+                                        onClick = { viewModel.playTrack(track, section.tracks) },
+                                        onLongClick = { trackForOptions = track }
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(24.dp))
+                        }
+                    }
+
+                    item {
+                        Spacer(modifier = Modifier.height(140.dp))
+                    }
                 }
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(top = 6.dp)
                 ) {
-                    items(genreTracks, key = { it.id }, contentType = { "track" }) { track ->
+                    items(trendingTracks, key = { it.id }, contentType = { "track" }) { track ->
                         val isFav = track.id in favoriteIds
                         TrackItem(
                             track = track.copy(isFavorite = isFav),
                             isPlaying = currentTrack?.id == track.id,
                             isLoading = isLoadingTrack && currentTrack?.id == track.id,
-                            onClick = { viewModel.playTrack(track, genreTracks) },
+                            onClick = { viewModel.playTrack(track, trendingTracks) },
                             onFavoriteClick = { viewModel.toggleFavorite(track) },
                             onMoreClick = { trackForOptions = track },
                             onSwipeAddToQueue = { viewModel.addToQueue(track) }
                         )
                     }
                     item {
-                        Spacer(modifier = Modifier.height(130.dp))
+                        Spacer(modifier = Modifier.height(140.dp))
                     }
                 }
             }
-        } else if (isLoadingTrending) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = colors.textPrimary)
-            }
-        } else if (homeSections.isNotEmpty() || trendingTracks.isNotEmpty()) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(top = 6.dp)
-            ) {
-                val homeTracks = trendingTracks.ifEmpty { homeSections.flatMap { it.tracks } }.distinctBy { it.id }
-
-                val startListeningTracks = (recentlyPlayed.ifEmpty { homeTracks }).distinctBy { it.id }.take(3)
-                if (startListeningTracks.isNotEmpty()) {
-                    item(key = "start_listening_header") {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 4.dp)
-                        ) {
-                            Text(
-                                text = stringResource(R.string.home_start_listening_sub),
-                                style = Typography.bodySmall.copy(fontSize = 12.sp),
-                                color = colors.textMuted
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = stringResource(R.string.home_start_listening),
-                                style = Typography.headlineMedium.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold),
-                                color = colors.textPrimary
-                            )
-                        }
-                    }
-
-                    items(startListeningTracks, key = { "start_listen_${it.id}" }) { track ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .combinedClickable(
-                                    onClick = { viewModel.playTrack(track, startListeningTracks) },
-                                    onLongClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        trackForOptions = track
-                                    }
-                                )
-                                .padding(horizontal = 20.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            AsyncImage(
-                                model = track.thumbnailUrlForDisplay(192),
-                                contentDescription = track.title,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .size(52.dp)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(colors.card)
-                            )
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = track.title,
-                                    style = Typography.titleMedium.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
-                                    color = colors.textPrimary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = track.artist,
-                                    style = Typography.bodySmall.copy(fontSize = 13.sp),
-                                    color = colors.textMuted,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                            IconButton(
-                                onClick = { trackForOptions = track },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.MoreVert,
-                                    contentDescription = "Options",
-                                    tint = colors.textMuted,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                val startIds = startListeningTracks.mapTo(HashSet()) { it.id }
-                val mixTracks = homeTracks.filter { it.id !in startIds }.take(8).ifEmpty { homeTracks.drop(3).take(8) }
-                if (mixTracks.isNotEmpty()) {
-                    item(key = "to_get_you_started_header") {
-                        Text(
-                            text = stringResource(R.string.home_to_get_you_started),
-                            style = Typography.headlineMedium.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold),
-                            color = colors.textPrimary,
-                            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 12.dp)
-                        )
-                    }
-                    item(key = "to_get_you_started_carousel") {
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 20.dp),
-                            horizontalArrangement = Arrangement.spacedBy(14.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            items(mixTracks, key = { "mix_${it.id}" }) { track ->
-                                Column(
-                                    modifier = Modifier
-                                        .width(152.dp)
-                                        .combinedClickable(
-                                            onClick = { viewModel.playTrack(track, mixTracks) },
-                                            onLongClick = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                trackForOptions = track
-                                            }
-                                        )
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(152.dp)
-                                            .clip(RoundedCornerShape(14.dp))
-                                            .background(colors.card)
-                                    ) {
-                                        AsyncImage(
-                                            model = track.thumbnailUrlForDisplay(512),
-                                            contentDescription = track.title,
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier.fillMaxSize()
-                                        )
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(64.dp)
-                                                .align(Alignment.BottomCenter)
-                                                .background(
-                                                    Brush.verticalGradient(
-                                                        listOf(
-                                                            Color.Transparent,
-                                                            PureBlack.copy(alpha = 0.82f)
-                                                        )
-                                                    )
-                                                )
-                                        )
-                                        Text(
-                                            text = formatMixBadgeLabel(track.artist),
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = PureWhite,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier
-                                                .align(Alignment.BottomStart)
-                                                .padding(horizontal = 10.dp, vertical = 9.dp)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    Text(
-                                        text = "${track.title} • ${track.artist}",
-                                        style = Typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 16.sp),
-                                        color = colors.textMuted,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                val quickPicks = (recentlyPlayed.ifEmpty { homeTracks }).distinctBy { it.id }.take(4)
-                if (quickPicks.isNotEmpty()) {
-                    item(key = "quick_picks_title") {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(stringResource(R.string.home_play_again), style = Typography.titleLarge, color = colors.textPrimary)
-                            Text(
-                                text = stringResource(R.string.home_view_all),
-                                style = Typography.bodySmall,
-                                color = colors.textMuted,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable { showRecentsDialog = true }
-                                    .padding(horizontal = 6.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-                    item(key = "quick_picks_grid") {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 20.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            quickPicks.chunked(2).forEach { rowTracks ->
-                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    rowTracks.forEach { track ->
-                                        Row(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .height(62.dp)
-                                                .clip(RoundedCornerShape(12.dp))
-                                                .background(colors.card)
-                                                .combinedClickable(
-                                                    onClick = { viewModel.playTrack(track, quickPicks) },
-                                                    onLongClick = {
-                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                        trackForOptions = track
-                                                    }
-                                                ),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            AsyncImage(
-                                                model = track.thumbnailUrlForDisplay(192),
-                                                contentDescription = null,
-                                                contentScale = ContentScale.Crop,
-                                                modifier = Modifier
-                                                    .size(62.dp)
-                                                    .clip(RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp))
-                                            )
-                                            Text(
-                                                text = track.title,
-                                                style = Typography.bodyMedium,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = colors.textPrimary,
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.padding(horizontal = 10.dp)
-                                            )
-                                        }
-                                    }
-                                    if (rowTracks.size == 1) Spacer(Modifier.weight(1f))
-                                }
-                            }
-                        }
-                        Spacer(Modifier.height(24.dp))
-                    }
-                }
-
-                val usedIds = (startIds + mixTracks.map { it.id } + quickPicks.map { it.id }).toHashSet()
-                val featuredTrack = homeSections.firstNotNullOfOrNull { sec ->
-                    sec.tracks.firstOrNull { it.id !in usedIds }
-                } ?: homeTracks.firstOrNull { it.id !in usedIds }
-                    ?: homeSections.firstNotNullOfOrNull { it.tracks.firstOrNull() }
-                    ?: homeTracks.firstOrNull()
-                if (featuredTrack != null) {
-                    item(key = "featured_title") {
-                        Text(
-                            text = stringResource(R.string.home_picks_for_you),
-                            style = Typography.titleLarge,
-                            color = colors.textPrimary,
-                            modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 10.dp)
-                        )
-                    }
-                    item(key = "featured_card") {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 20.dp)
-                                .height(142.dp)
-                                .clip(RoundedCornerShape(16.dp))
-                                .combinedClickable(
-                                    onClick = { viewModel.playTrack(featuredTrack, homeSections.firstOrNull { it.tracks.contains(featuredTrack) }?.tracks ?: homeTracks) },
-                                    onLongClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        trackForOptions = featuredTrack
-                                    }
-                                )
-                        ) {
-                            AsyncImage(
-                                model = featuredTrack.thumbnailUrlForDisplay(640),
-                                contentDescription = featuredTrack.title,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(Brush.horizontalGradient(listOf(PureBlack.copy(alpha = 0.82f), PureBlack.copy(alpha = 0.08f))))
-                            )
-                            Column(
-                                modifier = Modifier
-                                    .align(Alignment.BottomStart)
-                                    .padding(15.dp)
-                                    .fillMaxWidth(0.72f)
-                            ) {
-                                Text(stringResource(R.string.home_mix_personal), style = Typography.labelSmall.copy(fontSize = 9.sp, letterSpacing = 1.2.sp), color = PureWhite.copy(alpha = 0.72f))
-                                Text(featuredTrack.title, style = Typography.titleLarge, color = PureWhite, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(featuredTrack.artist, style = Typography.bodySmall, color = PureWhite.copy(alpha = 0.8f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.BottomEnd)
-                                    .padding(15.dp)
-                                    .size(38.dp)
-                                    .clip(CircleShape)
-                                    .background(PureWhite),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_kuro_play),
-                                    contentDescription = "Putar ${featuredTrack.title}",
-                                    tint = PureBlack,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(24.dp))
-                    }
-                }
-
-                homeSections.forEachIndexed { sIndex, section ->
-                    item(key = "header_${sIndex}_${section.title}") {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 20.dp, vertical = 6.dp)
-                        ) {
-                            Text(
-                                text = section.title,
-                                style = Typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 20.sp,
-                                color = colors.textPrimary
-                            )
-                            if (section.subtitle.isNotBlank()) {
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = section.subtitle,
-                                    style = Typography.bodySmall,
-                                    color = colors.textMuted
-                                )
-                            }
-                        }
-                    }
-
-                    item(key = "shelf_${sIndex}_${section.title}") {
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 20.dp),
-                            horizontalArrangement = Arrangement.spacedBy(13.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            itemsIndexed(section.tracks, key = { tIndex, track -> "shelf_${sIndex}_${track.id}_$tIndex" }) { _, track ->
-                                YtmMusicCard(
-                                    track = track,
-                                    isPlaying = currentTrack?.id == track.id,
-                                    onClick = { viewModel.playTrack(track, section.tracks) },
-                                    onLongClick = { trackForOptions = track }
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(24.dp))
-                    }
-                }
-
-                item {
-                    Spacer(modifier = Modifier.height(140.dp))
-                }
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(top = 6.dp)
-            ) {
-                items(trendingTracks, key = { it.id }, contentType = { "track" }) { track ->
-                    val isFav = track.id in favoriteIds
-                    TrackItem(
-                        track = track.copy(isFavorite = isFav),
-                        isPlaying = currentTrack?.id == track.id,
-                        isLoading = isLoadingTrack && currentTrack?.id == track.id,
-                        onClick = { viewModel.playTrack(track, trendingTracks) },
-                        onFavoriteClick = { viewModel.toggleFavorite(track) },
-                        onMoreClick = { trackForOptions = track },
-                        onSwipeAddToQueue = { viewModel.addToQueue(track) }
-                    )
-                }
-                item {
-                    Spacer(modifier = Modifier.height(140.dp))
-                }
-            }
-        }
         }
     }
 

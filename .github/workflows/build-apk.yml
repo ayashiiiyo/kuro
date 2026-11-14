@@ -109,14 +109,14 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.8.12 — Apple Fluid Motion & Playback Tracking Fixes
+          ## Kuro v3.8.13 — Pager Navigation, Lyric Cleanup & Playback Polish
 
-          - **Apple-Style Fluid Motion**:
-            - Added spring-based motion tokens and applied them to navigation tabs, the mini player, player/lyrics sheets, and screen transitions.
-            - The main UI now scales and dims fluidly behind the expanded player for depth.
-          - **Playback Tracking**:
-            - Widened play/duplicate detection windows, made skips decrement play counts, and removed double-counted plays on track changes.
-            - Prevented stale error-recovery jobs from skipping a newly selected track.
+          - **Swipeable Pager Navigation**:
+            - Replaced the nav host with a horizontal pager, added motion blur on 64-bit devices, and removed forced zoom/scale effects.
+          - **Lyrics Cleanup**:
+            - Sanitized NetEase JSON responses and filtered instrumental markers before rendering lyrics.
+          - **Player & Metadata Fixes**:
+            - Added favorite icon morphing, live progress in the mini player, and stable artwork/metadata refresh on track changes.
           - Published signed release, per-ABI, and debug APKs.
           EOF
           gh release delete "$RELEASE_TAG" --yes --cleanup-tag 2>/dev/null || true

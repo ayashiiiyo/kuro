@@ -1,5 +1,8 @@
 package com.ayashii.kuro.ui.theme
 
+import android.graphics.RenderEffect as FrameworkRenderEffect
+import android.graphics.Shader
+import android.os.Build
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.spring
@@ -14,10 +17,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import com.ayashii.kuro.data.settings.SettingsManager
 import com.ayashii.kuro.data.settings.ThemeMode
+import kotlin.math.abs
 
 object KuroMotion {
     val EmphasizedDecelerate = CubicBezierEasing(0.22f, 1.0f, 0.36f, 1.0f)
@@ -25,20 +32,45 @@ object KuroMotion {
     val StandardEasing = CubicBezierEasing(0.25f, 0.1f, 0.25f, 1.0f)
     val AppleDecelerate = CubicBezierEasing(0.22f, 1.0f, 0.36f, 1.0f)
 
+    val is64BitDevice: Boolean = Build.SUPPORTED_64_BIT_ABIS.isNotEmpty()
+
     fun <T> appleFluidSpring(): SpringSpec<T> = spring(
-        dampingRatio = 0.78f,
-        stiffness = 380f
+        dampingRatio = 0.84f,
+        stiffness = 400f
     )
 
     fun <T> appleSnappySpring(): SpringSpec<T> = spring(
-        dampingRatio = 0.82f,
+        dampingRatio = 0.86f,
         stiffness = 520f
     )
 
     fun <T> appleInteractiveSpring(): SpringSpec<T> = spring(
-        dampingRatio = 0.86f,
+        dampingRatio = 0.90f,
         stiffness = 680f
     )
+
+    fun Modifier.pagerMotionBlurTransition(
+        pageOffsetProvider: () -> Float,
+        maxBlurPx: Float = 16f
+    ): Modifier = this.graphicsLayer {
+        val rawOffset = pageOffsetProvider().coerceIn(-1f, 1f)
+        val absOffset = abs(rawOffset)
+        val motionCurve = (4f * absOffset * (1f - absOffset)).coerceIn(0f, 1f)
+        alpha = (1f - (absOffset * 0.28f)).coerceIn(0.72f, 1f)
+        translationX = -rawOffset * size.width * 0.06f
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && is64BitDevice) {
+            val blurX = motionCurve * maxBlurPx
+            if (blurX > 0.6f) {
+                renderEffect = FrameworkRenderEffect.createBlurEffect(
+                    blurX,
+                    (blurX * 0.18f).coerceAtLeast(0.5f),
+                    Shader.TileMode.CLAMP
+                ).asComposeRenderEffect()
+            } else {
+                renderEffect = null
+            }
+        }
+    }
 }
 
 @Immutable

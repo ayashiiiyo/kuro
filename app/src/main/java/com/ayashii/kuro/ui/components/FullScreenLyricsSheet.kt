@@ -58,7 +58,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -76,9 +75,10 @@ import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ayashii.kuro.R
+import com.ayashii.kuro.data.lyrics.LrcParser
 import com.ayashii.kuro.data.lyrics.LyricsData
-import com.ayashii.kuro.data.settings.SettingsManager
 import com.ayashii.kuro.data.model.Track
+import com.ayashii.kuro.data.settings.SettingsManager
 import com.ayashii.kuro.ui.theme.KuroAppTheme
 import com.ayashii.kuro.ui.theme.KuroMotion
 import com.ayashii.kuro.ui.theme.Typography
@@ -112,6 +112,13 @@ fun FullScreenLyricsSheet(
             0.70f to baseBg,
             1.0f to baseBg
         )
+    }
+
+    val sanitizedLyrics = remember(lyricsData) {
+        lyricsData?.let { data ->
+            val clean = LrcParser.sanitizeLines(data.lines)
+            data.copy(lines = clean)
+        }
     }
 
     val settingsManager = remember { SettingsManager.getInstance() }
@@ -154,13 +161,13 @@ fun FullScreenLyricsSheet(
         }
     }
 
-    var activeIndex by remember(lyricsData) {
-        mutableIntStateOf(lyricsData?.getCurrentLineIndex(viewModel.getPositionMs()) ?: -1)
+    var activeIndex by remember(sanitizedLyrics) {
+        mutableIntStateOf(sanitizedLyrics?.getCurrentLineIndex(viewModel.getPositionMs()) ?: -1)
     }
 
-    LaunchedEffect(lyricsData, viewModel) {
+    LaunchedEffect(sanitizedLyrics, viewModel) {
         viewModel.playbackPosition.collect { posMs ->
-            val nextIdx = lyricsData?.getCurrentLineIndex(posMs) ?: -1
+            val nextIdx = sanitizedLyrics?.getCurrentLineIndex(posMs) ?: -1
             if (nextIdx != activeIndex) {
                 activeIndex = nextIdx
             }
@@ -179,7 +186,6 @@ fun FullScreenLyricsSheet(
             listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
         }
     }
-    val lyricsClipShape = remember { RoundedCornerShape(28.dp) }
     val lyricsNestedScroll = remember(listState) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
@@ -228,14 +234,9 @@ fun FullScreenLyricsSheet(
             .fillMaxSize()
             .graphicsLayer {
                 val currentY = animatedDragY.coerceAtLeast(0f)
-                val dismissProgress = (currentY / 500f).coerceIn(0f, 1f)
+                val dismissProgress = (currentY / 540f).coerceIn(0f, 1f)
                 translationY = currentY
-                val s = 1f - (dismissProgress * 0.06f)
-                scaleX = s
-                scaleY = s
-                alpha = 1f - (dismissProgress * 0.22f)
-                shape = lyricsClipShape
-                clip = currentY > 0.5f
+                alpha = 1f - (dismissProgress * 0.16f)
             }
             .background(baseBg)
             .background(lyricsGradient)
@@ -371,8 +372,8 @@ fun FullScreenLyricsSheet(
                     IconButton(
                         onClick = {
                             try {
-                                val shareText = if (lyricsData != null && lyricsData.lines.isNotEmpty()) {
-                                    val snippet = lyricsData.lines.take(8).joinToString("\n") { it.text }
+                                val shareText = if (sanitizedLyrics != null && sanitizedLyrics.lines.isNotEmpty()) {
+                                    val snippet = sanitizedLyrics.lines.take(8).joinToString("\n") { it.text }
                                     "${track.title} - ${track.artist}\n\n$snippet\n\n${track.url}"
                                 } else {
                                     "${track.title} - ${track.artist}: ${track.url}"
@@ -401,7 +402,7 @@ fun FullScreenLyricsSheet(
                     .fillMaxWidth()
                     .weight(1f)
             ) {
-                if (lyricsData == null || lyricsData.lines.isEmpty()) {
+                if (sanitizedLyrics == null || sanitizedLyrics.lines.isEmpty()) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
@@ -417,34 +418,23 @@ fun FullScreenLyricsSheet(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(vertical = 24.dp),
-                        verticalArrangement = Arrangement.spacedBy(22.dp)
+                        verticalArrangement = Arrangement.spacedBy(20.dp)
                     ) {
                         itemsIndexed(
-                            items = lyricsData.lines,
+                            items = sanitizedLyrics.lines,
                             key = { idx, item -> "${idx}_${item.timeMs}" }
                         ) { index, line ->
                             val isActive = index == activeIndex
                             val distance = kotlin.math.abs(index - activeIndex)
-                            val targetScale = when {
-                                isActive -> 1.0f
-                                distance == 1 -> 0.89f
-                                distance == 2 -> 0.84f
-                                else -> 0.80f
-                            }
                             val targetAlpha = when {
                                 isActive -> 1.0f
-                                distance == 1 -> 0.56f
+                                distance == 1 -> 0.54f
                                 distance == 2 -> 0.34f
-                                else -> 0.18f
+                                else -> 0.20f
                             }
-                            val lineScale by animateFloatAsState(
-                                targetValue = targetScale,
-                                animationSpec = KuroMotion.appleFluidSpring(),
-                                label = "lyrics_font_size"
-                            )
                             val lineAlpha by animateFloatAsState(
                                 targetValue = targetAlpha,
-                                animationSpec = KuroMotion.appleFluidSpring(),
+                                animationSpec = tween(220, easing = FastOutSlowInEasing),
                                 label = "lyrics_line_alpha"
                             )
                             val lineOffsetX by animateFloatAsState(
@@ -455,7 +445,7 @@ fun FullScreenLyricsSheet(
 
                             val textColor by animateColorAsState(
                                 targetValue = if (isActive) colors.textPrimary else colors.textSecondary,
-                                animationSpec = tween(240, easing = FastOutSlowInEasing),
+                                animationSpec = tween(220, easing = FastOutSlowInEasing),
                                 label = "lyrics_color"
                             )
 
@@ -463,11 +453,8 @@ fun FullScreenLyricsSheet(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .graphicsLayer {
-                                        scaleX = lineScale
-                                        scaleY = lineScale
                                         alpha = lineAlpha
                                         translationX = lineOffsetX
-                                        transformOrigin = TransformOrigin(0f, 0.5f)
                                     }
                                     .clickable {
                                         viewModel.seekTo(line.timeMs)
@@ -476,20 +463,20 @@ fun FullScreenLyricsSheet(
                             ) {
                                 Text(
                                     text = line.text,
-                                    fontSize = 25.sp,
+                                    fontSize = 23.sp,
                                     fontWeight = if (isActive) FontWeight.ExtraBold else FontWeight.Bold,
                                     color = textColor,
-                                    lineHeight = 33.sp
+                                    lineHeight = 31.sp
                                 )
 
                                 if (showTranslation && !line.translation.isNullOrBlank()) {
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
                                         text = line.translation!!,
-                                        fontSize = if (isActive) 15.sp else 13.sp,
+                                        fontSize = 14.sp,
                                         fontWeight = FontWeight.Medium,
-                                        color = if (isActive) colors.textSecondary else colors.textSecondary.copy(alpha = 0.35f),
-                                        lineHeight = if (isActive) 20.sp else 17.sp
+                                        color = if (isActive) colors.textSecondary else colors.textSecondary.copy(alpha = 0.45f),
+                                        lineHeight = 19.sp
                                     )
                                 }
                             }
@@ -595,7 +582,7 @@ fun FullScreenLyricsSheet(
             onSelectLanguage = { selected ->
                 settingsManager.setLyricsLanguage(selected)
                 showTranslation = true
-                viewModel.retranslateActiveLyrics(lyricsData, selected)
+                viewModel.retranslateActiveLyrics(sanitizedLyrics, selected)
                 showLangPickerDialog = false
             },
             onDismiss = { showLangPickerDialog = false }
@@ -686,11 +673,6 @@ private fun LyricsBottomControls(
                         modifier = Modifier.size(28.dp)
                     )
                 } else {
-                    val playScale by animateFloatAsState(
-                        targetValue = if (isPlaying) 0.94f else 1f,
-                        animationSpec = tween(durationMillis = 140),
-                        label = "lyrics_play_scale"
-                    )
                     IconButton(
                         onClick = onPlayPauseClick,
                         modifier = Modifier.size(64.dp)
@@ -699,7 +681,7 @@ private fun LyricsBottomControls(
                             painter = if (isPlaying) painterResource(R.drawable.ic_kuro_pause) else painterResource(R.drawable.ic_kuro_play),
                             contentDescription = if (isPlaying) "Pause" else "Play",
                             tint = colors.background,
-                            modifier = Modifier.size(30.dp).graphicsLayer { scaleX = playScale; scaleY = playScale }
+                            modifier = Modifier.size(30.dp)
                         )
                     }
                 }

@@ -2,6 +2,7 @@ package com.ayashii.kuro.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -9,6 +10,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
@@ -399,11 +401,10 @@ fun SearchScreen(
         AnimatedContent(
             targetState = bodyMode,
             transitionSpec = {
-                (fadeIn(tween(240, easing = KuroMotion.EmphasizedDecelerate)) +
-                    slideInVertically(animationSpec = tween(240, easing = KuroMotion.EmphasizedDecelerate)) { it / 16 } +
-                    scaleIn(initialScale = 0.98f, animationSpec = tween(240, easing = KuroMotion.EmphasizedDecelerate)))
+                (fadeIn(tween(220, easing = KuroMotion.EmphasizedDecelerate)) +
+                    slideInVertically(animationSpec = tween(220, easing = KuroMotion.EmphasizedDecelerate)) { it / 18 })
                     .togetherWith(
-                        fadeOut(tween(160, easing = KuroMotion.EmphasizedAccelerate))
+                        fadeOut(tween(150, easing = KuroMotion.EmphasizedAccelerate))
                     )
             },
             label = "search_body_transition",
@@ -411,7 +412,7 @@ fun SearchScreen(
                 .fillMaxSize()
                 .imePadding()
                 .graphicsLayer {
-                    translationX = if (bodyMode != 0) (animatedSwipeBackX.coerceAtLeast(0f) * 0.4f) else 0f
+                    translationX = if (bodyMode != 0) animatedSwipeBackX.coerceAtLeast(0f) else 0f
                 }
                 .then(
                     if (bodyMode != 0) {
@@ -430,7 +431,7 @@ fun SearchScreen(
                                 onDragCancel = { swipeBackOffsetX = 0f },
                                 onHorizontalDrag = { change, dragAmount ->
                                     if (dragAmount > 0f || swipeBackOffsetX > 0f) {
-                                        swipeBackOffsetX = (swipeBackOffsetX + dragAmount).coerceIn(0f, 220f)
+                                        swipeBackOffsetX = (swipeBackOffsetX + dragAmount).coerceIn(0f, size.width.toFloat().coerceAtLeast(360f))
                                         change.consume()
                                     }
                                 }
@@ -508,7 +509,7 @@ fun SearchScreen(
                         }
 
                         if (searchResults.isNotEmpty()) {
-                            items(searchResults, key = { it.id }) { track ->
+                            items(searchResults, key = { it.id }, contentType = { "search_track" }) { track ->
                                 val isCurrent = currentTrack?.id == track.id
                                 val isSaved = track.id in favoriteIds
 
@@ -584,6 +585,7 @@ fun SearchScreen(
 
                                     IconButton(
                                         onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                             if (isSaved) {
                                                 viewModel.toggleFavorite(track)
                                             } else {
@@ -592,12 +594,26 @@ fun SearchScreen(
                                         },
                                         modifier = Modifier.size(36.dp)
                                     ) {
-                                        Icon(
-                                            imageVector = if (isSaved) Icons.Default.CheckCircle else Icons.Outlined.AddCircleOutline,
-                                            contentDescription = "Save track",
-                                            tint = if (isSaved) colors.accent else colors.textMuted,
-                                            modifier = Modifier.size(22.dp)
+                                        val saveTint by animateColorAsState(
+                                            targetValue = if (isSaved) colors.accent else colors.textMuted,
+                                            animationSpec = tween(180),
+                                            label = "search_save_tint"
                                         )
+                                        AnimatedContent(
+                                            targetState = isSaved,
+                                            transitionSpec = {
+                                                (scaleIn(initialScale = 0.6f, animationSpec = KuroMotion.appleSnappySpring()) + fadeIn(tween(140)))
+                                                    .togetherWith(scaleOut(targetScale = 0.6f, animationSpec = tween(110)) + fadeOut(tween(110)))
+                                            },
+                                            label = "search_save_icon"
+                                        ) { saved ->
+                                            Icon(
+                                                imageVector = if (saved) Icons.Default.CheckCircle else Icons.Outlined.AddCircleOutline,
+                                                contentDescription = "Save track",
+                                                tint = saveTint,
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -658,7 +674,7 @@ fun SearchScreen(
                                 )
                             }
 
-                            items(recentlyPlayed, key = { "recent_${it.id}" }) { track ->
+                            items(recentlyPlayed, key = { "recent_${it.id}" }, contentType = { "recent_track" }) { track ->
                                 val isSaved = track.id in favoriteIds
 
                                 Row(
@@ -719,6 +735,7 @@ fun SearchScreen(
 
                                     IconButton(
                                         onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                             if (isSaved) {
                                                 viewModel.toggleFavorite(track)
                                             } else {
@@ -727,12 +744,26 @@ fun SearchScreen(
                                         },
                                         modifier = Modifier.size(36.dp)
                                     ) {
-                                        Icon(
-                                            imageVector = if (isSaved) Icons.Default.CheckCircle else Icons.Outlined.AddCircleOutline,
-                                            contentDescription = "Save track",
-                                            tint = if (isSaved) colors.accent else colors.textMuted,
-                                            modifier = Modifier.size(22.dp)
+                                        val saveTint by animateColorAsState(
+                                            targetValue = if (isSaved) colors.accent else colors.textMuted,
+                                            animationSpec = tween(180),
+                                            label = "recent_save_tint"
                                         )
+                                        AnimatedContent(
+                                            targetState = isSaved,
+                                            transitionSpec = {
+                                                (scaleIn(initialScale = 0.6f, animationSpec = KuroMotion.appleSnappySpring()) + fadeIn(tween(140)))
+                                                    .togetherWith(scaleOut(targetScale = 0.6f, animationSpec = tween(110)) + fadeOut(tween(110)))
+                                            },
+                                            label = "recent_save_icon"
+                                        ) { saved ->
+                                            Icon(
+                                                imageVector = if (saved) Icons.Default.CheckCircle else Icons.Outlined.AddCircleOutline,
+                                                contentDescription = "Save track",
+                                                tint = saveTint,
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
                                     }
 
                                     Spacer(modifier = Modifier.width(4.dp))

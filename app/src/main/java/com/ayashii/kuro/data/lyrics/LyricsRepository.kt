@@ -22,9 +22,11 @@ class LyricsRepository(private val context: Context) {
     private val memCache = LruCache<String, LyricsData>(100)
     private val negativeCache = LruCache<String, Long>(200)
     private val NEGATIVE_CACHE_TTL = 7 * 24 * 60 * 60 * 1000L
-    private val diskCacheDir = File(context.cacheDir, "lyrics_cache_v7").apply {
+    private val diskCacheDir = File(context.cacheDir, "lyrics_cache_v8").apply {
         mkdirs()
         try {
+            val oldCache7 = File(context.cacheDir, "lyrics_cache_v7")
+            if (oldCache7.exists()) oldCache7.deleteRecursively()
             val oldCache6 = File(context.cacheDir, "lyrics_cache_v6")
             if (oldCache6.exists()) oldCache6.deleteRecursively()
             val oldCache5 = File(context.cacheDir, "lyrics_cache_v5")
@@ -84,6 +86,8 @@ class LyricsRepository(private val context: Context) {
                         memCache.put(trackId, cached)
                     }
                     return@withContext cached
+                } else {
+                    langDiskFile.delete()
                 }
             } catch (e: Exception) {
                 Log.d("LyricsRepository", "Disk cache read error: ${e.message}")
@@ -108,6 +112,8 @@ class LyricsRepository(private val context: Context) {
                         langDiskFile.writeText(serializeLyricsJson(localized))
                     } catch (_: Exception) {}
                     return@withContext localized
+                } else {
+                    baseDiskFile.delete()
                 }
             } catch (e: Exception) {
                 Log.d("LyricsRepository", "Base disk cache read error: ${e.message}")
@@ -127,7 +133,10 @@ class LyricsRepository(private val context: Context) {
         var lyrics: LyricsData? = null
 
         if (liriqoResult is LyricsFetchResult.Success) {
-            lyrics = liriqoResult.data
+            val sanitizedLines = LrcParser.sanitizeLines(liriqoResult.data.lines)
+            if (isValidLyricsLines(sanitizedLines)) {
+                lyrics = liriqoResult.data.copy(lines = sanitizedLines)
+            }
         }
 
         if (lyrics != null) {
@@ -152,7 +161,7 @@ class LyricsRepository(private val context: Context) {
                 }
             }
         } else {
-            val liriqoVerifiedEmpty = liriqoResult is LyricsFetchResult.Empty
+            val liriqoVerifiedEmpty = liriqoResult is LyricsFetchResult.Empty || liriqoResult is LyricsFetchResult.Success
             val hadNetworkError = liriqoResult is LyricsFetchResult.Error
 
             if (!hadNetworkError && liriqoVerifiedEmpty) {
@@ -256,7 +265,7 @@ class LyricsRepository(private val context: Context) {
                     title = title,
                     artist = artist
                 )
-                if (lyricsData != null && lyricsData.lines.isNotEmpty()) {
+                if (lyricsData != null && isValidLyricsLines(lyricsData.lines)) {
                     LyricsFetchResult.Success(lyricsData)
                 } else {
                     LyricsFetchResult.Empty
@@ -272,8 +281,9 @@ class LyricsRepository(private val context: Context) {
     }
 
     fun isValidLyricsLines(lines: List<LyricLine>): Boolean {
-        if (lines.isEmpty()) return false
-        val nonBlank = lines.filter { it.text.isNotBlank() }
+        val sanitized = LrcParser.sanitizeLines(lines)
+        if (sanitized.isEmpty()) return false
+        val nonBlank = sanitized.filter { it.text.isNotBlank() && !isIntroToken(it.text) }
         if (nonBlank.isEmpty()) return false
         if (nonBlank.size <= 2) {
             val combined = nonBlank.joinToString(" ") { it.text.lowercase().trim() }
@@ -327,9 +337,10 @@ class LyricsRepository(private val context: Context) {
     }
 
     private fun translateLines(lines: List<LyricLine>, targetLang: LyricsLanguage): List<LyricLine> {
-        if (lines.isEmpty()) return lines
+        val cleanInput = LrcParser.sanitizeLines(lines)
+        if (cleanInput.isEmpty()) return emptyList()
 
-        val rawTexts = lines.map { it.text }
+        val rawTexts = cleanInput.map { it.text }
         val payload = com.ayashii.kuro.data.native.KuroNativeCore.buildDeepLRequestPayload(rawTexts, targetLang.deeplCode)
 
         for (endpoint in DEEPL_ENDPOINTS) {
@@ -346,9 +357,9 @@ class LyricsRepository(private val context: Context) {
                         val respBody = resp.body?.string().orEmpty()
                         val translatedTexts = com.ayashii.kuro.data.native.KuroNativeCore.parseDeepLResponseTranslations(respBody)
                         if (translatedTexts.isNotEmpty()) {
-                            return lines.mapIndexed { idx, line ->
+                            return cleanInput.mapIndexed { idx, line ->
                                 val trans = translatedTexts.getOrNull(idx)?.trim()
-                                val validTrans = if (!trans.isNullOrBlank() && !trans.equals(line.text.trim(), ignoreCase = true)) trans else null
+                                val validTrans = if (!trans.isNullOrBlank() && !trans.equals(line.text.trim(), ignoreCase = true) && !LrcParser.isJunkOrCreditLine(trans)) trans else null
                                 line.copy(translation = validTrans)
                             }
                         }
@@ -360,7 +371,7 @@ class LyricsRepository(private val context: Context) {
         }
 
         try {
-            val textToTranslate = lines.mapIndexed { idx, line ->
+            val textToTranslate = cleanInput.mapIndexed { idx, line ->
                 "[[[$idx]]] ${line.text}"
             }.joinToString("\n")
 
@@ -399,9 +410,9 @@ class LyricsRepository(private val context: Context) {
                         }
 
                         if (translatedMap.isNotEmpty()) {
-                            return lines.mapIndexed { idx, line ->
+                            return cleanInput.mapIndexed { idx, line ->
                                 val trans = translatedMap[idx]
-                                val validTrans = if (!trans.isNullOrBlank() && !trans.equals(line.text.trim(), ignoreCase = true)) trans else null
+                                val validTrans = if (!trans.isNullOrBlank() && !trans.equals(line.text.trim(), ignoreCase = true) && !LrcParser.isJunkOrCreditLine(trans)) trans else null
                                 line.copy(translation = validTrans)
                             }
                         }
@@ -413,9 +424,9 @@ class LyricsRepository(private val context: Context) {
                             fullTranslated.lines().map { it.trim() }.filter { it.isNotEmpty() }
                         }
 
-                        return lines.mapIndexed { idx, line ->
+                        return cleanInput.mapIndexed { idx, line ->
                             val trans = translatedBlocks.getOrNull(idx)?.trim()
-                            val validTrans = if (!trans.isNullOrBlank() && !trans.equals(line.text.trim(), ignoreCase = true) && !trans.matches(Regex("""^\[\s*\[\s*\[.*\]\s*\]\s*\]$"""))) trans else null
+                            val validTrans = if (!trans.isNullOrBlank() && !trans.equals(line.text.trim(), ignoreCase = true) && !trans.matches(Regex("""^\[\s*\[\s*\[.*\]\s*\]\s*\]$""")) && !LrcParser.isJunkOrCreditLine(trans)) trans else null
                             line.copy(translation = validTrans)
                         }
                     }
@@ -424,7 +435,7 @@ class LyricsRepository(private val context: Context) {
         } catch (e: Exception) {
             Log.d("LyricsRepository", "Fallback translation error: ${e.message}")
         }
-        return lines
+        return cleanInput
     }
 
     private fun encode(str: String): String = URLEncoder.encode(str, "UTF-8")
@@ -458,10 +469,10 @@ class LyricsRepository(private val context: Context) {
             val artist = root.getString("artist")
             val isSynced = root.optBoolean("isSynced", true)
             val linesArr = root.getJSONArray("lines")
-            val lines = mutableListOf<LyricLine>()
+            val rawLines = mutableListOf<LyricLine>()
             for (i in 0 until linesArr.length()) {
                 val obj = linesArr.getJSONObject(i)
-                lines.add(
+                rawLines.add(
                     LyricLine(
                         timeMs = obj.getLong("timeMs"),
                         text = obj.getString("text"),
@@ -470,7 +481,9 @@ class LyricsRepository(private val context: Context) {
                     )
                 )
             }
-            LyricsData(trackId, title, artist, lines, isSynced)
+            val sanitizedLines = LrcParser.sanitizeLines(rawLines)
+            if (!isValidLyricsLines(sanitizedLines)) return null
+            LyricsData(trackId, title, artist, sanitizedLines, isSynced)
         } catch (e: Exception) {
             null
         }

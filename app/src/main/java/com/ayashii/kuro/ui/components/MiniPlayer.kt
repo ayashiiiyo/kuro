@@ -1,6 +1,7 @@
 package com.ayashii.kuro.ui.components
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -8,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -100,11 +102,6 @@ fun MiniPlayer(
         label = "mini_swipe_offset_y"
     )
 
-    val miniArtScale by animateFloatAsState(
-        targetValue = if (isPlaying) 1.0f else 0.90f,
-        animationSpec = KuroMotion.appleFluidSpring(),
-        label = "mini_art_breathing"
-    )
     val solidContainerColor = if (colors.isDark) Color(0xFF0A0A0A) else Color(0xFFFFFFFF)
     val shape = RoundedCornerShape(14.dp)
 
@@ -208,10 +205,10 @@ fun MiniPlayer(
             ) {
                 AnimatedContent(
                     targetState = track,
+                    contentKey = { it.id },
                     transitionSpec = {
-                        (fadeIn(tween(240, easing = KuroMotion.EmphasizedDecelerate)) +
-                            scaleIn(initialScale = 0.92f, animationSpec = tween(240, easing = KuroMotion.EmphasizedDecelerate)))
-                            .togetherWith(fadeOut(tween(180, easing = KuroMotion.EmphasizedAccelerate)))
+                        fadeIn(tween(220, easing = KuroMotion.EmphasizedDecelerate))
+                            .togetherWith(fadeOut(tween(160, easing = KuroMotion.EmphasizedAccelerate)))
                     },
                     label = "mini_artwork"
                 ) { animatedTrack ->
@@ -220,10 +217,6 @@ fun MiniPlayer(
                         contentDescription = animatedTrack.title,
                         modifier = Modifier
                             .size(44.dp)
-                            .graphicsLayer {
-                                scaleX = miniArtScale
-                                scaleY = miniArtScale
-                            }
                             .clip(RoundedCornerShape(10.dp))
                             .background(colors.card),
                         contentScale = ContentScale.Crop
@@ -238,6 +231,7 @@ fun MiniPlayer(
             ) {
                 AnimatedContent(
                     targetState = track,
+                    contentKey = { it.id },
                     transitionSpec = {
                         fadeIn(tween(220, easing = KuroMotion.EmphasizedDecelerate))
                             .togetherWith(fadeOut(tween(160, easing = KuroMotion.EmphasizedAccelerate)))
@@ -274,12 +268,26 @@ fun MiniPlayer(
                     },
                     modifier = Modifier.size(36.dp)
                 ) {
-                    Icon(
-                        imageVector = if (track.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                        contentDescription = "Favorite",
-                        tint = if (track.isFavorite) Color(0xFFFF3B30) else colors.textMuted,
-                        modifier = Modifier.size(20.dp)
+                    val favColor by animateColorAsState(
+                        targetValue = if (track.isFavorite) Color(0xFFFF3B30) else colors.textMuted,
+                        animationSpec = tween(180),
+                        label = "mini_fav_tint"
                     )
+                    AnimatedContent(
+                        targetState = track.isFavorite,
+                        transitionSpec = {
+                            (scaleIn(initialScale = 0.6f, animationSpec = KuroMotion.appleSnappySpring()) + fadeIn(tween(140)))
+                                .togetherWith(scaleOut(targetScale = 0.6f, animationSpec = tween(110)) + fadeOut(tween(110)))
+                        },
+                        label = "mini_fav_icon"
+                    ) { isFav ->
+                        Icon(
+                            imageVector = if (isFav) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                            contentDescription = "Favorite",
+                            tint = favColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
 
@@ -295,11 +303,6 @@ fun MiniPlayer(
                     )
                 }
             } else {
-                val playScale by animateFloatAsState(
-                    targetValue = if (isPlaying) 0.94f else 1f,
-                    animationSpec = tween(durationMillis = 160, easing = KuroMotion.StandardEasing),
-                    label = "mini_play_scale"
-                )
                 IconButton(
                     onClick = onPlayPauseClick,
                     modifier = Modifier.size(40.dp)
@@ -308,12 +311,7 @@ fun MiniPlayer(
                         painter = if (isPlaying) painterResource(R.drawable.ic_kuro_pause) else painterResource(R.drawable.ic_kuro_play),
                         contentDescription = if (isPlaying) "Pause" else "Play",
                         tint = colors.textPrimary,
-                        modifier = Modifier
-                            .size(24.dp)
-                            .graphicsLayer {
-                                scaleX = playScale
-                                scaleY = playScale
-                            }
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }

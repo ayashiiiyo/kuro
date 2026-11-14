@@ -4,6 +4,7 @@ import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -100,6 +101,7 @@ import androidx.media3.common.Player
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.ayashii.kuro.R
+import com.ayashii.kuro.data.lyrics.LrcParser
 import com.ayashii.kuro.data.lyrics.LyricsData
 import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.ui.theme.KuroAppTheme
@@ -154,12 +156,6 @@ fun FullPlayerSheet(
         pullUpLyricsY = 0f
     }
 
-    val artworkBreathingScale by animateFloatAsState(
-        targetValue = if (isPlaying) 1.0f else 0.86f,
-        animationSpec = KuroMotion.appleFluidSpring(),
-        label = "apple_artwork_breathing"
-    )
-
     LaunchedEffect(showHeartBurst) {
         if (showHeartBurst) {
             delay(650L)
@@ -180,7 +176,7 @@ fun FullPlayerSheet(
     val animatedArtworkX by animateFloatAsState(
         targetValue = artworkDragX,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
+            dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessMedium
         ),
         label = "artwork_swipe_offset"
@@ -210,8 +206,10 @@ fun FullPlayerSheet(
         )
     }
 
-    val hasLyricsAvailable = currentLyrics != null && currentLyrics!!.lines.isNotEmpty()
-    val sheetClipShape = remember { RoundedCornerShape(28.dp) }
+    val validLyricsLines = remember(currentLyrics) {
+        currentLyrics?.let { LrcParser.sanitizeLines(it.lines) } ?: emptyList()
+    }
+    val hasLyricsAvailable = validLyricsLines.isNotEmpty()
     val nestedScrollConnection = remember(scrollState, hasLyricsAvailable) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
@@ -284,14 +282,9 @@ fun FullPlayerSheet(
             .fillMaxSize()
             .graphicsLayer {
                 val currentY = animatedDragY.coerceAtLeast(0f)
-                val dismissProgress = (currentY / 520f).coerceIn(0f, 1f)
+                val dismissProgress = (currentY / 560f).coerceIn(0f, 1f)
                 translationY = currentY
-                val sheetScale = 1f - (dismissProgress * 0.07f)
-                scaleX = sheetScale
-                scaleY = sheetScale
-                alpha = 1f - (dismissProgress * 0.22f)
-                shape = sheetClipShape
-                clip = currentY > 0.5f
+                alpha = 1f - (dismissProgress * 0.16f)
             }
             .background(baseBg)
             .background(ambientGradient)
@@ -428,10 +421,7 @@ fun FullPlayerSheet(
                         .fillMaxWidth(0.92f)
                         .aspectRatio(1f)
                         .graphicsLayer {
-                            scaleX = artworkBreathingScale
-                            scaleY = artworkBreathingScale
-                            translationX = animatedArtworkX * 0.45f
-                            rotationZ = (animatedArtworkX / 38f).coerceIn(-6f, 6f)
+                            translationX = animatedArtworkX * 0.55f
                         }
                         .clip(RoundedCornerShape(16.dp))
                         .background(colors.card)
@@ -474,6 +464,7 @@ fun FullPlayerSheet(
                 ) {
                     AnimatedContent(
                         targetState = track,
+                        contentKey = { it.id },
                         transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(180)) },
                         label = "full_player_artwork"
                     ) { animatedTrack ->
@@ -519,8 +510,12 @@ fun FullPlayerSheet(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            val sanitizedLyricsData = remember(currentLyrics, validLyricsLines) {
+                currentLyrics?.copy(lines = validLyricsLines)
+            }
+
             LiveLyricSnippet(
-                lyricsData = currentLyrics,
+                lyricsData = sanitizedLyricsData,
                 viewModel = viewModel,
                 onClick = { showFullScreenLyrics = true }
             )
@@ -535,6 +530,7 @@ fun FullPlayerSheet(
                 Column(modifier = Modifier.weight(1f)) {
                     AnimatedContent(
                         targetState = track,
+                        contentKey = { it.id },
                         transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(160)) },
                         label = "full_player_title"
                     ) { animatedTrack ->
@@ -571,22 +567,34 @@ fun FullPlayerSheet(
                     },
                     modifier = Modifier.size(46.dp)
                 ) {
-                    val favScale by animateFloatAsState(
-                        targetValue = if (track.isFavorite) 1.15f else 1f,
-                        animationSpec = tween(durationMillis = 150),
-                        label = "player_fav_scale"
+                    val favTint by animateColorAsState(
+                        targetValue = if (track.isFavorite) Color(0xFFFF3B30) else colors.textPrimary.copy(alpha = 0.85f),
+                        animationSpec = tween(durationMillis = 200),
+                        label = "player_fav_tint"
                     )
-                    Icon(
-                        imageVector = if (track.isFavorite) Icons.Default.CheckCircle else Icons.Outlined.AddCircleOutline,
-                        contentDescription = "Save / Favorite",
-                        tint = if (track.isFavorite) Color(0xFFFF3B30) else colors.textPrimary.copy(alpha = 0.85f),
-                        modifier = Modifier
-                            .size(30.dp)
-                            .graphicsLayer {
-                                scaleX = favScale
-                                scaleY = favScale
-                            }
-                    )
+                    AnimatedContent(
+                        targetState = track.isFavorite,
+                        transitionSpec = {
+                            (scaleIn(
+                                initialScale = 0.55f,
+                                animationSpec = KuroMotion.appleSnappySpring()
+                            ) + fadeIn(tween(150)))
+                                .togetherWith(
+                                    scaleOut(
+                                        targetScale = 0.55f,
+                                        animationSpec = tween(120)
+                                    ) + fadeOut(tween(120))
+                                )
+                        },
+                        label = "player_fav_icon_morph"
+                    ) { isFav ->
+                        Icon(
+                            imageVector = if (isFav) Icons.Default.CheckCircle else Icons.Outlined.AddCircleOutline,
+                            contentDescription = "Save / Favorite",
+                            tint = favTint,
+                            modifier = Modifier.size(30.dp)
+                        )
+                    }
                 }
             }
 
@@ -656,11 +664,6 @@ fun FullPlayerSheet(
                             modifier = Modifier.size(32.dp)
                         )
                     } else {
-                        val playScale by animateFloatAsState(
-                            targetValue = if (isPlaying) 0.94f else 1f,
-                            animationSpec = tween(durationMillis = 140),
-                            label = "full_player_play_scale"
-                        )
                         IconButton(
                             onClick = onPlayPauseClick,
                             modifier = Modifier.size(72.dp)
@@ -669,9 +672,7 @@ fun FullPlayerSheet(
                                 painter = if (isPlaying) painterResource(R.drawable.ic_kuro_pause) else painterResource(R.drawable.ic_kuro_play),
                                 contentDescription = if (isPlaying) "Pause" else "Play",
                                 tint = colors.background,
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .graphicsLayer { scaleX = playScale; scaleY = playScale }
+                                modifier = Modifier.size(34.dp)
                             )
                         }
                     }
@@ -771,12 +772,12 @@ fun FullPlayerSheet(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            val hasLyrics = currentLyrics != null && currentLyrics!!.lines.isNotEmpty() &&
-                    currentLyrics!!.lines.none { it.text.trim().equals("null", ignoreCase = true) }
+            val hasLyrics = sanitizedLyricsData != null && sanitizedLyricsData.lines.isNotEmpty() &&
+                    sanitizedLyricsData.lines.none { it.text.trim().equals("null", ignoreCase = true) }
 
             if (hasLyrics) {
                 LyricsPreviewCard(
-                    lyricsData = currentLyrics!!,
+                    lyricsData = sanitizedLyricsData!!,
                     viewModel = viewModel,
                     dominantColor = dominantColor,
                     showTranslationInPreview = showTranslationInPreview,
@@ -802,7 +803,7 @@ fun FullPlayerSheet(
         ) {
             FullScreenLyricsSheet(
                 track = track,
-                lyricsData = currentLyrics,
+                lyricsData = sanitizedLyricsData,
                 viewModel = viewModel,
                 isPlaying = isPlaying,
                 isLoadingTrack = isLoading,

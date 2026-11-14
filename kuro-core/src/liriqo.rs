@@ -62,6 +62,20 @@ pub struct NormalizedLyrics {
     pub lines: Vec<NormalizedLyricLine>,
 }
 
+#[derive(Debug, Deserialize)]
+struct NetEaseCreditToken {
+    #[serde(default)]
+    tx: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct NetEaseJsonLine {
+    #[serde(default)]
+    t: Option<i64>,
+    #[serde(default)]
+    c: Option<Vec<NetEaseCreditToken>>,
+}
+
 const PROVIDER_RANK: &[&str] = &[
     "apple_music_liriqo",
     "musixmatch",
@@ -80,32 +94,111 @@ fn provider_rank(provider: &str) -> usize {
         .unwrap_or(999)
 }
 
+fn unwrap_netease_json_line(text: &str) -> Option<(Option<i64>, String)> {
+    let t = text.trim();
+    if !t.starts_with('{') || !t.ends_with('}') {
+        return None;
+    }
+    if let Ok(parsed) = serde_json::from_str::<NetEaseJsonLine>(t) {
+        if let Some(tokens) = parsed.c {
+            let joined: String = tokens.into_iter().map(|tok| tok.tx).collect();
+            return Some((parsed.t, joined.trim().to_string()));
+        }
+    }
+    Some((None, String::new()))
+}
+
 fn is_junk_line(text: &str) -> bool {
     let t = text.trim();
     if t.is_empty() {
+        return true;
+    }
+    if let Some((_, unwrapped)) = unwrap_netease_json_line(t) {
+        if unwrapped.is_empty() {
+            return true;
+        }
+        return is_junk_line(&unwrapped);
+    }
+    if (t.starts_with('{') && t.ends_with('}'))
+        || t.contains("\"tx\":")
+        || t.contains("\"c\":[")
+    {
         return true;
     }
     let lower = t.to_lowercase();
     if lower.starts_with("——") || lower.starts_with("···") {
         return true;
     }
-    if lower.contains("纯音乐") || lower.contains("translation provided") || lower.contains("版权所有") {
+    if lower.contains("纯音乐")
+        || lower.contains("请欣赏")
+        || lower.contains("无歌词")
+        || lower.contains("純音樂")
+        || lower.contains("instrumental")
+        || lower.contains("translation provided")
+        || lower.contains("版权所有")
+        || lower.contains("lirik tidak tersedia")
+    {
         return true;
     }
     if lower.starts_with("written by")
         || lower.starts_with("produced by")
         || lower.starts_with("composed by")
+        || lower.starts_with("arranged by")
         || lower.starts_with("lyrics by")
+        || lower.starts_with("lyricist")
+        || lower.starts_with("composer")
+        || lower.starts_with("arranger")
+        || lower.starts_with("penulis lirik")
+        || lower.starts_with("komposer")
+        || lower.starts_with("aransemen")
+        || lower.starts_with("produser")
         || lower.starts_with("作词")
+        || lower.starts_with("作詞")
         || lower.starts_with("作曲")
         || lower.starts_with("编曲")
+        || lower.starts_with("編曲")
         || lower.starts_with("词曲")
+        || lower.starts_with("制作人")
+        || lower.starts_with("製作人")
         || lower.starts_with("和声")
         || lower.starts_with("混音")
+        || lower.starts_with("母带")
+        || lower.starts_with("录音")
+        || lower.starts_with("吉他")
+        || lower.starts_with("贝斯")
+        || lower.starts_with("鼓")
+        || lower.starts_with("弦乐")
+        || lower.starts_with("演唱")
+        || lower.starts_with("原唱")
+        || lower.starts_with("出品")
+        || lower.starts_with("发行")
+        || lower.starts_with("词:")
+        || lower.starts_with("词：")
+        || lower.starts_with("曲:")
+        || lower.starts_with("曲：")
+        || lower.starts_with("编:")
+        || lower.starts_with("编：")
     {
         return true;
     }
     false
+}
+
+fn sanitize_lyric_line_text(raw: &str) -> Option<(Option<i64>, String)> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Some((json_time, unwrapped)) = unwrap_netease_json_line(trimmed) {
+        if unwrapped.is_empty() || is_junk_line(&unwrapped) {
+            return None;
+        }
+        return Some((json_time, unwrapped));
+    }
+    if is_junk_line(trimmed) {
+        return None;
+    }
+    Some((None, trimmed.to_string()))
 }
 
 pub fn parse_liriqo_response(json_str: &str, duration_ms: i64) -> Option<NormalizedLyrics> {
@@ -132,10 +225,13 @@ pub fn parse_liriqo_response(json_str: &str, duration_ms: i64) -> Option<Normali
             if !timed.is_empty() {
                 let mut valid_lines: Vec<NormalizedLyricLine> = Vec::new();
                 for line in timed {
-                    let text = line.text.trim();
-                    if text.is_empty() || is_junk_line(text) {
+                    if line.is_instrumental == Some(true) || line.is_cue == Some(true) {
                         continue;
                     }
+                    let (_, clean_text) = match sanitize_lyric_line_text(&line.text) {
+                        Some(pair) => pair,
+                        None => continue,
+                    };
                     if line.start < 0 || line.end <= line.start {
                         continue;
                     }
@@ -146,7 +242,7 @@ pub fn parse_liriqo_response(json_str: &str, duration_ms: i64) -> Option<Normali
 
                     valid_lines.push(NormalizedLyricLine {
                         time_ms: line.start,
-                        text: text.to_string(),
+                        text: clean_text,
                         end_time_ms: Some(line.end),
                     });
                 }
@@ -182,11 +278,10 @@ pub fn parse_liriqo_response(json_str: &str, duration_ms: i64) -> Option<Normali
             if !plain_str.trim().is_empty() {
                 let mut valid_lines: Vec<NormalizedLyricLine> = Vec::new();
                 for line in plain_str.lines() {
-                    let text = line.trim();
-                    if !text.is_empty() && !is_junk_line(text) {
+                    if let Some((_, clean_text)) = sanitize_lyric_line_text(line) {
                         valid_lines.push(NormalizedLyricLine {
                             time_ms: 0,
-                            text: text.to_string(),
+                            text: clean_text,
                             end_time_ms: None,
                         });
                     }
@@ -218,7 +313,26 @@ fn parse_lrc_lines(lrc: &str, duration_ms: i64) -> Vec<NormalizedLyricLine> {
     let mut lines = Vec::new();
     for raw_line in lrc.lines() {
         let trimmed = raw_line.trim();
-        if trimmed.is_empty() || trimmed.starts_with("[ti:") || trimmed.starts_with("[ar:") || trimmed.starts_with("[al:") {
+        if trimmed.is_empty()
+            || trimmed.starts_with("[ti:")
+            || trimmed.starts_with("[ar:")
+            || trimmed.starts_with("[al:")
+            || trimmed.starts_with("[by:")
+            || trimmed.starts_with("[offset:")
+        {
+            continue;
+        }
+
+        if trimmed.starts_with('{') && trimmed.ends_with('}') {
+            if let Some((Some(json_time), clean_text)) = sanitize_lyric_line_text(trimmed) {
+                if duration_ms <= 0 || json_time <= duration_ms + 10_000 {
+                    lines.push(NormalizedLyricLine {
+                        time_ms: json_time.max(0),
+                        text: clean_text,
+                        end_time_ms: None,
+                    });
+                }
+            }
             continue;
         }
 
@@ -226,10 +340,11 @@ fn parse_lrc_lines(lrc: &str, duration_ms: i64) -> Vec<NormalizedLyricLine> {
         if let Some(close_bracket) = trimmed.find(']') {
             if trimmed.starts_with('[') && close_bracket > 1 {
                 let tag = &trimmed[1..close_bracket];
-                let text = trimmed[close_bracket + 1..].trim();
-                if text.is_empty() || is_junk_line(text) {
-                    continue;
-                }
+                let raw_text = trimmed[close_bracket + 1..].trim();
+                let (_, clean_text) = match sanitize_lyric_line_text(raw_text) {
+                    Some(pair) => pair,
+                    None => continue,
+                };
 
                 if let Some(time_ms) = parse_lrc_timestamp(tag) {
                     if duration_ms > 0 && time_ms > duration_ms + 10_000 {
@@ -237,7 +352,7 @@ fn parse_lrc_lines(lrc: &str, duration_ms: i64) -> Vec<NormalizedLyricLine> {
                     }
                     lines.push(NormalizedLyricLine {
                         time_ms,
-                        text: text.to_string(),
+                        text: clean_text,
                         end_time_ms: None,
                     });
                 }

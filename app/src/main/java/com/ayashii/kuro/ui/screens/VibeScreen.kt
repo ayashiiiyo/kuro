@@ -39,12 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -160,24 +155,9 @@ fun VibeScreen(
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .graphicsLayer {
-                        compositingStrategy = CompositingStrategy.Offscreen
-                    }
-                    .drawWithContent {
-                        drawContent()
-                        drawRect(
-                            brush = Brush.horizontalGradient(
-                                0.0f to Color.White,
-                                0.90f to Color.White,
-                                1.0f to Color.Transparent
-                            ),
-                            blendMode = BlendMode.DstIn
-                        )
-                    }
+                modifier = Modifier.fillMaxWidth()
             ) {
-                items(moodLabels.indices.toList()) { idx ->
+                items(moodLabels.indices.toList(), key = { it }) { idx ->
                     val (label, query) = moodLabels[idx]
                     val isSelected = selectedMoodIndex == idx
                     Box(
@@ -353,7 +333,7 @@ fun VibeScreen(
                 )
             }
 
-            items(candidatePool.take(15), key = { "vibe_track_${it.id}" }) { track ->
+            items(candidatePool.take(15), key = { "vibe_track_${it.id}" }, contentType = { "track" }) { track ->
                 val isFav = track.id in favoriteIds
                 TrackItem(
                     track = track.copy(isFavorite = isFav),

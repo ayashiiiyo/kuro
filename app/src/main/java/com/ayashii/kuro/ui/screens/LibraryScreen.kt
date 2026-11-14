@@ -11,6 +11,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,6 +29,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -48,12 +51,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -80,9 +85,12 @@ import com.ayashii.kuro.ui.components.TrackItem
 import com.ayashii.kuro.ui.components.TrackOptionsBottomSheet
 import com.ayashii.kuro.ui.theme.KuroAppTheme
 import com.ayashii.kuro.ui.theme.KuroMotion
+import com.ayashii.kuro.ui.theme.KuroMotion.pagerMotionBlurTransition
 import com.ayashii.kuro.ui.theme.Typography
 import com.ayashii.kuro.viewmodel.MusicViewModel
+import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LibraryScreen(
     viewModel: MusicViewModel,
@@ -97,6 +105,13 @@ fun LibraryScreen(
     val favoriteIds by remember(favorites) { derivedStateOf { favorites.mapTo(HashSet()) { it.id } } }
 
     var selectedTab by rememberSaveable { mutableStateOf(0) }
+    val libPagerState = rememberPagerState(initialPage = selectedTab, pageCount = { 2 })
+    val coroutineScope = rememberCoroutineScope()
+
+    LaunchedEffect(libPagerState.currentPage) {
+        selectedTab = libPagerState.currentPage
+    }
+
     var selectedPlaylistId by rememberSaveable { mutableStateOf<String?>(null) }
     var trackForPlaylist by remember { mutableStateOf<Track?>(null) }
     var trackForOptions by remember { mutableStateOf<Track?>(null) }
@@ -105,12 +120,12 @@ fun LibraryScreen(
     var showCreateDialog by rememberSaveable { mutableStateOf(false) }
     var playlistToDelete by remember { mutableStateOf<Playlist?>(null) }
     var newPlaylistName by rememberSaveable { mutableStateOf("") }
-    var tabDragOffsetX by remember { mutableFloatStateOf(0f) }
-
-    val haptic = LocalHapticFeedback.current
 
     BackHandler(enabled = !isPlayerExpanded && selectedPlaylistId == null && selectedTab != 0) {
         selectedTab = 0
+        coroutineScope.launch {
+            libPagerState.animateScrollToPage(0, animationSpec = KuroMotion.appleFluidSpring())
+        }
     }
 
     BackHandler(enabled = !isPlayerExpanded && selectedPlaylistId != null) {
@@ -128,6 +143,7 @@ fun LibraryScreen(
     ) {
         AnimatedContent(
             targetState = selectedPlaylist,
+            contentKey = { it?.id },
             transitionSpec = {
                 if (targetState != null) {
                     (slideInHorizontally(tween(260, easing = KuroMotion.EmphasizedDecelerate)) { it / 5 } +
@@ -221,7 +237,12 @@ fun LibraryScreen(
                                 .clip(RoundedCornerShape(20.dp))
                                 .background(if (selectedTab == 0) colors.accent else colors.card)
                                 .border(1.dp, if (selectedTab == 0) colors.accent else colors.border, RoundedCornerShape(20.dp))
-                                .clickable { selectedTab = 0 }
+                                .clickable {
+                                    selectedTab = 0
+                                    coroutineScope.launch {
+                                        libPagerState.animateScrollToPage(0, animationSpec = KuroMotion.appleFluidSpring())
+                                    }
+                                }
                                 .padding(horizontal = 16.dp, vertical = 8.dp),
                             contentAlignment = Alignment.Center
                         ) {
@@ -237,7 +258,12 @@ fun LibraryScreen(
                                 .clip(RoundedCornerShape(20.dp))
                                 .background(if (selectedTab == 1) colors.accent else colors.card)
                                 .border(1.dp, if (selectedTab == 1) colors.accent else colors.border, RoundedCornerShape(20.dp))
-                                .clickable { selectedTab = 1 }
+                                .clickable {
+                                    selectedTab = 1
+                                    coroutineScope.launch {
+                                        libPagerState.animateScrollToPage(1, animationSpec = KuroMotion.appleFluidSpring())
+                                    }
+                                }
                                 .padding(horizontal = 16.dp, vertical = 8.dp),
                             contentAlignment = Alignment.Center
                         ) {
@@ -251,214 +277,183 @@ fun LibraryScreen(
 
                     Spacer(modifier = Modifier.height(14.dp))
 
-                    AnimatedContent(
-                        targetState = selectedTab,
-                        transitionSpec = {
-                            if (targetState > initialState) {
-                                (slideInHorizontally(tween(240, easing = KuroMotion.EmphasizedDecelerate)) { it / 6 } +
-                                    fadeIn(tween(220, easing = KuroMotion.EmphasizedDecelerate)))
-                                    .togetherWith(
-                                        slideOutHorizontally(tween(180, easing = KuroMotion.EmphasizedAccelerate)) { -it / 6 } +
-                                            fadeOut(tween(150, easing = KuroMotion.EmphasizedAccelerate))
-                                    )
-                            } else {
-                                (slideInHorizontally(tween(240, easing = KuroMotion.EmphasizedDecelerate)) { -it / 6 } +
-                                    fadeIn(tween(220, easing = KuroMotion.EmphasizedDecelerate)))
-                                    .togetherWith(
-                                        slideOutHorizontally(tween(180, easing = KuroMotion.EmphasizedAccelerate)) { it / 6 } +
-                                            fadeOut(tween(150, easing = KuroMotion.EmphasizedAccelerate))
-                                    )
-                            }
-                        },
-                        label = "library_tab_transition",
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .pointerInput(selectedTab) {
-                                detectHorizontalDragGestures(
-                                    onDragStart = { tabDragOffsetX = 0f },
-                                    onDragEnd = {
-                                        if (tabDragOffsetX < -95f && selectedTab == 0) {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            selectedTab = 1
-                                        } else if (tabDragOffsetX > 95f && selectedTab == 1) {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            selectedTab = 0
-                                        }
-                                        tabDragOffsetX = 0f
-                                    },
-                                    onDragCancel = { tabDragOffsetX = 0f },
-                                    onHorizontalDrag = { change, dragAmount ->
-                                        tabDragOffsetX += dragAmount
-                                        if ((selectedTab == 0 && tabDragOffsetX < -20f) || (selectedTab == 1 && tabDragOffsetX > 20f)) {
-                                            change.consume()
-                                        }
+                    HorizontalPager(
+                        state = libPagerState,
+                        modifier = Modifier.fillMaxSize()
+                    ) { tab ->
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .pagerMotionBlurTransition(
+                                    pageOffsetProvider = {
+                                        (libPagerState.currentPage - tab) + libPagerState.currentPageOffsetFraction
                                     }
                                 )
-                            }
-                    ) { tab ->
-                        if (tab == 0) {
-                            if (favorites.isEmpty()) {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Icon(
-                                            imageVector = Icons.Outlined.QueueMusic,
-                                            contentDescription = null,
-                                            tint = colors.textSecondary,
-                                            modifier = Modifier.size(56.dp)
-                                        )
-                                        Spacer(modifier = Modifier.height(16.dp))
-                                        Text(
-                                            text = stringResource(R.string.lib_fav_empty),
-                                            style = Typography.titleMedium,
-                                            color = colors.textPrimary
-                                        )
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                            text = stringResource(R.string.lib_fav_empty_sub),
-                                            style = Typography.bodyMedium,
-                                            color = colors.textMuted
-                                        )
-                                    }
-                                }
-                            } else {
-                                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                                    items(favorites, key = { it.id }, contentType = { "track" }) { track ->
-                                        TrackItem(
-                                            track = track.copy(isFavorite = true),
-                                            isPlaying = currentTrack?.id == track.id,
-                                            isLoading = isLoadingTrack && currentTrack?.id == track.id,
-                                            onClick = { viewModel.playTrack(track, favorites) },
-                                            onFavoriteClick = { viewModel.toggleFavorite(track) },
-                                            onMoreClick = { trackForOptions = track },
-                                            onSwipeAddToQueue = { viewModel.addToQueue(track) }
-                                        )
-                                    }
-                                    item {
-                                        Spacer(modifier = Modifier.height(130.dp))
-                                    }
-                                }
-                            }
-                        } else {
-                            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                                item {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 16.dp, vertical = 4.dp)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(colors.card)
-                                            .border(1.dp, colors.border, RoundedCornerShape(12.dp))
-                                            .clickable { showCreateDialog = true }
-                                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                                        verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (tab == 0) {
+                                if (favorites.isEmpty()) {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(40.dp)
-                                                .clip(CircleShape)
-                                                .background(colors.accent),
-                                            contentAlignment = Alignment.Center
-                                        ) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                             Icon(
-                                                imageVector = Icons.Default.Add,
-                                                contentDescription = "New Playlist",
-                                                tint = colors.background,
-                                                modifier = Modifier.size(22.dp)
+                                                imageVector = Icons.Outlined.QueueMusic,
+                                                contentDescription = null,
+                                                tint = colors.textSecondary,
+                                                modifier = Modifier.size(56.dp)
                                             )
-                                        }
-                                        Spacer(modifier = Modifier.width(14.dp))
-                                        Column {
+                                            Spacer(modifier = Modifier.height(16.dp))
                                             Text(
-                                                text = stringResource(R.string.lib_create_playlist),
-                                                style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                                text = stringResource(R.string.lib_fav_empty),
+                                                style = Typography.titleMedium,
                                                 color = colors.textPrimary
                                             )
+                                            Spacer(modifier = Modifier.height(4.dp))
                                             Text(
-                                                text = stringResource(R.string.lib_create_playlist_sub),
-                                                style = Typography.bodySmall,
+                                                text = stringResource(R.string.lib_fav_empty_sub),
+                                                style = Typography.bodyMedium,
                                                 color = colors.textMuted
                                             )
                                         }
                                     }
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                }
-
-                                if (playlists.isEmpty()) {
-                                    item {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(vertical = 40.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Icon(
-                                                    imageVector = Icons.Outlined.QueueMusic,
-                                                    contentDescription = null,
-                                                    tint = colors.textSecondary,
-                                                    modifier = Modifier.size(52.dp)
-                                                )
-                                                Spacer(modifier = Modifier.height(12.dp))
-                                                Text(
-                                                    text = stringResource(R.string.lib_no_playlists),
-                                                    style = Typography.titleMedium,
-                                                    color = colors.textPrimary
-                                                )
-                                                Spacer(modifier = Modifier.height(4.dp))
-                                                Text(
-                                                    text = stringResource(R.string.lib_no_playlists_sub),
-                                                    style = Typography.bodyMedium,
-                                                    color = colors.textMuted
-                                                )
-                                            }
+                                } else {
+                                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                                        items(favorites, key = { it.id }, contentType = { "track" }) { track ->
+                                            TrackItem(
+                                                track = track.copy(isFavorite = true),
+                                                isPlaying = currentTrack?.id == track.id,
+                                                isLoading = isLoadingTrack && currentTrack?.id == track.id,
+                                                onClick = { viewModel.playTrack(track, favorites) },
+                                                onFavoriteClick = { viewModel.toggleFavorite(track) },
+                                                onMoreClick = { trackForOptions = track },
+                                                onSwipeAddToQueue = { viewModel.addToQueue(track) }
+                                            )
+                                        }
+                                        item {
+                                            Spacer(modifier = Modifier.height(130.dp))
                                         }
                                     }
-                                } else {
-                                    items(playlists, key = { it.id }) { playlist ->
+                                }
+                            } else {
+                                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                                    item {
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(horizontal = 16.dp, vertical = 6.dp)
+                                                .padding(horizontal = 16.dp, vertical = 4.dp)
                                                 .clip(RoundedCornerShape(12.dp))
                                                 .background(colors.card)
-                                                .clickable { selectedPlaylistId = playlist.id }
-                                                .padding(12.dp),
+                                                .border(1.dp, colors.border, RoundedCornerShape(12.dp))
+                                                .clickable { showCreateDialog = true }
+                                                .padding(horizontal = 16.dp, vertical = 14.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            PlaylistCollageIcon(playlist = playlist, size = 52)
-                                            Spacer(modifier = Modifier.width(14.dp))
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = playlist.name,
-                                                    style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                                    color = colors.textPrimary,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(40.dp)
+                                                    .clip(CircleShape)
+                                                    .background(colors.accent),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Add,
+                                                    contentDescription = "New Playlist",
+                                                    tint = colors.background,
+                                                    modifier = Modifier.size(22.dp)
                                                 )
-                                                Spacer(modifier = Modifier.height(2.dp))
+                                            }
+                                            Spacer(modifier = Modifier.width(14.dp))
+                                            Column {
                                                 Text(
-                                                    text = stringResource(R.string.lib_songs_count, playlist.tracks.size),
+                                                    text = stringResource(R.string.lib_create_playlist),
+                                                    style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                                    color = colors.textPrimary
+                                                )
+                                                Text(
+                                                    text = stringResource(R.string.lib_create_playlist_sub),
                                                     style = Typography.bodySmall,
                                                     color = colors.textMuted
                                                 )
                                             }
-                                            IconButton(onClick = { playlistToDelete = playlist }) {
-                                                Icon(
-                                                    imageVector = Icons.Default.DeleteOutline,
-                                                    contentDescription = stringResource(R.string.lib_delete),
-                                                    tint = colors.textMuted,
-                                                    modifier = Modifier.size(20.dp)
-                                                )
+                                        }
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                    }
+
+                                    if (playlists.isEmpty()) {
+                                        item {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 40.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                    Icon(
+                                                        imageVector = Icons.Outlined.QueueMusic,
+                                                        contentDescription = null,
+                                                        tint = colors.textSecondary,
+                                                        modifier = Modifier.size(52.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.height(12.dp))
+                                                    Text(
+                                                        text = stringResource(R.string.lib_no_playlists),
+                                                        style = Typography.titleMedium,
+                                                        color = colors.textPrimary
+                                                    )
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                    Text(
+                                                        text = stringResource(R.string.lib_no_playlists_sub),
+                                                        style = Typography.bodyMedium,
+                                                        color = colors.textMuted
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        items(playlists, key = { it.id }) { playlist ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .background(colors.card)
+                                                    .clickable { selectedPlaylistId = playlist.id }
+                                                    .padding(12.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                PlaylistCollageIcon(playlist = playlist, size = 52)
+                                                Spacer(modifier = Modifier.width(14.dp))
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = playlist.name,
+                                                        style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                                        color = colors.textPrimary,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                    Spacer(modifier = Modifier.height(2.dp))
+                                                    Text(
+                                                        text = stringResource(R.string.lib_songs_count, playlist.tracks.size),
+                                                        style = Typography.bodySmall,
+                                                        color = colors.textMuted
+                                                    )
+                                                }
+                                                IconButton(onClick = { playlistToDelete = playlist }) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.DeleteOutline,
+                                                        contentDescription = stringResource(R.string.lib_delete),
+                                                        tint = colors.textMuted,
+                                                        modifier = Modifier.size(20.dp)
+                                                    )
+                                                }
                                             }
                                         }
                                     }
-                                }
 
-                                item {
-                                    Spacer(modifier = Modifier.height(130.dp))
+                                    item {
+                                        Spacer(modifier = Modifier.height(130.dp))
+                                    }
                                 }
                             }
                         }
@@ -703,8 +698,9 @@ fun PlaylistDetailView(
     val colors = KuroAppTheme.colors
     val haptic = LocalHapticFeedback.current
     var dragBackX by remember { mutableFloatStateOf(0f) }
+    var isDraggingBack by remember { mutableStateOf(false) }
 
-    val animatedDragBackX by animateFloatAsState(
+    val settledDragBackX by animateFloatAsState(
         targetValue = dragBackX,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
@@ -712,18 +708,26 @@ fun PlaylistDetailView(
         ),
         label = "playlist_detail_back_drag"
     )
+    val activeDragX = if (isDraggingBack) dragBackX else settledDragBackX
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .graphicsLayer {
-                translationX = animatedDragBackX.coerceAtLeast(0f) * 0.45f
+                val curX = activeDragX.coerceAtLeast(0f)
+                translationX = curX
+                alpha = 1f - ((curX / size.width.coerceAtLeast(1f)) * 0.25f).coerceIn(0f, 0.25f)
             }
             .pointerInput(playlist.id) {
                 detectHorizontalDragGestures(
-                    onDragStart = { dragBackX = 0f },
+                    onDragStart = {
+                        isDraggingBack = true
+                        dragBackX = 0f
+                    },
                     onDragEnd = {
-                        if (dragBackX > 90f) {
+                        val shouldDismiss = dragBackX > (size.width * 0.28f).coerceAtLeast(100f)
+                        isDraggingBack = false
+                        if (shouldDismiss) {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                             dragBackX = 0f
                             onBack()
@@ -731,10 +735,13 @@ fun PlaylistDetailView(
                             dragBackX = 0f
                         }
                     },
-                    onDragCancel = { dragBackX = 0f },
+                    onDragCancel = {
+                        isDraggingBack = false
+                        dragBackX = 0f
+                    },
                     onHorizontalDrag = { change, dragAmount ->
                         if (dragAmount > 0f || dragBackX > 0f) {
-                            dragBackX = (dragBackX + dragAmount).coerceIn(0f, 240f)
+                            dragBackX = (dragBackX + dragAmount).coerceIn(0f, size.width.toFloat().coerceAtLeast(360f))
                             change.consume()
                         }
                     }
@@ -845,7 +852,7 @@ fun PlaylistDetailView(
                     }
                 }
             } else {
-                items(playlist.tracks, key = { it.id }) { track ->
+                items(playlist.tracks, key = { it.id }, contentType = { "track" }) { track ->
                     val isFav = track.id in favoriteIds
                     TrackItem(
                         track = track.copy(isFavorite = isFav),

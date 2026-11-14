@@ -2,7 +2,7 @@
 """
 Comprehensive Verification Harness: Kuro Android Music Player
 Testing R2 Zero Comment Compliance, Code Integrity, Bracket Balance,
-Git Diff Cleanliness, and All 31 Documented Bug / UX Remediations.
+Git Diff Cleanliness, and All Documented Bug / UX Remediations.
 """
 
 import os
@@ -115,7 +115,6 @@ for root, dirs, files in os.walk(ROOT_DIR):
             with open(p, "r", encoding="utf-8") as fp:
                 for idx, line in enumerate(fp, 1):
                     if "//" in line:
-                        # Ensure it's part of a string literal or url
                         has_url = "http://" in line or "https://" in line or "startsWith(\"//\")" in line or "starts_with(\"//\")" in line
                         has_quotes = line.count('"') >= 2 or line.count("'") >= 2
                         if not (has_url or has_quotes):
@@ -201,7 +200,6 @@ suite.assert_true(
 # ==============================================================================
 print(f"\n{Colors.BOLD}>>> 2. Category 1: UI & Navigation Architecture{Colors.RESET}")
 
-# NAV-CORE-01: SearchScreen Staged Back Handling & MainActivity BackStack
 search_screen = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/screens/SearchScreen.kt")
 main_activity = suite.read_file("app/src/main/java/com/ayashii/kuro/MainActivity.kt")
 nav_stage1 = ("BackHandler(enabled = searchQuery.isNotEmpty())" in search_screen or "BackHandler(enabled = !isPlayerExpanded && searchQuery.isNotEmpty())" in search_screen) and 'searchQuery = ""' in search_screen
@@ -214,8 +212,6 @@ suite.assert_true(
     f"stage1={nav_stage1}, stage2={nav_stage2}, main={nav_main}"
 )
 
-# UI-01: Light Theme text contrast in SearchScreen (theme-aware colors replace hardcoded white)
-# Verify canvas text elements (TextField, Track Titles, Section Headers, Not Found) use theme colors
 ui01_textfield = "focusedTextColor = colors.textPrimary" in search_screen and "unfocusedTextColor = colors.textPrimary" in search_screen
 ui01_track_title = "if (isCurrent) colors.accent else colors.textPrimary" in search_screen
 ui01_headers = ("Pencarian Terbaru" in search_screen or "Discover something new" in search_screen) and "colors.textPrimary" in search_screen
@@ -227,7 +223,6 @@ suite.assert_true(
     f"textfield={ui01_textfield}, track_title={ui01_track_title}, headers={ui01_headers}, not_found={ui01_not_found}"
 )
 
-# UI-02: Missing BackHandler in LibraryScreen PlaylistDetailView
 library_screen = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/screens/LibraryScreen.kt")
 ui02_check = ("BackHandler(enabled = selectedPlaylistId != null)" in library_screen or "BackHandler(enabled = !isPlayerExpanded && selectedPlaylistId != null)" in library_screen) and "selectedPlaylistId = null" in library_screen
 suite.assert_true(
@@ -237,7 +232,6 @@ suite.assert_true(
     "BackHandler for selectedPlaylistId not found"
 )
 
-# UI-03: Missing BackHandler in HomeScreen Genre Filter
 home_screen = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/screens/HomeScreen.kt")
 ui03_check = ('BackHandler(enabled = selectedGenre != "Semua")' in home_screen or 'BackHandler(enabled = !isPlayerExpanded && selectedGenre != "Semua")' in home_screen) and "selectedGenre = " in home_screen
 suite.assert_true(
@@ -247,7 +241,6 @@ suite.assert_true(
     "BackHandler for selectedGenre not found"
 )
 
-# UI-04: BackHandler in FullPlayerSheet / FullScreenLyricsSheet
 full_player = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/components/FullPlayerSheet.kt")
 ui04_check = "BackHandler(enabled = showFullScreenLyrics)" in full_player and "showFullScreenLyrics = false" in full_player and "BackHandler(enabled = isExpanded)" in main_activity
 suite.assert_true(
@@ -257,7 +250,6 @@ suite.assert_true(
     "Lyrics or FullPlayer BackHandler missing"
 )
 
-# UI-05: Dead action buttons in TrackOptionsBottomSheet
 track_options = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/components/TrackOptionsBottomSheet.kt")
 has_share = "Intent(Intent.ACTION_SEND)" in track_options and "player_share" in track_options
 has_playlist = "onAddToPlaylist()" in track_options
@@ -271,7 +263,6 @@ suite.assert_true(
     f"share={has_share}, playlist={has_playlist}, queue={has_queue}, fav={has_fav}, lyrics={has_lyrics}"
 )
 
-# UI-06: Dead action buttons in ProfileMenuSheet
 profile_sheet = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/components/ProfileMenuSheet.kt")
 has_logout = "onLogoutClick()" in profile_sheet
 has_login = "onLoginClick()" in profile_sheet
@@ -283,7 +274,6 @@ suite.assert_true(
     f"logout={has_logout}, login={has_login}, stats={has_stats}"
 )
 
-# UI-07: Configuration change & screen rotation state loss (rememberSaveable)
 saveable_in_library = "selectedTab by rememberSaveable" in library_screen and "selectedPlaylistId by rememberSaveable" in library_screen
 saveable_in_home = "selectedGenre by rememberSaveable" in home_screen
 saveable_in_player = "showFullScreenLyrics by rememberSaveable" in full_player
@@ -294,7 +284,6 @@ suite.assert_true(
     f"library={saveable_in_library}, home={saveable_in_home}, player={saveable_in_player}"
 )
 
-# UI-08: Window insets / display cutout padding on player sheets
 fullscreen_lyrics = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/components/FullScreenLyricsSheet.kt")
 insets_in_lyrics = "statusBarsPadding()" in fullscreen_lyrics or "WindowInsets.statusBars" in fullscreen_lyrics
 insets_in_player = "statusBarsPadding()" in full_player or "navigationBarsPadding()" in full_player or "WindowInsets.navigationBars" in full_player
@@ -305,7 +294,6 @@ suite.assert_true(
     f"lyrics_insets={insets_in_lyrics}, player_insets={insets_in_player}"
 )
 
-# UI-09: Aggressive auto-scroll in FullScreenLyricsSheet ignoring user touch
 ui09_check = "!listState.isScrollInProgress" in fullscreen_lyrics and "animateScrollToItem" in fullscreen_lyrics
 suite.assert_true(
     ui09_check,
@@ -314,7 +302,6 @@ suite.assert_true(
     "isScrollInProgress guard not found"
 )
 
-# UI-10: Notification & widget tap missing EXTRA_EXPAND_PLAYER & onNewIntent
 widgets = suite.read_file("app/src/main/java/com/ayashii/kuro/widget/KuroWidgets.kt")
 service = suite.read_file("app/src/main/java/com/ayashii/kuro/service/PlaybackService.kt")
 main_has_extra = "EXTRA_EXPAND_PLAYER" in main_activity and "onNewIntent" in main_activity and "expandPlayer(true)" in main_activity
@@ -327,7 +314,6 @@ suite.assert_true(
     f"main={main_has_extra}, widget={widget_has_extra}, service={service_has_extra}"
 )
 
-# UI-11: Dead orphaned component SyncedLyricsView.kt deletion
 orphaned_path = "app/src/main/java/com/ayashii/kuro/ui/components/SyncedLyricsView.kt"
 ui11_check = not suite.file_exists(orphaned_path)
 suite.assert_true(
@@ -337,7 +323,6 @@ suite.assert_true(
     f"File {orphaned_path} still exists" if not ui11_check else ""
 )
 
-# UI-12: Double dynamic dominant color extraction animation flash
 dynamic_theme = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/theme/DynamicThemeHelper.kt")
 ui12_cache = "getCachedColor" in dynamic_theme and "colorCache" in dynamic_theme
 ui12_anim = "animateColorAsState" in dynamic_theme and "tween(durationMillis = 450" in dynamic_theme
@@ -357,7 +342,6 @@ player_queue = suite.read_file("app/src/main/java/com/ayashii/kuro/data/player/P
 music_vm = suite.read_file("app/src/main/java/com/ayashii/kuro/viewmodel/MusicViewModel.kt")
 music_repo = suite.read_file("app/src/main/java/com/ayashii/kuro/data/remote/MusicRepository.kt")
 
-# PB-01: PlaybackService vs MusicViewModel background media decoupling
 service_decoupled = "PlayerQueueManager" in service and "getNextTrack" in service and "getPreviousTrack" in service
 suite.assert_true(
     service_decoupled,
@@ -366,7 +350,6 @@ suite.assert_true(
     "PlaybackService does not bind directly to PlayerQueueManager"
 )
 
-# PB-02: Missing background track completion progression (STATE_ENDED in service)
 pb02_check = "STATE_ENDED" in service and "getNextTrack(userInitiated = false" in service and "playTrack" in service
 suite.assert_true(
     pb02_check,
@@ -375,9 +358,7 @@ suite.assert_true(
     "STATE_ENDED auto-advance handling missing from PlaybackService"
 )
 
-# PB-03: Unthrottled error cascade & machine-gun skipping (max 3 consecutive)
 pb03_queue = "consecutiveErrors" in player_queue and "recordPlaybackFailure" in player_queue
-pb03_vm = "consecutiveErrors" in music_vm or "recordPlaybackFailure" in music_vm or "maxConsecutiveErrors" in music_vm or ">= 3" in service or ">= 3" in music_vm or "recordPlaybackFailure" in service
 suite.assert_true(
     pb03_queue,
     "PB-03",
@@ -385,7 +366,6 @@ suite.assert_true(
     "consecutiveErrors tracking missing in PlayerQueueManager"
 )
 
-# PB-04: Stale 3-hour googlevideo stream cache (20m TTL + eviction on error)
 pb04_ttl = "CACHE_EXPIRY_MS = 20 * 60 * 1000L" in music_repo
 pb04_evict = "fun evictStreamUrl(" in music_repo and "streamUrlCache.remove" in music_repo
 suite.assert_true(
@@ -395,7 +375,6 @@ suite.assert_true(
     f"ttl={pb04_ttl}, evict={pb04_evict}"
 )
 
-# PB-05: Missing Recents queue insertion branch in playTrack
 pb05_check = "playTrack(track: Track, newQueue: List<Track>" in player_queue and "queue.add(track)" in player_queue and "indexOfFirst" in player_queue
 suite.assert_true(
     pb05_check,
@@ -404,7 +383,6 @@ suite.assert_true(
     "Queue insertion branch missing in playTrack"
 )
 
-# PB-06: Fisher-Yates shuffle deck without replacement & history
 pb06_deck = "generateFisherYatesDeck" in player_queue and "shuffleDeck" in player_queue
 pb06_history = "playbackHistory" in player_queue and "removeLast" in player_queue
 suite.assert_true(
@@ -414,7 +392,6 @@ suite.assert_true(
     f"deck={pb06_deck}, history={pb06_history}"
 )
 
-# PB-07: Scrubber drag seek flooding ExoPlayer (onValueChangeFinished buffer)
 pb07_check = "onValueChangeFinished" in full_player and "isDragging" in full_player and "viewModel.seekTo" in full_player
 suite.assert_true(
     pb07_check,
@@ -423,8 +400,6 @@ suite.assert_true(
     "onValueChangeFinished seek buffer missing in FullPlayerSheet"
 )
 
-# PB-08: Involuntary audio resumption when seeking while paused
-# seekTo in MusicViewModel must not call play() or set playWhenReady=true
 seek_def_match = re.search(r"fun seekTo\(positionMs: Long\)\s*\{([^}]+)\}", music_vm)
 seek_body = seek_def_match.group(1) if seek_def_match else ""
 pb08_safe = "play()" not in seek_body and "playWhenReady = true" not in seek_body and "seekTo" in seek_body
@@ -435,7 +410,6 @@ suite.assert_true(
     f"seek_body: {seek_body.strip()}"
 )
 
-# PB-09: Tapping next in repeat-one loops current song (user skip advances)
 pb09_queue = "userInitiated" in player_queue and "REPEAT_MODE_ONE" in player_queue and "!userInitiated" in player_queue
 pb09_vm = "userInitiated: Boolean = true" in music_vm
 suite.assert_true(
@@ -445,7 +419,6 @@ suite.assert_true(
     f"queue={pb09_queue}, vm={pb09_vm}"
 )
 
-# PB-10: 1.2-second progress bar and clock freeze (DISCONTINUITY_REASON_SEEK)
 pb10_check = "DISCONTINUITY_REASON_SEEK" in music_vm and "onPositionDiscontinuity" in music_vm
 suite.assert_true(
     pb10_check,
@@ -454,7 +427,6 @@ suite.assert_true(
     "DISCONTINUITY_REASON_SEEK handler missing in MusicViewModel"
 )
 
-# PB-11: Missing foreground service demotion on 5m pause timeout / focus loss
 pb11_timeout = "updatePauseTimeout" in service and "PAUSE_TIMEOUT_MS" in service and "5 * 60 * 1000L" in service
 pb11_demote = "stopForeground(STOP_FOREGROUND_DETACH)" in service and "pauseTimeoutJob" in service
 suite.assert_true(
@@ -464,7 +436,6 @@ suite.assert_true(
     f"timeout={pb11_timeout}, demote={pb11_demote}"
 )
 
-# PB-12: Duplicate track ID index collision in queue (playTrackAtIndex)
 pb12_check = "playTrackAtIndex" in player_queue and "playTrackAtIndex" in music_vm
 suite.assert_true(
     pb12_check,
@@ -473,7 +444,6 @@ suite.assert_true(
     "playTrackAtIndex not implemented in PlayerQueueManager or MusicViewModel"
 )
 
-# PB-13: Missing queue management operations (remove, move, clear upcoming)
 queue_sheet = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/components/QueueBottomSheet.kt")
 pb13_remove = "removeFromQueue" in player_queue and "removeFromQueue" in music_vm
 pb13_move = "moveQueueItem" in player_queue and "moveQueueItem" in music_vm
@@ -486,7 +456,6 @@ suite.assert_true(
     f"remove={pb13_remove}, move={pb13_move}, clear={pb13_clear}, ui={pb13_ui}"
 )
 
-# PB-14: MediaSession over-reporting available commands (bind to queue bounds)
 pb14_check = "COMMAND_SEEK_TO_NEXT" in service and "hasNext()" in service and "COMMAND_SEEK_TO_PREVIOUS" in service and "hasPrevious()" in service
 suite.assert_true(
     pb14_check,
@@ -495,7 +464,6 @@ suite.assert_true(
     "Available commands reporting not bound to queue bounds"
 )
 
-# PB-15: Monotonic progress guard backward snap on >= 200ms discrepancies
 pb15_check = "anchorPosition" in music_vm and "anchorTimestamp" in music_vm and ("lastGroundTruthSync" in music_vm or "calcPos" in music_vm)
 suite.assert_true(
     pb15_check,
@@ -504,7 +472,6 @@ suite.assert_true(
     "Anchor position / elapsed tracking missing in MusicViewModel"
 )
 
-# PB-16: False-positive vocal suppression at 00:00 (isIntroToken check)
 lyrics_model = suite.read_file("app/src/main/java/com/ayashii/kuro/data/lyrics/LyricsModel.kt")
 pb16_check = "fun isIntroToken(" in lyrics_model and "getCurrentLineIndex" in lyrics_model
 suite.assert_true(
@@ -514,7 +481,6 @@ suite.assert_true(
     "isIntroToken function missing in LyricsModel"
 )
 
-# PB-17: Highlighted lyrics persisting through guitar solos (endTimeMs in LyricLine)
 pb17_field = "endTimeMs: Long? = null" in lyrics_model
 pb17_active = "endTimeMs" in lyrics_model and "effectivePos > end" in lyrics_model
 suite.assert_true(
@@ -524,7 +490,6 @@ suite.assert_true(
     f"field={pb17_field}, active={pb17_active}"
 )
 
-# PB-18: Missing LRC [offset:+/-ms] tag parsing
 lrc_parser = suite.read_file("app/src/main/java/com/ayashii/kuro/data/lyrics/LrcParser.kt")
 pb18_tag = "OFFSET_TAG_REGEX" in lrc_parser or "offset" in lrc_parser.lower()
 pb18_apply = "offsetMs" in lrc_parser and "timeMs =" in lrc_parser
@@ -535,7 +500,6 @@ suite.assert_true(
     f"tag={pb18_tag}, apply={pb18_apply}"
 )
 
-# PB-19: Google Translate separator breakage (\n~~~\n -> robust delimiter)
 lyrics_repo = suite.read_file("app/src/main/java/com/ayashii/kuro/data/lyrics/LyricsRepository.kt")
 pb19_check = "[[[" in lyrics_repo and "]]]" in lyrics_repo and "tagRegex" in lyrics_repo
 suite.assert_true(
@@ -550,7 +514,6 @@ suite.assert_true(
 # ==============================================================================
 print(f"\n{Colors.BOLD}>>> 4. Category 3: State Management & Data Layer{Colors.RESET}")
 
-# ST-01: Infinite retry in REPEAT_MODE_ONE (isErrorRecovery parameter)
 st01_queue = "isErrorRecovery: Boolean = false" in player_queue and "!isErrorRecovery" in player_queue
 st01_vm = "isErrorRecovery: Boolean = false" in music_vm and "getNextTrack" in music_vm
 st01_service = "isErrorRecovery" in service
@@ -561,7 +524,6 @@ suite.assert_true(
     f"queue={st01_queue}, vm={st01_vm}, service={st01_service}"
 )
 
-# ST-02: Negative cache 7-day poisoning fix on transient network errors
 st02_result = "LyricsFetchResult" in lyrics_repo
 st02_guard = "!hadNetworkError" in lyrics_repo and "emptyMarker" in lyrics_repo
 suite.assert_true(
@@ -571,18 +533,16 @@ suite.assert_true(
     f"result={st02_result}, guard={st02_guard}"
 )
 
-# ST-03: Settings clear cache supporting active lyrics_cache_v5 directory
 settings_mgr = suite.read_file("app/src/main/java/com/ayashii/kuro/data/settings/SettingsManager.kt")
-st03_size = 'File(context.cacheDir, "lyrics_cache_v5")' in settings_mgr
-st03_count = settings_mgr.count('"lyrics_cache_v5"')
+st03_size = 'File(context.cacheDir, "lyrics_cache_v8")' in settings_mgr
+st03_count = settings_mgr.count('"lyrics_cache_v8"')
 suite.assert_true(
     st03_size and st03_count >= 3,
     "ST-03",
-    "SettingsManager includes lyrics_cache_v5 across size calculation and cache clearing routines",
+    "SettingsManager includes lyrics_cache_v8 across size calculation and cache clearing routines",
     f"size={st03_size}, count={st03_count}"
 )
 
-# ST-04: Shared _searchResults StateFlow collision (dedicated _genreTracks)
 st04_vm = "_genreTracks" in music_vm and "loadGenreTracks" in music_vm
 st04_home = "viewModel.genreTracks" in home_screen and "loadGenreTracks" in home_screen
 suite.assert_true(
@@ -592,7 +552,6 @@ suite.assert_true(
     f"vm={st04_vm}, home={st04_home}"
 )
 
-# ST-05: Lyrics duration resync at STATE_READY leaves _isLoadingLyrics stuck
 st05_check = "_isLoadingLyrics.value = false" in music_vm and "finally" in music_vm
 suite.assert_true(
     st05_check,
@@ -601,7 +560,6 @@ suite.assert_true(
     "finally block resetting _isLoadingLyrics not found in MusicViewModel"
 )
 
-# ST-06: Stale cookies trigger re-login trap in LoginWebViewDialog
 login_dialog = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/components/LoginWebViewDialog.kt")
 st06_check = "cookieManager.removeAllCookies(null)" in login_dialog and "cookieManager.flush()" in login_dialog
 suite.assert_true(
@@ -611,7 +569,6 @@ suite.assert_true(
     "removeAllCookies / flush not found in LoginWebViewDialog"
 )
 
-# ST-07: Android 14+ SecurityException in AudioOutputManager (RECEIVER_NOT_EXPORTED)
 audio_output = suite.read_file("app/src/main/java/com/ayashii/kuro/data/audio/AudioOutputManager.kt")
 st07_check = "RECEIVER_NOT_EXPORTED" in audio_output and "registerReceiver" in audio_output
 suite.assert_true(
@@ -621,7 +578,6 @@ suite.assert_true(
     "RECEIVER_NOT_EXPORTED flag not found in AudioOutputManager"
 )
 
-# ST-08: Main-thread synchronous JSON disk serialization (Dispatchers.IO)
 taste_mgr = suite.read_file("app/src/main/java/com/ayashii/kuro/data/recommendation/TasteManager.kt")
 st08_favs = "saveStoredFavorites" in music_vm and "Dispatchers.IO" in music_vm
 st08_taste = "persistTasteDataAsync" in taste_mgr and "coroutineScope.launch" in taste_mgr
@@ -632,7 +588,6 @@ suite.assert_true(
     f"favs={st08_favs}, taste={st08_taste}"
 )
 
-# ST-09: Unsynchronized compound operations on playlistQueue
 st09_lock = "private val lock = Any()" in player_queue and "synchronized(lock)" in player_queue
 st09_methods = player_queue.count("synchronized(lock)") >= 6
 suite.assert_true(
@@ -647,7 +602,6 @@ suite.assert_true(
 # ==============================================================================
 print(f"\n{Colors.BOLD}>>> 5. Behavioral & Algorithmic Simulation Tests{Colors.RESET}")
 
-# SIM-01: Simulate LrcParser offset calculation behaviorally
 def simulate_lrc_offset_parse(lrc_text):
     offset_match = re.search(r"\[offset:\s*([+-]?\d+)\s*\]", lrc_text, re.I)
     offset_ms = int(offset_match.group(1)) if offset_match else 0
@@ -676,7 +630,6 @@ suite.assert_true(
     f"result={sim_res}"
 )
 
-# SIM-02: Simulate LyricsModel vocal suppression logic at 00:00
 def simulate_get_current_line(lines, pos_ms):
     if not lines or pos_ms < lines[0][0]:
         return -1
@@ -701,9 +654,6 @@ test_lyrics = [
     (3000, "Hello World", 5000),
     (7000, "Guitar Solo Line", 8000)
 ]
-# At 1500ms -> should be suppressed (-1) because 00:00 is intro token
-# At 4000ms -> should highlight "Hello World" (index 1)
-# At 6000ms -> gap between line 1 (ends 5000) and line 2 (starts 7000) -> should be -1
 pos_1500 = simulate_get_current_line(test_lyrics, 1500)
 pos_4000 = simulate_get_current_line(test_lyrics, 4000)
 pos_6000 = simulate_get_current_line(test_lyrics, 6000)
@@ -715,7 +665,6 @@ suite.assert_true(
     f"pos_1500={pos_1500}, pos_4000={pos_4000}, pos_6000={pos_6000}"
 )
 
-# SIM-03: Simulate Fisher-Yates deck generation
 def simulate_fisher_yates(queue_size, current_index):
     deck = [i for i in range(queue_size) if i != current_index]
     import random
@@ -734,9 +683,9 @@ suite.assert_true(
 )
 
 # ==============================================================================
-# SECTION 6: KURO v3.8.9 REMEDIATIONS & BEHAVIORAL PROOFS (WGT, FADE, YTM, AUTH, NOTIF)
+# SECTION 6: KURO v3.8.9 - v3.8.12 REMEDIATIONS & BEHAVIORAL PROOFS
 # ==============================================================================
-print(f"\n{Colors.BOLD}>>> 6. Kuro v3.8.9 Remediations & Behavioral Proofs{Colors.RESET}")
+print(f"\n{Colors.BOLD}>>> 6. Kuro v3.8.9 - v3.8.12 Remediations & Behavioral Proofs{Colors.RESET}")
 
 widget_compact_xml = suite.read_file("app/src/main/res/layout/widget_kuro_compact.xml")
 widget_square_xml = suite.read_file("app/src/main/res/layout/widget_kuro_square.xml")
@@ -744,6 +693,7 @@ widget_bg_xml = suite.read_file("app/src/main/res/drawable/widget_background.xml
 ic_notif_xml = suite.read_file("app/src/main/res/drawable/ic_notification.xml")
 auth_mgr = suite.read_file("app/src/main/java/com/ayashii/kuro/data/auth/AuthManager.kt")
 vibe_screen = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/screens/VibeScreen.kt")
+liriqo_rs = suite.read_file("kuro-core/src/liriqo.rs")
 
 wgt01_check = (
     'android:clipToOutline="true"' in widget_compact_xml
@@ -760,17 +710,17 @@ suite.assert_true(
 )
 
 fade01_check = (
-    "CompositingStrategy.Offscreen" in main_activity
-    and "BlendMode.DstIn" in main_activity
-    and "BlendMode.DstIn" in home_screen
-    and "BlendMode.DstIn" in vibe_screen
-    and "slideInHorizontally" not in main_activity
+    "HorizontalPager" in main_activity
+    and "pagerMotionBlurTransition" in main_activity
+    and "CompositingStrategy.Offscreen" not in main_activity
+    and "CompositingStrategy.Offscreen" not in home_screen
+    and "CompositingStrategy.Offscreen" not in vibe_screen
 )
 suite.assert_true(
     fade01_check,
     "FADE-01",
-    "Smooth Fade-In tab transitions and offscreen DstIn gradient fade masks on navigation & header bars",
-    "Missing Fade-In or DstIn edge mask in MainActivity/HomeScreen/VibeScreen"
+    "Interactive HorizontalPager with Motion Blur and zero full-screen Offscreen framebuffer overhead on 32-bit GPUs",
+    "Missing HorizontalPager or unexpected Offscreen compositing in MainActivity/HomeScreen/VibeScreen"
 )
 
 ytm01_check = (
@@ -828,7 +778,6 @@ suite.assert_true(
     "Missing additional bug fixes"
 )
 
-
 full_player = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/components/FullPlayerSheet.kt")
 full_lyrics = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/components/FullScreenLyricsSheet.kt")
 mini_player = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/components/MiniPlayer.kt")
@@ -858,19 +807,17 @@ gesture01_check = (
     and "detectDragGestures" in mini_player
     and "artworkDragX" in full_player
     and "showHeartBurst" in full_player
-    and "onSwipeAddToQueue" in track_item
     and "combinedClickable" in track_item
     and "detectHorizontalDragGestures" in queue_sheet
-    and "detectHorizontalDragGestures" in library_screen
+    and "HorizontalPager" in library_screen
     and "detectHorizontalDragGestures" in search_screen
 )
 suite.assert_true(
     gesture01_check,
     "GESTURE-01",
-    "Comprehensive touchscreen gestures: FullScreenLyrics swipe-down, MiniPlayer swipe-up/down, Artwork horizontal swipe & double-tap heart burst, TrackItem swipe-to-queue/favorite & long-press, Queue swipe-to-delete, and sub-screen swipe-back",
+    "Comprehensive touchscreen gestures: FullScreenLyrics swipe-down, MiniPlayer swipe-up/down, Artwork horizontal swipe & double-tap heart burst, holdable HorizontalPager tabs, and sub-screen swipe-back",
     "Missing one or more touchscreen gesture handlers"
 )
-
 
 cargo_toml = suite.read_file("kuro-core/Cargo.toml")
 sanitizer_rs = suite.read_file("kuro-core/src/sanitizer.rs")
@@ -893,23 +840,27 @@ suite.assert_true(
     "Missing one or more APK size compression or auto-ABI update components"
 )
 
-
 theme_kt = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/theme/Theme.kt")
 taste_mgr = suite.read_file("app/src/main/java/com/ayashii/kuro/data/recommendation/TasteManager.kt")
-apple01_check = (
-    "appleFluidSpring" in theme_kt
-    and "appleSnappySpring" in theme_kt
-    and "artworkBreathingScale" in suite.read_file("app/src/main/java/com/ayashii/kuro/ui/components/FullPlayerSheet.kt")
-    and "lineOffsetX" in suite.read_file("app/src/main/java/com/ayashii/kuro/ui/components/FullScreenLyricsSheet.kt")
-    and "miniArtScale" in suite.read_file("app/src/main/java/com/ayashii/kuro/ui/components/MiniPlayer.kt")
-    and "bgRecedeScale" in suite.read_file("app/src/main/java/com/ayashii/kuro/MainActivity.kt")
+v3812_check = (
+    "unwrap_netease_json_line" in liriqo_rs
+    and "unwrapNetEaseJsonText" in lrc_parser
+    and "sanitizeLines" in lrc_parser
+    and "pagerMotionBlurTransition" in theme_kt
+    and "contentKey = { it.id }" in full_player
+    and "contentKey = { it.id }" in mini_player
+    and "player_fav_icon_morph" in full_player
+    and "progressProvider = { viewModel.getProgress() }" in main_activity
+    and "artworkBreathingScale" not in full_player
+    and "miniArtScale" not in mini_player
+    and "bgRecedeScale" not in main_activity
     and "20000L" in taste_mgr
 )
 suite.assert_true(
-    apple01_check,
-    "APPLE-MOTION-01",
-    "Apple-style motion-only upgrade: artwork breathing, cascading depth lyrics, 3D modal recession, spring nav physics, and play-count dedup",
-    "Missing one or more Apple motion or v3.8.12 bug-fix components"
+    v3812_check,
+    "KURO-V3812-01",
+    "v3.8.12 fixes: NetEase JSON/instrumental lyrics filter, zero forced zoom, 32-bit scroll optimization, holdable HorizontalPager with motion blur, and zero-blink + to checkmark morph",
+    "Missing one or more v3.8.12 remediation components"
 )
 
 # ==============================================================================

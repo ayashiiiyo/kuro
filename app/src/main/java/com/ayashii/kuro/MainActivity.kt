@@ -16,10 +16,9 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,6 +35,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
@@ -47,16 +48,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -68,11 +67,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
 import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.data.update.UpdateInfo
 import com.ayashii.kuro.data.update.UpdateManager
@@ -86,8 +80,10 @@ import com.ayashii.kuro.ui.screens.SearchScreen
 import com.ayashii.kuro.ui.screens.VibeScreen
 import com.ayashii.kuro.ui.theme.KuroAppTheme
 import com.ayashii.kuro.ui.theme.KuroMotion
+import com.ayashii.kuro.ui.theme.KuroMotion.pagerMotionBlurTransition
 import com.ayashii.kuro.ui.theme.KuroTheme
 import com.ayashii.kuro.viewmodel.MusicViewModel
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -164,11 +160,12 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MainAppScreen(viewModel: MusicViewModel) {
-    val navController = rememberNavController()
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route
+    val navItems = Screen.bottomNavItems
+    val pagerState = rememberPagerState(initialPage = 0, pageCount = { navItems.size })
+    val coroutineScope = rememberCoroutineScope()
 
     val currentTrack by viewModel.currentTrack.collectAsState()
     val isPlaying by viewModel.isPlaying.collectAsState()
@@ -182,14 +179,14 @@ fun MainAppScreen(viewModel: MusicViewModel) {
     var availableUpdate by remember { mutableStateOf<UpdateInfo?>(null) }
     var navSwipeOffsetX by remember { mutableFloatStateOf(0f) }
 
-    val navigateToTab: (String) -> Unit = { targetRoute ->
-        if (currentRoute != targetRoute) {
-            navController.navigate(targetRoute) {
-                popUpTo(navController.graph.findStartDestination().id) {
-                    saveState = true
-                }
-                launchSingleTop = true
-                restoreState = true
+    val navigateToPage: (Int) -> Unit = { targetPage ->
+        val clamped = targetPage.coerceIn(0, navItems.lastIndex)
+        if (pagerState.currentPage != clamped) {
+            coroutineScope.launch {
+                pagerState.animateScrollToPage(
+                    page = clamped,
+                    animationSpec = KuroMotion.appleFluidSpring()
+                )
             }
         }
     }
@@ -205,26 +202,9 @@ fun MainAppScreen(viewModel: MusicViewModel) {
     }
 
     val colors = KuroAppTheme.colors
-    val bgRecedeScale by animateFloatAsState(
-        targetValue = if (isExpanded && currentTrack != null) 0.94f else 1.0f,
-        animationSpec = KuroMotion.appleFluidSpring(),
-        label = "apple_bg_recede_scale"
-    )
-    val bgRecedeAlpha by animateFloatAsState(
-        targetValue = if (isExpanded && currentTrack != null) 0.76f else 1.0f,
-        animationSpec = KuroMotion.appleFluidSpring(),
-        label = "apple_bg_recede_alpha"
-    )
 
     Box(modifier = Modifier.fillMaxSize().background(colors.background)) {
         Scaffold(
-            modifier = Modifier.graphicsLayer {
-                scaleX = bgRecedeScale
-                scaleY = bgRecedeScale
-                alpha = bgRecedeAlpha
-                clip = bgRecedeScale < 0.995f
-                shape = RoundedCornerShape(((1f - bgRecedeScale) * 420f).dp)
-            },
             containerColor = colors.background,
             bottomBar = {
                 Box(
@@ -249,18 +229,17 @@ fun MainAppScreen(viewModel: MusicViewModel) {
                             .clip(pillShape)
                             .background(colors.surface.copy(alpha = 0.94f))
                             .border(1.dp, colors.border.copy(alpha = 0.65f), pillShape)
-                            .pointerInput(currentRoute) {
+                            .pointerInput(pagerState.currentPage) {
                                 detectHorizontalDragGestures(
                                     onDragStart = { navSwipeOffsetX = 0f },
                                     onDragEnd = {
-                                        val items = Screen.bottomNavItems
-                                        val currentIdx = items.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
-                                        if (navSwipeOffsetX < -64f && currentIdx + 1 < items.size) {
+                                        val currentIdx = pagerState.currentPage
+                                        if (navSwipeOffsetX < -64f && currentIdx + 1 < navItems.size) {
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            navigateToTab(items[currentIdx + 1].route)
+                                            navigateToPage(currentIdx + 1)
                                         } else if (navSwipeOffsetX > 64f && currentIdx - 1 >= 0) {
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            navigateToTab(items[currentIdx - 1].route)
+                                            navigateToPage(currentIdx - 1)
                                         }
                                         navSwipeOffsetX = 0f
                                     },
@@ -275,17 +254,12 @@ fun MainAppScreen(viewModel: MusicViewModel) {
                         horizontalArrangement = Arrangement.SpaceEvenly,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Screen.bottomNavItems.forEach { screen ->
-                            val selected = currentRoute == screen.route
+                        navItems.forEachIndexed { index, screen ->
+                            val selected = pagerState.currentPage == index
                             val itemAlpha by animateFloatAsState(
                                 targetValue = if (selected) 1f else 0.56f,
                                 animationSpec = KuroMotion.appleSnappySpring(),
                                 label = "nav_item_alpha"
-                            )
-                            val itemScale by animateFloatAsState(
-                                targetValue = if (selected) 1.06f else 0.94f,
-                                animationSpec = KuroMotion.appleSnappySpring(),
-                                label = "nav_item_scale"
                             )
                             val interactionSource = remember { MutableInteractionSource() }
                             Column(
@@ -298,7 +272,7 @@ fun MainAppScreen(viewModel: MusicViewModel) {
                                         indication = null
                                     ) {
                                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        navigateToTab(screen.route)
+                                        navigateToPage(index)
                                     }
                                     .padding(vertical = 7.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -312,8 +286,6 @@ fun MainAppScreen(viewModel: MusicViewModel) {
                                         .size(22.dp)
                                         .graphicsLayer {
                                             alpha = itemAlpha
-                                            scaleX = itemScale
-                                            scaleY = itemScale
                                         }
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
@@ -339,71 +311,41 @@ fun MainAppScreen(viewModel: MusicViewModel) {
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
-                NavHost(
-                    navController = navController,
-                    startDestination = Screen.Home.route,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            compositingStrategy = CompositingStrategy.Offscreen
-                        }
-                        .drawWithContent {
-                            drawContent()
-                            drawRect(
-                                brush = Brush.verticalGradient(
-                                    0.0f to Color.White,
-                                    0.95f to Color.White,
-                                    1.0f to Color.Transparent
-                                ),
-                                blendMode = BlendMode.DstIn
+                HorizontalPager(
+                    state = pagerState,
+                    beyondBoundsPageCount = 1,
+                    modifier = Modifier.fillMaxSize()
+                ) { page ->
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .pagerMotionBlurTransition(
+                                pageOffsetProvider = {
+                                    (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                                }
                             )
-                        },
-                    enterTransition = {
-                        fadeIn(
-                            animationSpec = tween(300, easing = KuroMotion.EmphasizedDecelerate)
-                        ) + scaleIn(
-                            initialScale = 0.988f,
-                            animationSpec = tween(300, easing = KuroMotion.EmphasizedDecelerate)
-                        )
-                    },
-                    exitTransition = {
-                        fadeOut(
-                            animationSpec = tween(180, easing = KuroMotion.EmphasizedAccelerate)
-                        ) + scaleOut(
-                            targetScale = 0.992f,
-                            animationSpec = tween(180, easing = KuroMotion.EmphasizedAccelerate)
-                        )
-                    },
-                    popEnterTransition = {
-                        fadeIn(
-                            animationSpec = tween(300, easing = KuroMotion.EmphasizedDecelerate)
-                        ) + scaleIn(
-                            initialScale = 0.988f,
-                            animationSpec = tween(300, easing = KuroMotion.EmphasizedDecelerate)
-                        )
-                    },
-                    popExitTransition = {
-                        fadeOut(
-                            animationSpec = tween(180, easing = KuroMotion.EmphasizedAccelerate)
-                        ) + scaleOut(
-                            targetScale = 0.992f,
-                            animationSpec = tween(180, easing = KuroMotion.EmphasizedAccelerate)
-                        )
-                    }
-                ) {
-                    composable(Screen.Home.route) {
-                        HomeScreen(viewModel = viewModel)
-                    }
-                    composable(Screen.Search.route) {
-                        SearchScreen(viewModel = viewModel)
-                    }
-                    composable(Screen.Vibe.route) {
-                        VibeScreen(viewModel = viewModel)
-                    }
-                    composable(Screen.Library.route) {
-                        LibraryScreen(viewModel = viewModel)
+                    ) {
+                        when (page) {
+                            0 -> HomeScreen(viewModel = viewModel)
+                            1 -> SearchScreen(viewModel = viewModel)
+                            2 -> VibeScreen(viewModel = viewModel)
+                            else -> LibraryScreen(viewModel = viewModel)
+                        }
                     }
                 }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(22.dp)
+                        .align(Alignment.BottomCenter)
+                        .background(
+                            Brush.verticalGradient(
+                                0.0f to Color.Transparent,
+                                1.0f to colors.background
+                            )
+                        )
+                )
 
                 AnimatedVisibility(
                     visible = currentTrack != null && !isExpanded,
@@ -435,16 +377,20 @@ fun MainAppScreen(viewModel: MusicViewModel) {
             }
         }
 
+        BackHandler(enabled = !isExpanded && pagerState.currentPage != 0) {
+            navigateToPage(0)
+        }
+
         AnimatedVisibility(
             visible = isExpanded && currentTrack != null,
             enter = slideInVertically(
-                animationSpec = tween(durationMillis = 320, easing = KuroMotion.EmphasizedDecelerate),
+                animationSpec = tween(durationMillis = 300, easing = KuroMotion.EmphasizedDecelerate),
                 initialOffsetY = { it }
-            ) + fadeIn(animationSpec = tween(220, easing = KuroMotion.EmphasizedDecelerate)),
+            ) + fadeIn(animationSpec = tween(200, easing = KuroMotion.EmphasizedDecelerate)),
             exit = slideOutVertically(
                 animationSpec = tween(durationMillis = 220, easing = KuroMotion.EmphasizedDecelerate),
                 targetOffsetY = { it }
-            ) + fadeOut(animationSpec = tween(180, easing = KuroMotion.EmphasizedDecelerate))
+            ) + fadeOut(animationSpec = tween(170, easing = KuroMotion.EmphasizedDecelerate))
         ) {
             currentTrack?.let { track ->
                 FullPlayerSheet(
@@ -466,7 +412,7 @@ fun MainAppScreen(viewModel: MusicViewModel) {
         }
 
         /**
-         * Declared after Scaffold and NavHost so LIFO BackHandler dispatch
+         * Declared after Scaffold and HorizontalPager so LIFO BackHandler dispatch
          * always collapses FullPlayerSheet before any child screen intercepts Back.
          */
         BackHandler(enabled = isExpanded) {
@@ -496,16 +442,11 @@ fun MiniPlayerContainer(
     isLoading: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val currentPosMs by viewModel.playbackPosition.collectAsState()
-    val durMs by viewModel.duration.collectAsState()
-    val effDur = if (durMs > 0) durMs else (track.durationSeconds * 1000L).coerceAtLeast(1L)
-    val progressFloat = (currentPosMs.toFloat() / effDur.toFloat()).coerceIn(0f, 1f)
-
     MiniPlayer(
         track = track,
         isPlaying = isPlaying,
         isLoading = isLoading,
-        progress = progressFloat,
+        progressProvider = { viewModel.getProgress() },
         onPlayPauseClick = { viewModel.togglePlayPause() },
         onSkipNextClick = { viewModel.skipNext() },
         onSkipPreviousClick = { viewModel.skipPrevious() },
