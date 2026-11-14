@@ -109,14 +109,18 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.8.13 — Pager Navigation, Lyric Cleanup & Playback Polish
+          ## Kuro v3.8.14 — Native Parsing Speedups, Smarter Radio & Search History
 
-          - **Swipeable Pager Navigation**:
-            - Replaced the nav host with a horizontal pager, added motion blur on 64-bit devices, and removed forced zoom/scale effects.
-          - **Lyrics Cleanup**:
-            - Sanitized NetEase JSON responses and filtered instrumental markers before rendering lyrics.
-          - **Player & Metadata Fixes**:
-            - Added favorite icon morphing, live progress in the mini player, and stable artwork/metadata refresh on track changes.
+          - **Faster Native Parsing**:
+            - Rust now returns packed track and lyric payloads for YTM search, radio, and LiriQo, cutting JNI object overhead.
+            - Title sanitizer recognizes more official-video/lyric/remaster noise patterns.
+          - **Smarter Radio**:
+            - Personalized AUTOMIX discover/familiar tuning for signed-in users, with artist de-clustering for more varied queues.
+          - **Search History**:
+            - Search recents are tracked separately from recently played with clear/remove support.
+          - **UI & Playback Polish**:
+            - Cascading section transitions with cached blur steps and lighter pager motion blur on 32-bit devices.
+            - Playback reporting to YouTube Music and duplicate update-receiver cleanup.
           - Published signed release, per-ABI, and debug APKs.
           EOF
           gh release delete "$RELEASE_TAG" --yes --cleanup-tag 2>/dev/null || true

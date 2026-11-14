@@ -313,21 +313,23 @@ fun MainAppScreen(viewModel: MusicViewModel) {
             ) {
                 HorizontalPager(
                     state = pagerState,
-                    beyondBoundsPageCount = 1,
+                    beyondBoundsPageCount = 0,
                     modifier = Modifier.fillMaxSize()
                 ) { page ->
+                    val pageOffsetProvider = {
+                        (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                    }
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .pagerMotionBlurTransition(
-                                pageOffsetProvider = {
-                                    (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
-                                }
-                            )
+                            .pagerMotionBlurTransition(pageOffsetProvider = pageOffsetProvider)
                     ) {
                         when (page) {
                             0 -> HomeScreen(viewModel = viewModel)
-                            1 -> SearchScreen(viewModel = viewModel)
+                            1 -> SearchScreen(
+                                viewModel = viewModel,
+                                pageOffsetProvider = pageOffsetProvider
+                            )
                             2 -> VibeScreen(viewModel = viewModel)
                             else -> LibraryScreen(viewModel = viewModel)
                         }

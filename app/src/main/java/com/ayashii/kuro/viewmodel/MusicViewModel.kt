@@ -158,6 +158,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     val tasteManager = com.ayashii.kuro.data.recommendation.TasteManager.getInstance(getApplication())
     val recentlyPlayed = tasteManager.recentlyPlayed
+    val searchRecents = tasteManager.searchRecents
     val onRepeatTracks = tasteManager.onRepeatTracks
 
     fun removeFromRecents(trackId: String) = tasteManager.removeFromRecents(trackId)
@@ -375,7 +376,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         if (queueManager.queueState.value.size <= 2 || remaining <= 3) {
             viewModelScope.launch(Dispatchers.IO) {
                 try {
-                    val radioTracks = repository.getRadioTracks(track.id)
+                    val isLoggedIn = authState.value != null
+                    val tuner = if (isLoggedIn) "AUTOMIX_SETTING_DISCOVER" else "AUTOMIX_SETTING_NORMAL"
+                    val radioTracks = repository.getRadioTracks(track.id, tuner)
                     if (radioTracks.isNotEmpty()) {
                         appendRadioTracks(radioTracks)
                         val currentList = queueManager.queueState.value
@@ -560,7 +563,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                             }
                             Player.STATE_ENDED -> {
                                 _isLoadingTrack.value = false
-                                _currentTrack.value?.let { tasteManager.recordTrackPlayed(it) }
                                 if (_sleepTimerEndOfTrack.value) {
                                     _sleepTimerEndOfTrack.value = false
                                     mediaController?.pause()
@@ -785,7 +787,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     syncWidgetState()
                 }
 
-                delay(50)
+                delay(85)
             }
         }
     }
@@ -803,6 +805,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     fun loadTrending() {
         viewModelScope.launch {
             _isLoadingTrending.value = true
+            val isLoggedIn = authState.value != null
             val rawShelves = repository.getHomeShelves().toMutableList()
             val onRepeat = tasteManager.onRepeatTracks.value
             if (onRepeat.isNotEmpty()) {
@@ -811,6 +814,31 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     subtitle = settingsManager.getLocalizedString(com.ayashii.kuro.R.string.home_on_repeat_sub),
                     tracks = onRepeat
                 ))
+            }
+            if (isLoggedIn) {
+                val seedCandidates = (onRepeat + _favorites.value + tasteManager.recentlyPlayed.value)
+                    .distinctBy { it.id }
+                    .take(2)
+                if (seedCandidates.isNotEmpty()) {
+                    val discoveryPool = mutableListOf<Track>()
+                    for ((idx, seed) in seedCandidates.withIndex()) {
+                        val mode = if (idx == 0) "AUTOMIX_SETTING_DISCOVER" else "AUTOMIX_SETTING_FAMILIAR"
+                        val rTracks = repository.getRadioTracks(seed.id, mode)
+                        discoveryPool.addAll(rTracks.take(10))
+                    }
+                    val rankedMix = tasteManager.rankRadioTracks(discoveryPool.distinctBy { it.id })
+                    if (rankedMix.isNotEmpty()) {
+                        val insertPos = if (rawShelves.isNotEmpty()) 1 else 0
+                        rawShelves.add(
+                            insertPos,
+                            HomeSection(
+                                title = settingsManager.getLocalizedString(com.ayashii.kuro.R.string.home_mix_personal),
+                                subtitle = authState.value?.name?.takeIf { it.isNotBlank() } ?: "YouTube Music AI",
+                                tracks = rankedMix.take(16)
+                            )
+                        )
+                    }
+                }
             }
             _homeSections.value = rawShelves
             val tracks = if (rawShelves.isNotEmpty()) {
@@ -887,8 +915,25 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         genreJob = viewModelScope.launch {
             _isLoadingGenre.value = true
             try {
-                val results = repository.searchTracks("$genre music hits")
-                _genreTracks.value = results
+                val isLoggedIn = authState.value != null
+                if (isLoggedIn) {
+                    val topArtist = tasteManager.getTopArtists(3).firstOrNull()?.first
+                    val primaryResults = repository.searchTracks("$genre music hits")
+                    val seedTrack = primaryResults.firstOrNull()
+                    val radioSupplement = if (seedTrack != null) {
+                        repository.getRadioTracks(seedTrack.id, "AUTOMIX_SETTING_DISCOVER").take(12)
+                    } else if (!topArtist.isNullOrBlank()) {
+                        repository.searchTracks("$genre $topArtist").take(8)
+                    } else {
+                        emptyList()
+                    }
+                    val combined = (primaryResults.take(8) + radioSupplement + primaryResults.drop(8))
+                        .distinctBy { it.id }
+                    _genreTracks.value = tasteManager.rankRadioTracks(combined)
+                } else {
+                    val results = repository.searchTracks("$genre music hits")
+                    _genreTracks.value = results
+                }
             } catch (e: Exception) {
                 Log.e("KuroMusicViewModel", "Load genre tracks error: ${e.message}")
                 _genreTracks.value = emptyList()
@@ -966,6 +1011,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 queueManager.updateCurrentTrack(updatedTrack)
 
                 tasteManager.recordTrackPlayed(updatedTrack)
+                if (authState.value != null) {
+                    launch(Dispatchers.IO) {
+                        repository.reportPlaybackToYouTubeMusic(updatedTrack.id)
+                    }
+                }
 
                 val controller = mediaController
                 if (controller != null) {

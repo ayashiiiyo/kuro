@@ -41,6 +41,9 @@ class UpdateManager private constructor(private val context: Context) {
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
 
+    @Volatile
+    private var activeDownloadReceiver: BroadcastReceiver? = null
+
     companion object {
         private const val TAG = "KuroUpdateManager"
         private const val PREFS_NAME = "kuro_update_prefs"
@@ -253,6 +256,13 @@ class UpdateManager private constructor(private val context: Context) {
                 }
             }
         }
+
+        activeDownloadReceiver?.let { prev ->
+            try {
+                context.unregisterReceiver(prev)
+            } catch (_: Exception) {}
+        }
+        activeDownloadReceiver = onComplete
 
         try {
             androidx.core.content.ContextCompat.registerReceiver(

@@ -430,7 +430,8 @@ class MusicRepository {
 
             val response = client.newCall(reqBuilder.build()).execute()
             val jsonStr = response.use { it.body?.string() } ?: return emptyList()
-            parseYtmSearchTracks(org.json.JSONObject(jsonStr))
+            com.ayashii.kuro.data.native.KuroNativeCore.parseYtmSearch(jsonStr)
+                ?: parseYtmSearchTracks(org.json.JSONObject(jsonStr))
         } catch (e: Exception) {
             Log.e("MusicRepository", "YTM Search exception: ${e.message}")
             emptyList()
@@ -777,17 +778,19 @@ class MusicRepository {
                 return null
             }
 
+            val isLoggedIn = auth.isLoggedIn()
             coroutineScope {
-                val homeDeferred = async { fetchBrowse("FEmusic_home") }
+                val homeDeferred = if (isLoggedIn) async { fetchBrowse("FEmusic_home") } else null
                 val exploreDeferred = async { fetchBrowse("FEmusic_explore") }
-                val homeJson = homeDeferred.await()
+                val homeJson = homeDeferred?.await()
                 val exploreJson = exploreDeferred.await()
 
                 if (homeJson != null) {
                     result.addAll(parseYtmSections(homeJson, getLocString(com.ayashii.kuro.R.string.home_quick_picks_title, "Quick Picks")))
                 }
                 if (exploreJson != null) {
-                    result.addAll(parseYtmSections(exploreJson, getLocString(com.ayashii.kuro.R.string.home_trending_shelf_title, "Trending Songs")))
+                    val exploreShelves = parseYtmSections(exploreJson, getLocString(com.ayashii.kuro.R.string.home_trending_shelf_title, "Trending Songs"))
+                    result.addAll(if (isLoggedIn) exploreShelves else exploreShelves.take(2))
                 }
             }
         } catch (e: Exception) {
@@ -1050,6 +1053,81 @@ class MusicRepository {
      * Two-way YouTube Music Like/Unlike synchronization via InnerTube API.
      * Mutates the user's official YouTube Music "Liked Music" library when logged in.
      */
+    suspend fun reportPlaybackToYouTubeMusic(videoId: String): Boolean = withContext(Dispatchers.IO) {
+        if (videoId.isBlank()) return@withContext false
+        val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
+        if (!auth.isLoggedIn() || auth.getCookie().isNullOrBlank()) return@withContext false
+
+        try {
+            val origin = "https://music.youtube.com"
+            val (hlCode, glCode) = resolveHlGl()
+            val cpnChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
+            val rng = java.util.Random()
+            val cpn = (1..16).map { cpnChars[rng.nextInt(cpnChars.length)] }.joinToString("")
+
+            val payload = org.json.JSONObject().apply {
+                put("context", org.json.JSONObject().apply {
+                    put("client", org.json.JSONObject().apply {
+                        put("clientName", YTM_CLIENT_NAME)
+                        put("clientVersion", YTM_CLIENT_VERSION)
+                        put("hl", hlCode)
+                        put("gl", glCode)
+                    })
+                })
+                put("videoId", videoId)
+                put("cpn", cpn)
+                put("playbackContext", org.json.JSONObject().apply {
+                    put("contentPlaybackContext", org.json.JSONObject().apply {
+                        put("signatureTimestamp", 20024)
+                    })
+                })
+            }
+
+            val reqBuilder = okhttp3.Request.Builder()
+                .url("$origin/youtubei/v1/player")
+                .header("Content-Type", "application/json")
+                .header("User-Agent", YTM_USER_AGENT)
+                .header("Origin", origin)
+                .header("Referer", "$origin/")
+                .header("X-Origin", origin)
+                .header("X-YouTube-Client-Name", "67")
+                .header("X-YouTube-Client-Version", YTM_CLIENT_VERSION)
+
+            auth.applyAuthToRequest(reqBuilder, payload, origin)
+            reqBuilder.post(payload.toString().toRequestBody("application/json".toMediaType()))
+
+            val playerJsonStr = HttpClientProvider.client.newCall(reqBuilder.build()).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext false
+                resp.body?.string().orEmpty()
+            }
+            if (playerJsonStr.isBlank()) return@withContext false
+
+            val playerJson = org.json.JSONObject(playerJsonStr)
+            val trackingUrl = playerJson.optJSONObject("playbackTracking")
+                ?.optJSONObject("videostatsPlaybackUrl")
+                ?.optString("baseUrl", "")
+                .orEmpty()
+
+            if (trackingUrl.startsWith("http")) {
+                val sep = if (trackingUrl.contains("?")) "&" else "?"
+                val finalTrackingUrl = "${trackingUrl}${sep}ver=2&c=WEB_REMIX&cpn=$cpn&el=detailpage"
+                val pingBuilder = okhttp3.Request.Builder()
+                    .url(finalTrackingUrl)
+                    .header("User-Agent", YTM_USER_AGENT)
+                    .header("Origin", origin)
+                    .header("Referer", "$origin/")
+                    .get()
+                auth.applyAuthToRequest(pingBuilder, null, origin)
+                HttpClientProvider.client.newCall(pingBuilder.build()).execute().close()
+                return@withContext true
+            }
+            false
+        } catch (e: Exception) {
+            Log.d("MusicRepository", "Playback reporting skipped: ${e.message}")
+            false
+        }
+    }
+
     suspend fun setTrackLikeStatus(videoId: String, isLiked: Boolean): Boolean = withContext(Dispatchers.IO) {
         if (videoId.isBlank()) return@withContext false
         val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()

@@ -99,6 +99,7 @@ import com.ayashii.kuro.ui.components.SettingsDialog
 import com.ayashii.kuro.ui.components.TrackOptionsBottomSheet
 import com.ayashii.kuro.ui.theme.KuroAppTheme
 import com.ayashii.kuro.ui.theme.KuroMotion
+import com.ayashii.kuro.ui.theme.KuroMotion.cascadeSection
 import com.ayashii.kuro.ui.theme.Typography
 import com.ayashii.kuro.viewmodel.MusicViewModel
 
@@ -114,6 +115,7 @@ data class SearchCategoryItem(
 @Composable
 fun SearchScreen(
     viewModel: MusicViewModel,
+    pageOffsetProvider: () -> Float = { 0f },
     modifier: Modifier = Modifier
 ) {
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -133,6 +135,7 @@ fun SearchScreen(
     val currentTrack by viewModel.currentTrack.collectAsState()
     val trendingTracks by viewModel.trendingTracks.collectAsState()
     val recentlyPlayed by viewModel.recentlyPlayed.collectAsState()
+    val searchRecents by viewModel.searchRecents.collectAsState()
     val currentAccount by viewModel.authState.collectAsState()
     val favorites by viewModel.favorites.collectAsState()
     val favoriteIds by remember(favorites) { derivedStateOf { favorites.mapTo(HashSet()) { it.id } } }
@@ -200,7 +203,8 @@ fun SearchScreen(
                             slideOutVertically(animationSpec = tween(150, easing = KuroMotion.EmphasizedAccelerate)) { -it / 8 }
                     )
             },
-            label = "search_header_transition"
+            label = "search_header_transition",
+            modifier = Modifier.cascadeSection(stage = 0, pageOffsetProvider = pageOffsetProvider)
         ) { activeHeader ->
             if (!activeHeader) {
                 Column {
@@ -661,10 +665,12 @@ fun SearchScreen(
                 }
                 1 -> {
                     LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .cascadeSection(stage = 1, pageOffsetProvider = pageOffsetProvider),
                         contentPadding = PaddingValues(top = 4.dp, bottom = 156.dp)
                     ) {
-                        if (recentlyPlayed.isNotEmpty()) {
+                        if (searchRecents.isNotEmpty()) {
                             item {
                                 Text(
                                     text = stringResource(R.string.search_recents_title),
@@ -674,7 +680,7 @@ fun SearchScreen(
                                 )
                             }
 
-                            items(recentlyPlayed, key = { "recent_${it.id}" }, contentType = { "recent_track" }) { track ->
+                            items(searchRecents, key = { "recent_${it.id}" }, contentType = { "recent_track" }) { track ->
                                 val isSaved = track.id in favoriteIds
 
                                 Row(
@@ -684,7 +690,7 @@ fun SearchScreen(
                                             onClick = {
                                                 focusManager.clearFocus()
                                                 keyboardController?.hide()
-                                                viewModel.playTrack(track, recentlyPlayed)
+                                                viewModel.playTrack(track, searchRecents)
                                             },
                                             onLongClick = {
                                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -840,7 +846,9 @@ fun SearchScreen(
 
                         item {
                             Column(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .cascadeSection(stage = 1, pageOffsetProvider = pageOffsetProvider),
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 categories.chunked(2).forEach { rowCategories ->
@@ -901,7 +909,11 @@ fun SearchScreen(
                         val discoverTracks = trendingTracks.take(6)
                         if (discoverTracks.isNotEmpty()) {
                             item {
-                                Column(modifier = Modifier.padding(top = 22.dp, bottom = 12.dp)) {
+                                Column(
+                                    modifier = Modifier
+                                        .padding(top = 22.dp, bottom = 12.dp)
+                                        .cascadeSection(stage = 2, pageOffsetProvider = pageOffsetProvider)
+                                ) {
                                     Text(
                                         text = stringResource(R.string.search_discover_new).ifBlank { DEFAULT_DISCOVER_HEADER },
                                         style = Typography.headlineMedium.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold),

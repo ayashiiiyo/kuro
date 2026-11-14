@@ -22,6 +22,9 @@ class TasteManager private constructor(context: Context) {
     private val _recentlyPlayed = MutableStateFlow<List<Track>>(emptyList())
     val recentlyPlayed: StateFlow<List<Track>> = _recentlyPlayed.asStateFlow()
 
+    private val _searchRecents = MutableStateFlow<List<Track>>(emptyList())
+    val searchRecents: StateFlow<List<Track>> = _searchRecents.asStateFlow()
+
     private val _onRepeatTracks = MutableStateFlow<List<Track>>(emptyList())
     val onRepeatTracks: StateFlow<List<Track>> = _onRepeatTracks.asStateFlow()
 
@@ -77,13 +80,13 @@ class TasteManager private constructor(context: Context) {
             }
             lastRecordedPlayId = null
         }
-        updateTrackScore(track, deltaScore = -2, isPlay = false)
+        updateTrackScore(track, deltaScore = -3, isPlay = false)
         refreshOnRepeat()
     }
 
     private fun updateTrackScore(track: Track, deltaScore: Int, isPlay: Boolean) {
         val currentScore = scoresMap[track.id] ?: 0
-        scoresMap[track.id] = maxOf(0, currentScore + deltaScore)
+        scoresMap[track.id] = (currentScore + deltaScore).coerceIn(-20, 120)
         cachedTopArtists = null
 
         if (isPlay) {
@@ -109,17 +112,17 @@ class TasteManager private constructor(context: Context) {
     }
 
     fun removeFromRecents(trackId: String) {
-        val current = _recentlyPlayed.value.toMutableList()
+        val current = _searchRecents.value.toMutableList()
         current.removeAll { it.id == trackId }
-        _recentlyPlayed.value = current
-        saveRecents(current)
+        _searchRecents.value = current
+        saveSearchRecents(current)
     }
 
     fun clearRecents() {
-        _recentlyPlayed.value = emptyList()
+        _searchRecents.value = emptyList()
         coroutineScope.launch {
             try {
-                prefs.edit().remove(KEY_RECENTS).apply()
+                prefs.edit().putString(KEY_SEARCH_RECENTS, "[]").apply()
             } catch (_: Exception) {}
         }
     }
@@ -132,6 +135,34 @@ class TasteManager private constructor(context: Context) {
         val trimmed = if (current.size > MAX_RECENTS) current.take(MAX_RECENTS) else current
         _recentlyPlayed.value = trimmed
         saveRecents(trimmed)
+
+        val currentSearch = _searchRecents.value.toMutableList()
+        currentSearch.removeAll { it.id == track.id }
+        currentSearch.add(0, track)
+        val trimmedSearch = if (currentSearch.size > MAX_RECENTS) currentSearch.take(MAX_RECENTS) else currentSearch
+        _searchRecents.value = trimmedSearch
+        saveSearchRecents(trimmedSearch)
+    }
+
+    private fun saveSearchRecents(tracks: List<Track>) {
+        val copy = ArrayList(tracks)
+        coroutineScope.launch {
+            try {
+                val arr = JSONArray()
+                for (t in copy) {
+                    val obj = JSONObject().apply {
+                        put("id", t.id)
+                        put("url", t.url)
+                        put("title", t.title)
+                        put("artist", t.artist)
+                        put("thumbnailUrl", t.thumbnailUrl)
+                        put("durationSeconds", t.durationSeconds)
+                    }
+                    arr.put(obj)
+                }
+                prefs.edit().putString(KEY_SEARCH_RECENTS, arr.toString()).apply()
+            } catch (_: Exception) {}
+        }
     }
 
     private fun saveRecents(tracks: List<Track>) {
@@ -219,6 +250,27 @@ class TasteManager private constructor(context: Context) {
                 )
             }
             _recentlyPlayed.value = rList
+            val searchRecentsRaw = prefs.getString(KEY_SEARCH_RECENTS, null)
+            if (searchRecentsRaw != null) {
+                val sArr = JSONArray(searchRecentsRaw)
+                val sList = mutableListOf<Track>()
+                for (i in 0 until sArr.length()) {
+                    val obj = sArr.getJSONObject(i)
+                    sList.add(
+                        Track(
+                            id = obj.optString("id"),
+                            url = obj.optString("url"),
+                            title = obj.optString("title"),
+                            artist = obj.optString("artist"),
+                            thumbnailUrl = obj.optString("thumbnailUrl"),
+                            durationSeconds = obj.optLong("durationSeconds", 0L)
+                        )
+                    )
+                }
+                _searchRecents.value = sList
+            } else {
+                _searchRecents.value = rList
+            }
 
             val scoresJson = JSONObject(prefs.getString(KEY_SCORES, "{}") ?: "{}")
             val playsJson = JSONObject(prefs.getString(KEY_PLAYS, "{}") ?: "{}")
@@ -301,12 +353,19 @@ class TasteManager private constructor(context: Context) {
      */
     fun rankRadioTracks(candidates: List<Track>): List<Track> {
         if (candidates.isEmpty()) return candidates
-        val topArtistList = getTopArtists(10).map { it.first }
+        val isLoggedIn = try {
+            com.ayashii.kuro.data.auth.AuthManager.getInstance().isLoggedIn()
+        } catch (_: Throwable) {
+            false
+        }
+        val topArtistLimit = if (isLoggedIn) 12 else 5
+        val topArtistList = getTopArtists(topArtistLimit).map { it.first }
 
         return com.ayashii.kuro.data.native.KuroNativeCore.rankRadioTracks(
             candidates = candidates,
             scores = scoresMap,
-            topArtists = topArtistList
+            topArtists = topArtistList,
+            preserveNeuralOrder = isLoggedIn
         )
     }
 
@@ -339,6 +398,7 @@ class TasteManager private constructor(context: Context) {
         private const val KEY_PLAYS = "plays"
         private const val KEY_TRACK_DATA = "track_data"
         private const val KEY_RECENTS = "recents"
+        private const val KEY_SEARCH_RECENTS = "search_recents"
         private const val MAX_RECENTS = 30
         private const val MAX_TRACK_ENTRIES = 100
 

@@ -34,19 +34,33 @@ object KuroMotion {
 
     val is64BitDevice: Boolean = Build.SUPPORTED_64_BIT_ABIS.isNotEmpty()
 
+    private val cachedBlurSteps: Array<androidx.compose.ui.graphics.RenderEffect?> by lazy {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val scale = if (is64BitDevice) 1.0f else 0.75f
+            arrayOf(
+                null,
+                FrameworkRenderEffect.createBlurEffect(3.2f * scale, 0.7f * scale, Shader.TileMode.CLAMP).asComposeRenderEffect(),
+                FrameworkRenderEffect.createBlurEffect(6.5f * scale, 1.2f * scale, Shader.TileMode.CLAMP).asComposeRenderEffect(),
+                FrameworkRenderEffect.createBlurEffect(10.5f * scale, 1.8f * scale, Shader.TileMode.CLAMP).asComposeRenderEffect()
+            )
+        } else {
+            emptyArray()
+        }
+    }
+
     fun <T> appleFluidSpring(): SpringSpec<T> = spring(
-        dampingRatio = 0.84f,
-        stiffness = 400f
+        dampingRatio = 0.90f,
+        stiffness = 620f
     )
 
     fun <T> appleSnappySpring(): SpringSpec<T> = spring(
-        dampingRatio = 0.86f,
-        stiffness = 520f
+        dampingRatio = 0.92f,
+        stiffness = 740f
     )
 
     fun <T> appleInteractiveSpring(): SpringSpec<T> = spring(
-        dampingRatio = 0.90f,
-        stiffness = 680f
+        dampingRatio = 0.94f,
+        stiffness = 860f
     )
 
     fun Modifier.pagerMotionBlurTransition(
@@ -56,19 +70,37 @@ object KuroMotion {
         val rawOffset = pageOffsetProvider().coerceIn(-1f, 1f)
         val absOffset = abs(rawOffset)
         val motionCurve = (4f * absOffset * (1f - absOffset)).coerceIn(0f, 1f)
-        alpha = (1f - (absOffset * 0.28f)).coerceIn(0.72f, 1f)
-        translationX = -rawOffset * size.width * 0.06f
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && is64BitDevice) {
-            val blurX = motionCurve * maxBlurPx
-            if (blurX > 0.6f) {
-                renderEffect = FrameworkRenderEffect.createBlurEffect(
-                    blurX,
-                    (blurX * 0.18f).coerceAtLeast(0.5f),
-                    Shader.TileMode.CLAMP
-                ).asComposeRenderEffect()
-            } else {
-                renderEffect = null
-            }
+        alpha = (1f - (absOffset * 0.22f)).coerceIn(0.78f, 1f)
+        translationX = -rawOffset * size.width * 0.07f
+        scaleX = 1f + (motionCurve * 0.026f)
+        scaleY = 1f - (motionCurve * 0.013f)
+        if (cachedBlurSteps.isNotEmpty() && maxBlurPx > 0f) {
+            val step = (motionCurve * 3.4f).toInt().coerceIn(0, 3)
+            renderEffect = cachedBlurSteps[step]
+        }
+    }
+
+    fun Modifier.cascadeSection(
+        stage: Int,
+        pageOffsetProvider: () -> Float
+    ): Modifier = this.graphicsLayer {
+        val rawOffset = pageOffsetProvider().coerceIn(-1f, 1f)
+        val absOffset = abs(rawOffset)
+        if (absOffset > 0.001f) {
+            val staggerMultiplier = 1f + (stage * 0.38f)
+            val stagedProgress = (absOffset * staggerMultiplier).coerceIn(0f, 1f)
+            alpha = (1f - (stagedProgress * 0.65f)).coerceIn(0.35f, 1f)
+            translationX = rawOffset * (18f + stage * 16f) * density
+            translationY = stagedProgress * (8f + stage * 7f) * density
+            val s = 1f - (stagedProgress * 0.03f)
+            scaleX = s
+            scaleY = s
+        } else {
+            alpha = 1f
+            translationX = 0f
+            translationY = 0f
+            scaleX = 1f
+            scaleY = 1f
         }
     }
 }

@@ -150,3 +150,60 @@ pub extern "system" fn Java_com_ayashii_kuro_data_native_KuroNativeCore_parseLir
     };
     to_jstring(&mut env, &output)
 }
+
+#[no_mangle]
+pub extern "system" fn Java_com_ayashii_kuro_data_native_KuroNativeCore_parseAutomixTracksPacked(
+    mut env: JNIEnv,
+    _class: JClass,
+    raw_json: JString,
+    current_video_id: JString,
+) -> jstring {
+    let json_str: String = match env.get_string(&raw_json) {
+        Ok(s) => s.into(),
+        Err(_) => return to_jstring(&mut env, ""),
+    };
+
+    let video_id_str: String = match env.get_string(&current_video_id) {
+        Ok(s) => s.into(),
+        Err(_) => String::new(),
+    };
+
+    let tracks = innertube::parse_automix_radio(&json_str, &video_id_str);
+    let packed = innertube::pack_tracks(&tracks);
+    to_jstring(&mut env, &packed)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_ayashii_kuro_data_native_KuroNativeCore_parseYtmSearchPacked(
+    mut env: JNIEnv,
+    _class: JClass,
+    raw_json: JString,
+) -> jstring {
+    let json_str: String = match env.get_string(&raw_json) {
+        Ok(s) => s.into(),
+        Err(_) => return to_jstring(&mut env, ""),
+    };
+
+    let tracks = innertube::parse_ytm_search(&json_str);
+    let packed = innertube::pack_tracks(&tracks);
+    to_jstring(&mut env, &packed)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_ayashii_kuro_data_native_KuroNativeCore_parseLiriqoLyricsPacked(
+    mut env: JNIEnv,
+    _class: JClass,
+    raw_json: JString,
+    duration_ms: jni::sys::jlong,
+) -> jstring {
+    let json_str: String = match env.get_string(&raw_json) {
+        Ok(s) => s.into(),
+        Err(_) => return to_jstring(&mut env, ""),
+    };
+
+    let output = match liriqo::parse_liriqo_response(&json_str, duration_ms) {
+        Some(lyrics) => liriqo::pack_lyrics(&lyrics),
+        None => String::new(),
+    };
+    to_jstring(&mut env, &output)
+}

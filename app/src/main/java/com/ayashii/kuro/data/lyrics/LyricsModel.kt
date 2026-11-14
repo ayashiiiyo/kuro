@@ -7,14 +7,17 @@ data class LyricLine(
     val endTimeMs: Long? = null
 )
 
+private val INTRO_TOKEN_REGEX = Regex("^[♪♫🎶\\s\\-\\.\\(\\)\\[\\]]*(?:instrumental|intro|music)?[♪♫🎶\\s\\-\\.\\(\\)\\[\\]]*$")
+private val INTRO_STATIC_SET = setOf("♪", "♫", "🎶", "(instrumental)", "[instrumental]", "(intro)", "[intro]", "intro", "...", "---", "--", "null")
+
 internal fun isIntroToken(text: String): Boolean {
     val trimmed = text.trim()
     if (trimmed.isEmpty()) return true
     val lower = trimmed.lowercase()
-    if (lower in setOf("♪", "♫", "🎶", "(instrumental)", "[instrumental]", "(intro)", "[intro]", "intro", "...", "---", "--", "null")) {
+    if (lower in INTRO_STATIC_SET) {
         return true
     }
-    return lower.matches(Regex("^[♪♫🎶\\s\\-\\.\\(\\)\\[\\]]*(?:instrumental|intro|music)?[♪♫🎶\\s\\-\\.\\(\\)\\[\\]]*$"))
+    return INTRO_TOKEN_REGEX.matches(lower)
 }
 
 data class LyricsData(

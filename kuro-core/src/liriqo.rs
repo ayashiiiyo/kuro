@@ -387,3 +387,25 @@ fn parse_lrc_timestamp(tag: &str) -> Option<i64> {
         Some(minutes * 60_000 + sec * 1_000)
     }
 }
+
+pub fn pack_lyrics(lyrics: &NormalizedLyrics) -> String {
+    if lyrics.lines.is_empty() {
+        return String::new();
+    }
+    let mut out = String::with_capacity(lyrics.lines.len() * 64 + 32);
+    out.push_str(if lyrics.is_synced { "1" } else { "0" });
+    out.push('\x1F');
+    out.push_str(&lyrics.provider);
+    for line in &lyrics.lines {
+        out.push('\n');
+        out.push_str(&line.time_ms.to_string());
+        out.push('\x1F');
+        if let Some(end_ms) = line.end_time_ms {
+            out.push_str(&end_ms.to_string());
+        }
+        out.push('\x1F');
+        let clean_txt = line.text.replace(['\x1F', '\n', '\r'], " ");
+        out.push_str(&clean_txt);
+    }
+    out
+}

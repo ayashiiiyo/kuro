@@ -9,8 +9,9 @@ import org.json.JSONObject
 object KuroNativeCore {
 
     private const val TAG = "KuroNativeCore"
-    private val CLEAN_NOISE_REGEX = Regex("""(?i)\s*[\(\[](?:official\s*(?:music\s*)?video|official\s*audio|music\s*video|lyric\s*video|lyrics|audio|visualizer|remastered|remaster|4k|hd|hq|mv|clip\s*officiel|video\s*oficial)[\)\]]""")
-    private val CLEAN_PIPE_REGEX = Regex("""(?i)\s*\|\s*(?:official\s*(?:music\s*)?video|official\s*audio|visualizer).*""")
+    private const val UNIT_SEP = '\u001F'
+    private val CLEAN_NOISE_REGEX = Regex("""(?i)\s*[\(\[](?:official\s*(?:music\s*)?video|official\s*audio|official\s*lyric\s*video|official\s*mv|music\s*video|lyric\s*video|lyrics|audio|visualizer|remastered|remaster|4k|hd|hq|mv|clip\s*officiel|video\s*oficial)[\)\]]""")
+    private val CLEAN_PIPE_REGEX = Regex("""(?i)\s*\|\s*(?:official\s*(?:music\s*)?video|official\s*audio|official\s*lyric|visualizer).*""")
     private val LRC_TAG_REGEX = Regex("""\[(\d{1,2}):(\d{2}(?:\.\d{1,3})?)\]""")
 
     val isLoaded: Boolean = try {
@@ -27,9 +28,12 @@ object KuroNativeCore {
     private external fun cleanTrackTitle(rawTitle: String): String
     private external fun rankCandidates(candidatesJson: String, profileJson: String): String
     private external fun parseAutomixTracks(rawJson: String, currentVideoId: String): String
+    private external fun parseAutomixTracksPacked(rawJson: String, currentVideoId: String): String
+    private external fun parseYtmSearchPacked(rawJson: String): String
     private external fun buildDeepLPayload(linesJson: String, targetLang: String): String
     private external fun parseDeepLTranslations(responseJson: String): String
     private external fun parseLiriqoLyrics(rawJson: String, durationMs: Long): String
+    private external fun parseLiriqoLyricsPacked(rawJson: String, durationMs: Long): String
 
     fun sanitizeTitle(rawTitle: String): String {
         if (!isLoaded) return fallbackCleanTitle(rawTitle)
@@ -43,56 +47,47 @@ object KuroNativeCore {
     fun rankRadioTracks(
         candidates: List<Track>,
         scores: Map<String, Int>,
-        topArtists: List<String>
+        topArtists: List<String>,
+        preserveNeuralOrder: Boolean = true
     ): List<Track> {
-        if (candidates.isEmpty()) return candidates
-        if (!isLoaded) return fallbackRankRadio(candidates, scores, topArtists)
-
-        return try {
-            val candArr = JSONArray()
-            for (t in candidates) {
-                candArr.put(JSONObject().apply {
-                    put("id", t.id)
-                    put("title", t.title)
-                    put("artist", t.artist)
-                    put("url", t.url)
-                    put("thumbnailUrl", t.thumbnailUrl)
-                    put("durationSeconds", t.durationSeconds)
-                })
-            }
-
-            val profObj = JSONObject().apply {
-                val scoresObj = JSONObject()
-                scores.forEach { (k, v) -> scoresObj.put(k, v) }
-                put("scores", scoresObj)
-
-                val artArr = JSONArray()
-                topArtists.forEach { artArr.put(it) }
-                put("top_artists", artArr)
-            }
-
-            val outJson = rankCandidates(candArr.toString(), profObj.toString())
-            val resArr = JSONArray(outJson)
-            val ranked = mutableListOf<Track>()
-            val candMap = candidates.associateBy { it.id }
-
-            for (i in 0 until resArr.length()) {
-                val obj = resArr.getJSONObject(i)
-                val id = obj.optString("id")
-                val orig = candMap[id]
-                if (orig != null) {
-                    ranked.add(orig)
-                }
-            }
-            if (ranked.isNotEmpty()) ranked else candidates
-        } catch (e: Throwable) {
-            Log.e(TAG, "Native rank failed, using fallback: ${e.message}")
-            fallbackRankRadio(candidates, scores, topArtists)
+        if (candidates.size <= 1) return candidates
+        if (!preserveNeuralOrder) {
+            return fallbackRankGuestRadio(candidates, scores, topArtists)
         }
+        return fallbackRankPrivilegeRadio(candidates, scores, topArtists)
+    }
+
+    private fun unpackTracks(packed: String): List<Track>? {
+        if (packed.isBlank()) return null
+        val list = ArrayList<Track>(24)
+        for (line in packed.lineSequence()) {
+            if (line.isBlank()) continue
+            val parts = line.split(UNIT_SEP)
+            if (parts.size < 6) continue
+            val vid = parts[0]
+            if (vid.isBlank()) continue
+            list.add(
+                Track(
+                    id = vid,
+                    title = parts[1],
+                    artist = parts[2].ifBlank { "Unknown Artist" },
+                    url = parts[3].ifBlank { "https://www.youtube.com/watch?v=$vid" },
+                    thumbnailUrl = parts[4],
+                    durationSeconds = parts[5].toLongOrNull() ?: 0L
+                )
+            )
+        }
+        return if (list.isNotEmpty()) list else null
     }
 
     fun parseAutomix(rawJson: String, currentVideoId: String): List<Track>? {
-        if (!isLoaded) return null
+        if (!isLoaded || rawJson.isBlank()) return null
+        try {
+            val packed = parseAutomixTracksPacked(rawJson, currentVideoId)
+            val fastList = unpackTracks(packed)
+            if (fastList != null) return fastList
+        } catch (_: Throwable) {}
+
         return try {
             val out = parseAutomixTracks(rawJson, currentVideoId)
             val arr = JSONArray(out)
@@ -117,6 +112,17 @@ object KuroNativeCore {
             if (list.isNotEmpty()) list else null
         } catch (e: Throwable) {
             Log.e(TAG, "Native parseAutomix failed: ${e.message}")
+            null
+        }
+    }
+
+    fun parseYtmSearch(rawJson: String): List<Track>? {
+        if (!isLoaded || rawJson.isBlank()) return null
+        return try {
+            val packed = parseYtmSearchPacked(rawJson)
+            unpackTracks(packed)
+        } catch (e: Throwable) {
+            Log.d(TAG, "Native parseYtmSearch fallback: ${e.message}")
             null
         }
     }
@@ -182,18 +188,59 @@ object KuroNativeCore {
             .trim()
     }
 
-    private fun fallbackRankRadio(
+    private fun fallbackRankGuestRadio(
         candidates: List<Track>,
         scores: Map<String, Int>,
         topArtists: List<String>
     ): List<Track> {
-        val topSet = topArtists.map { it.lowercase() }.toSet()
+        val topSet = topArtists.mapTo(HashSet(topArtists.size)) { it.trim().lowercase() }
         return candidates.sortedByDescending { track ->
-            var s = scores[track.id] ?: 0
-            if (s < 0) s = 0
-            if (track.artist.lowercase() in topSet) s += 5
+            val raw = scores[track.id] ?: 0
+            var s = if (raw < 0) raw * 2 else raw.coerceAtMost(8)
+            if (track.artist.trim().lowercase() in topSet && raw >= 0) s += 3
             s
         }
+    }
+
+    private fun fallbackRankPrivilegeRadio(
+        candidates: List<Track>,
+        scores: Map<String, Int>,
+        topArtists: List<String>
+    ): List<Track> {
+        val topSet = topArtists.mapTo(HashSet(topArtists.size)) { it.trim().lowercase() }
+        val total = candidates.size.coerceAtLeast(1)
+
+        val scored = candidates.mapIndexed { idx, track ->
+            val baseOrderBonus = ((total - idx) * 6) / total
+            val raw = scores[track.id] ?: 0
+            var affinity = if (raw < 0) (raw * 3).coerceAtLeast(-30) else raw.coerceAtMost(10)
+            if (track.artist.trim().lowercase() in topSet && raw >= 0) {
+                affinity += 4
+            }
+            Triple(baseOrderBonus + affinity, idx, track)
+        }.sortedWith(compareByDescending<Triple<Int, Int, Track>> { it.first }.thenBy { it.second })
+
+        val result = ArrayList<Track>(scored.size)
+        val deferred = ArrayList<Track>()
+        val artistCounts = HashMap<String, Int>()
+
+        for ((score, _, track) in scored) {
+            if (score <= -6) {
+                deferred.add(track)
+                continue
+            }
+            val artistKey = track.artist.trim().lowercase()
+            val count = artistCounts[artistKey] ?: 0
+            val sameAsPrev = result.lastOrNull()?.artist?.trim()?.lowercase() == artistKey
+            if (sameAsPrev || count >= 2) {
+                deferred.add(track)
+            } else {
+                artistCounts[artistKey] = count + 1
+                result.add(track)
+            }
+        }
+        result.addAll(deferred)
+        return result
     }
 
     private fun isJunkLyricLine(text: String): Boolean {
@@ -208,6 +255,42 @@ object KuroNativeCore {
         artist: String
     ): com.ayashii.kuro.data.lyrics.LyricsData? {
         if (rawJson.isBlank()) return null
+
+        if (isLoaded) {
+            try {
+                val packed = parseLiriqoLyricsPacked(rawJson, durationMs)
+                if (packed.isNotBlank()) {
+                    val seq = packed.lineSequence().iterator()
+                    if (seq.hasNext()) {
+                        val header = seq.next().split(UNIT_SEP)
+                        val isSynced = header.firstOrNull() != "0"
+                        val lines = ArrayList<com.ayashii.kuro.data.lyrics.LyricLine>(64)
+                        while (seq.hasNext()) {
+                            val row = seq.next()
+                            if (row.isBlank()) continue
+                            val cols = row.split(UNIT_SEP)
+                            if (cols.size < 3) continue
+                            val timeMs = cols[0].toLongOrNull() ?: 0L
+                            val endMs = cols[1].takeIf { it.isNotEmpty() }?.toLongOrNull()
+                            val text = cols[2].trim()
+                            if (text.isNotEmpty()) {
+                                lines.add(com.ayashii.kuro.data.lyrics.LyricLine(timeMs, text, endTimeMs = endMs))
+                            }
+                        }
+                        if (lines.isNotEmpty()) {
+                            return com.ayashii.kuro.data.lyrics.LyricsData(
+                                trackId = trackId,
+                                title = title,
+                                artist = artist,
+                                lines = lines,
+                                isSynced = isSynced
+                            )
+                        }
+                    }
+                }
+            } catch (_: Throwable) {}
+        }
+
         val jsonResult = if (isLoaded) {
             try {
                 parseLiriqoLyrics(rawJson, durationMs)

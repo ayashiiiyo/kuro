@@ -17,11 +17,16 @@ fn normalize_ascii_spaces(s: &str) -> String {
 
 fn is_noise_tag(content: &str) -> bool {
     let norm = normalize_ascii_spaces(content);
-    matches!(
-        norm.as_str(),
+    let s = norm.as_str();
+    if matches!(
+        s,
         "official music video"
             | "official video"
             | "official audio"
+            | "official lyric video"
+            | "official lyrics"
+            | "official visualizer"
+            | "official mv"
             | "music video"
             | "lyric video"
             | "lyrics"
@@ -35,7 +40,26 @@ fn is_noise_tag(content: &str) -> bool {
             | "mv"
             | "clip officiel"
             | "video oficial"
-    )
+    ) {
+        return true;
+    }
+    if s.starts_with("official ")
+        && (s.contains("video")
+            || s.contains("audio")
+            || s.contains("lyric")
+            || s.contains("mv")
+            || s.contains("visualizer")
+            || s.contains("4k")
+            || s.contains("hd"))
+    {
+        return true;
+    }
+    if (s.starts_with("remastered") || s.starts_with("remaster "))
+        && s.bytes().any(|b| b.is_ascii_digit())
+    {
+        return true;
+    }
+    false
 }
 
 fn strip_bracketed_noise(input: &str) -> String {
@@ -75,6 +99,7 @@ fn strip_pipe_noise(input: &str) -> String {
         if after.starts_with("official music video")
             || after.starts_with("official video")
             || after.starts_with("official audio")
+            || after.starts_with("official lyric")
             || after.starts_with("visualizer")
         {
             return input[..pipe_idx].trim_end().to_string();
@@ -98,6 +123,7 @@ mod tests {
         assert_eq!(clean_title("Song Name (Official Music Video)"), "Song Name");
         assert_eq!(clean_title("Another Track [Audio]"), "Another Track");
         assert_eq!(clean_title("Hit Song | Official Video"), "Hit Song");
+        assert_eq!(clean_title("Track (Official Lyric Video)"), "Track");
         assert_eq!(clean_title("Clean Title"), "Clean Title");
     }
 }
