@@ -283,6 +283,7 @@ class PlaybackService : MediaSessionService() {
 
     @Volatile
     private var restoringSession = false
+    private var streamSimpleCache: SimpleCache? = null
     private var pauseTimeoutJob: Job? = null
     private var servicePlayJob: Job? = null
     private val favSyncReceiver = object : android.content.BroadcastReceiver() {

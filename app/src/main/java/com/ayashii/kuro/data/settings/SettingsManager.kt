@@ -475,6 +475,8 @@ class SettingsManager private constructor(private val context: Context) {
         private const val KEY_AUDIO_QUALITY = "audio_quality"
         private const val KEY_AUDIO_SUB_QUALITY = "audio_sub_quality"
         private const val KEY_AUTO_TRANSLATE = "lyrics_auto_translate"
+        private const val KEY_DOWNLOAD_TREE_URI = "download_tree_uri"
+        private const val KEY_DOWNLOAD_SUB_QUALITY = "download_sub_quality"
 
         @Volatile
         private var instance: SettingsManager? = null
