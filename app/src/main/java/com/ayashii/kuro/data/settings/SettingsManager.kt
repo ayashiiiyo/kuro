@@ -64,7 +64,7 @@ enum class AudioQuality(
     @StringRes val descRes: Int
 ) {
     HIGH(
-        "High Quality (M4A / 256 kbps)",
+        "High Quality (Opus 160 / M4A 256 kbps)",
         "Crisp sound, best audio fidelity",
         R.string.settings_quality_high_title,
         R.string.settings_quality_high_desc
@@ -76,11 +76,88 @@ enum class AudioQuality(
         R.string.settings_quality_med_desc
     ),
     LOW(
-        "Data Saver (64 kbps)",
+        "Data Saver (48 - 70 kbps)",
         "Fastest buffer, minimal data usage",
         R.string.settings_quality_low_title,
         R.string.settings_quality_low_desc
     )
+}
+
+enum class AudioSubQuality(
+    val parent: AudioQuality,
+    val badge: String,
+    val subtitleId: String,
+    val subtitleEn: String,
+    val targetBitrate: Int,
+    val preferOpus: Boolean
+) {
+    HIGH_OPUS_160(
+        AudioQuality.HIGH,
+        "WebM Opus • ~160 kbps",
+        "Kualitas tertinggi YouTube Music (setara 256 kbps AAC)",
+        "Highest YouTube Music clarity (itag 251 / 774)",
+        160,
+        true
+    ),
+    HIGH_M4A_256(
+        AudioQuality.HIGH,
+        "M4A AAC • 128–256 kbps",
+        "Hardware decoder ramah TWS & hemat baterai (itag 141 / 140)",
+        "Hardware decoder friendly & low battery usage (itag 141 / 140)",
+        256,
+        false
+    ),
+    MED_M4A_128(
+        AudioQuality.MEDIUM,
+        "M4A AAC • 128 kbps",
+        "Standar seimbang & kompatibilitas tinggi (itag 140)",
+        "Balanced standard AAC stream (itag 140)",
+        128,
+        false
+    ),
+    MED_OPUS_128(
+        AudioQuality.MEDIUM,
+        "WebM Opus • ~128 kbps",
+        "Karakter vokal & separasi instrumen lebih tajam",
+        "Crisp vocal & instrument separation",
+        128,
+        true
+    ),
+    LOW_OPUS_70(
+        AudioQuality.LOW,
+        "WebM Opus • ~70 kbps",
+        "Hemat kuota dengan suara tetap jernih (itag 250)",
+        "Data saver with clean vocals (itag 250)",
+        70,
+        true
+    ),
+    LOW_OPUS_50(
+        AudioQuality.LOW,
+        "WebM Opus • ~50 kbps",
+        "Ultra hemat kuota (itag 249)",
+        "Ultra data saver (itag 249)",
+        50,
+        true
+    ),
+    LOW_M4A_48(
+        AudioQuality.LOW,
+        "M4A HE-AAC • ~48 kbps",
+        "Buffer paling cepat di sinyal lemah (itag 139)",
+        "Fastest buffer on weak mobile signal (itag 139)",
+        48,
+        false
+    );
+
+    companion object {
+        fun optionsFor(quality: AudioQuality): List<AudioSubQuality> =
+            values().filter { it.parent == quality }
+
+        fun defaultFor(quality: AudioQuality): AudioSubQuality = when (quality) {
+            AudioQuality.HIGH -> HIGH_OPUS_160
+            AudioQuality.MEDIUM -> MED_M4A_128
+            AudioQuality.LOW -> LOW_OPUS_70
+        }
+    }
 }
 
 class SettingsManager private constructor(private val context: Context) {
@@ -98,6 +175,9 @@ class SettingsManager private constructor(private val context: Context) {
 
     private val _audioQuality = MutableStateFlow(loadAudioQuality())
     val audioQuality: StateFlow<AudioQuality> = _audioQuality.asStateFlow()
+
+    private val _audioSubQuality = MutableStateFlow(loadAudioSubQuality())
+    val audioSubQuality: StateFlow<AudioSubQuality> = _audioSubQuality.asStateFlow()
 
     private val _autoTranslate = MutableStateFlow(prefs.getBoolean(KEY_AUTO_TRANSLATE, true))
     val autoTranslate: StateFlow<Boolean> = _autoTranslate.asStateFlow()
@@ -132,6 +212,18 @@ class SettingsManager private constructor(private val context: Context) {
         }
     }
 
+    private fun loadAudioSubQuality(): AudioSubQuality {
+        val q = loadAudioQuality()
+        val defaultSub = AudioSubQuality.defaultFor(q)
+        val name = prefs.getString(KEY_AUDIO_SUB_QUALITY, defaultSub.name) ?: defaultSub.name
+        return try {
+            val parsed = AudioSubQuality.valueOf(name)
+            if (parsed.parent == q) parsed else defaultSub
+        } catch (_: Exception) {
+            defaultSub
+        }
+    }
+
     fun setThemeMode(mode: ThemeMode) {
         _themeMode.value = mode
         prefs.edit().putString(KEY_THEME_MODE, mode.name).apply()
@@ -162,7 +254,25 @@ class SettingsManager private constructor(private val context: Context) {
 
     fun setAudioQuality(quality: AudioQuality) {
         _audioQuality.value = quality
-        prefs.edit().putString(KEY_AUDIO_QUALITY, quality.name).apply()
+        val nextSub = if (_audioSubQuality.value.parent == quality) {
+            _audioSubQuality.value
+        } else {
+            AudioSubQuality.defaultFor(quality)
+        }
+        _audioSubQuality.value = nextSub
+        prefs.edit()
+            .putString(KEY_AUDIO_QUALITY, quality.name)
+            .putString(KEY_AUDIO_SUB_QUALITY, nextSub.name)
+            .apply()
+    }
+
+    fun setAudioSubQuality(subQuality: AudioSubQuality) {
+        _audioQuality.value = subQuality.parent
+        _audioSubQuality.value = subQuality
+        prefs.edit()
+            .putString(KEY_AUDIO_QUALITY, subQuality.parent.name)
+            .putString(KEY_AUDIO_SUB_QUALITY, subQuality.name)
+            .apply()
     }
 
     fun setAutoTranslate(enabled: Boolean) {
@@ -338,6 +448,7 @@ class SettingsManager private constructor(private val context: Context) {
         private const val KEY_LANGUAGE = "app_language"
         private const val KEY_LYRICS_LANGUAGE = "lyrics_target_language"
         private const val KEY_AUDIO_QUALITY = "audio_quality"
+        private const val KEY_AUDIO_SUB_QUALITY = "audio_sub_quality"
         private const val KEY_AUTO_TRANSLATE = "lyrics_auto_translate"
 
         @Volatile

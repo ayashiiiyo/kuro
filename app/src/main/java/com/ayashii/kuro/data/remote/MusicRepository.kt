@@ -296,21 +296,32 @@ class MusicRepository {
         }
 
         val ytmTracks = coroutineScope {
-            val generalDeferred = async { searchYouTubeMusicByParams(query, null) }
             val songsDeferred = async { searchYouTubeMusicByParams(query, YTM_PARAMS_SONGS) }
+            val generalDeferred = async { searchYouTubeMusicByParams(query, null) }
             val videosDeferred = async { searchYouTubeMusicByParams(query, YTM_PARAMS_VIDEOS) }
 
-            val generalList = generalDeferred.await()
             val songsList = songsDeferred.await()
+            val generalList = generalDeferred.await()
             val videosList = videosDeferred.await()
 
             val merged = LinkedHashMap<String, Track>()
-            for (t in generalList) {
+            /* Prioritize official YouTube Music Songs (Official Audio) at #1-#5 */
+            for (t in songsList.take(8)) {
                 if (t.id.isNotBlank() && !merged.containsKey(t.id)) {
                     merged[t.id] = t
                 }
             }
-            for (t in songsList) {
+            for (t in generalList) {
+                if (t.id.isNotBlank()) {
+                    val existing = merged[t.id]
+                    if (existing == null) {
+                        merged[t.id] = t
+                    } else if (existing.durationSeconds <= 0L && t.durationSeconds > 0L) {
+                        merged[t.id] = existing.copy(durationSeconds = t.durationSeconds)
+                    }
+                }
+            }
+            for (t in songsList.drop(8)) {
                 val existing = merged[t.id]
                 if (existing == null) {
                     merged[t.id] = t
@@ -329,13 +340,7 @@ class MusicRepository {
             merged.values.toList()
         }
 
-        val queryTokens = q.split(Regex("\\s+")).filter { it.length >= 2 }
-        val hasStrongMatch = ytmTracks.any { trk ->
-            val combined = "${trk.title} ${trk.artist}".lowercase()
-            queryTokens.all { tok -> combined.contains(tok) }
-        }
-
-        val fallbackTracks = if (ytmTracks.size < 6 || !hasStrongMatch) {
+        val fallbackTracks = if (ytmTracks.isEmpty()) {
             fetchNewPipeSearchTracks(query)
         } else {
             emptyList()
@@ -569,12 +574,79 @@ class MusicRepository {
     suspend fun getSuggestions(query: String): List<String> = withContext(Dispatchers.IO) {
         if (query.isBlank()) return@withContext emptyList()
         try {
-            val extractor = service.suggestionExtractor
-            extractor.suggestionList(query)
+            val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
+            val origin = "https://music.youtube.com"
+            val (hlCode, glCode) = resolveHlGl()
+            val payload = org.json.JSONObject().apply {
+                put("context", org.json.JSONObject().apply {
+                    put("client", org.json.JSONObject().apply {
+                        put("clientName", YTM_CLIENT_NAME)
+                        put("clientVersion", YTM_CLIENT_VERSION)
+                        put("hl", hlCode)
+                        put("gl", glCode)
+                    })
+                })
+                put("input", query.trim())
+            }
+            val reqBuilder = okhttp3.Request.Builder()
+                .url("$origin/youtubei/v1/music/get_search_suggestions")
+                .header("Content-Type", "application/json")
+                .header("User-Agent", YTM_USER_AGENT)
+                .header("Origin", origin)
+                .header("Referer", "$origin/")
+                .header("X-Origin", origin)
+                .header("X-YouTube-Client-Name", "67")
+                .header("X-YouTube-Client-Version", YTM_CLIENT_VERSION)
+            auth.applyAuthToRequest(reqBuilder, payload, origin)
+            reqBuilder.post(payload.toString().toRequestBody("application/json".toMediaType()))
+
+            val jsonStr = HttpClientProvider.client.newCall(reqBuilder.build()).execute().use { resp ->
+                if (resp.isSuccessful) resp.body?.string() else null
+            }
+            if (!jsonStr.isNullOrBlank()) {
+                val root = org.json.JSONObject(jsonStr)
+                val sections = root.optJSONArray("contents")
+                if (sections != null) {
+                    val out = ArrayList<String>(10)
+                    val seen = HashSet<String>()
+                    for (s in 0 until sections.length()) {
+                        val items = sections.optJSONObject(s)
+                            ?.optJSONObject("searchSuggestionsSectionRenderer")
+                            ?.optJSONArray("contents") ?: continue
+                        for (i in 0 until items.length()) {
+                            val itemObj = items.optJSONObject(i) ?: continue
+                            val renderer = itemObj.optJSONObject("searchSuggestionRenderer")
+                                ?: itemObj.optJSONObject("historySuggestionRenderer")
+                                ?: continue
+                            var suggestionText = renderer.optJSONObject("navigationEndpoint")
+                                ?.optJSONObject("searchEndpoint")
+                                ?.optString("query", "")
+                                ?.trim()
+                                .orEmpty()
+                            if (suggestionText.isEmpty()) {
+                                val runs = renderer.optJSONObject("suggestion")?.optJSONArray("runs")
+                                if (runs != null) {
+                                    val sb = StringBuilder()
+                                    for (r in 0 until runs.length()) {
+                                        sb.append(runs.optJSONObject(r)?.optString("text", "").orEmpty())
+                                    }
+                                    suggestionText = sb.toString().trim()
+                                }
+                            }
+                            if (suggestionText.isNotEmpty() && seen.add(suggestionText.lowercase())) {
+                                out.add(suggestionText)
+                            }
+                        }
+                    }
+                    if (out.isNotEmpty()) {
+                        return@withContext out
+                    }
+                }
+            }
         } catch (e: Exception) {
-            Log.e("MusicRepository", "Suggestions failed: ${e.message}", e)
-            emptyList()
+            Log.d("MusicRepository", "YTM suggestions fallback: ${e.message}")
         }
+        emptyList()
     }
 
     suspend fun getHomeShelves(): List<HomeSection> = withContext(Dispatchers.IO) {
@@ -947,11 +1019,23 @@ class MusicRepository {
         return null
     }
 
+    private fun resolveActiveSubQuality(
+        quality: com.ayashii.kuro.data.settings.AudioQuality
+    ): com.ayashii.kuro.data.settings.AudioSubQuality {
+        return try {
+            val active = com.ayashii.kuro.data.settings.SettingsManager.getInstance().audioSubQuality.value
+            if (active.parent == quality) active else com.ayashii.kuro.data.settings.AudioSubQuality.defaultFor(quality)
+        } catch (_: Throwable) {
+            com.ayashii.kuro.data.settings.AudioSubQuality.defaultFor(quality)
+        }
+    }
+
     suspend fun getAudioStreamUrl(
         url: String,
         quality: com.ayashii.kuro.data.settings.AudioQuality = com.ayashii.kuro.data.settings.AudioQuality.HIGH
     ): String? = withContext(Dispatchers.IO) {
-        val cacheKey = "$url#${quality.name}"
+        val subQuality = resolveActiveSubQuality(quality)
+        val cacheKey = "$url#${quality.name}#${subQuality.name}"
         val now = System.currentTimeMillis()
         synchronized(streamUrlCache) {
             streamUrlCache.get(cacheKey)?.let { (cachedUrl, timestamp) ->
@@ -966,24 +1050,59 @@ class MusicRepository {
             val audioStreams = streamInfo.audioStreams
             val httpAudios = audioStreams.filter { it.content != null && it.content.startsWith("http") }
 
-            val chosenAudio = when (quality) {
-                com.ayashii.kuro.data.settings.AudioQuality.LOW -> {
-                    httpAudios.minByOrNull { it.averageBitrate }
+            val opusStreams = httpAudios.filter {
+                it.format == org.schabi.newpipe.extractor.MediaFormat.WEBMA_OPUS ||
+                it.format == org.schabi.newpipe.extractor.MediaFormat.WEBMA ||
+                it.format?.name.equals("webm", ignoreCase = true) ||
+                it.format?.name.equals("opus", ignoreCase = true) ||
+                it.content.contains("audio%2Fwebm") ||
+                it.content.contains("itag=251") ||
+                it.content.contains("itag=250") ||
+                it.content.contains("itag=249")
+            }
+
+            val m4aStreams = httpAudios.filter {
+                it.format == org.schabi.newpipe.extractor.MediaFormat.M4A ||
+                it.format?.name.equals("m4a", ignoreCase = true) ||
+                it.format?.suffix.equals("m4a", ignoreCase = true) ||
+                it.format.toString().contains("M4A", ignoreCase = true) ||
+                it.content.contains("audio%2Fmp4") ||
+                it.content.contains("itag=140") ||
+                it.content.contains("itag=141") ||
+                it.content.contains("itag=139")
+            }
+
+            val preferredPool = if (subQuality.preferOpus) {
+                opusStreams.ifEmpty { httpAudios }
+            } else {
+                m4aStreams.ifEmpty { httpAudios }
+            }
+
+            val chosenAudio = when (subQuality) {
+                com.ayashii.kuro.data.settings.AudioSubQuality.HIGH_OPUS_160 -> {
+                    opusStreams.maxByOrNull { it.averageBitrate }
+                        ?: httpAudios.maxByOrNull { it.averageBitrate }
                 }
-                com.ayashii.kuro.data.settings.AudioQuality.MEDIUM -> {
-                    httpAudios.filter { it.averageBitrate in 90..180 }
-                        .minByOrNull { kotlin.math.abs(it.averageBitrate - 128) }
-                        ?: httpAudios.sortedBy { it.averageBitrate }.getOrNull(httpAudios.size / 2)
-                }
-                com.ayashii.kuro.data.settings.AudioQuality.HIGH -> {
-                    val m4aStreams = httpAudios.filter {
-                        it.format == org.schabi.newpipe.extractor.MediaFormat.M4A ||
-                        it.format?.name.equals("m4a", ignoreCase = true) ||
-                        it.format?.suffix.equals("m4a", ignoreCase = true) ||
-                        it.format.toString().contains("M4A", ignoreCase = true)
-                    }
+                com.ayashii.kuro.data.settings.AudioSubQuality.HIGH_M4A_256 -> {
                     m4aStreams.maxByOrNull { it.averageBitrate }
                         ?: httpAudios.maxByOrNull { it.averageBitrate }
+                }
+                com.ayashii.kuro.data.settings.AudioSubQuality.MED_M4A_128,
+                com.ayashii.kuro.data.settings.AudioSubQuality.MED_OPUS_128 -> {
+                    preferredPool.minByOrNull { kotlin.math.abs(it.averageBitrate - 128) }
+                        ?: httpAudios.minByOrNull { kotlin.math.abs(it.averageBitrate - 128) }
+                }
+                com.ayashii.kuro.data.settings.AudioSubQuality.LOW_OPUS_70 -> {
+                    preferredPool.minByOrNull { kotlin.math.abs(it.averageBitrate - 70) }
+                        ?: httpAudios.minByOrNull { it.averageBitrate }
+                }
+                com.ayashii.kuro.data.settings.AudioSubQuality.LOW_OPUS_50 -> {
+                    preferredPool.minByOrNull { it.averageBitrate }
+                        ?: httpAudios.minByOrNull { it.averageBitrate }
+                }
+                com.ayashii.kuro.data.settings.AudioSubQuality.LOW_M4A_48 -> {
+                    m4aStreams.minByOrNull { it.averageBitrate }
+                        ?: httpAudios.minByOrNull { it.averageBitrate }
                 }
             } ?: httpAudios.maxByOrNull { it.averageBitrate } ?: httpAudios.firstOrNull()
 
@@ -1020,11 +1139,22 @@ class MusicRepository {
         quality: com.ayashii.kuro.data.settings.AudioQuality = com.ayashii.kuro.data.settings.AudioQuality.HIGH
     ): ResolvedStream? = withContext(Dispatchers.IO) {
         val streamUrl = getAudioStreamUrl(url, quality) ?: return@withContext null
-        val mime = if (streamUrl.contains("audio%2Fwebm") || streamUrl.contains("audio/webm")) {
+        val mime = if (
+            streamUrl.contains("audio%2Fwebm") ||
+            streamUrl.contains("audio/webm") ||
+            streamUrl.contains("itag=251") ||
+            streamUrl.contains("itag=250") ||
+            streamUrl.contains("itag=249") ||
+            streamUrl.contains("itag=774")
+        ) {
             "audio/webm"
-        } else if (streamUrl.contains("audio%2Fmp4") || streamUrl.contains("audio/mp4") || streamUrl.contains("itag=140") || streamUrl.contains("itag=141") || streamUrl.contains("itag=139")) {
-            "audio/mp4"
-        } else if (quality == com.ayashii.kuro.data.settings.AudioQuality.HIGH) {
+        } else if (
+            streamUrl.contains("audio%2Fmp4") ||
+            streamUrl.contains("audio/mp4") ||
+            streamUrl.contains("itag=140") ||
+            streamUrl.contains("itag=141") ||
+            streamUrl.contains("itag=139")
+        ) {
             "audio/mp4"
         } else {
             null

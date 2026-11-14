@@ -44,6 +44,22 @@ object KuroNativeCore {
         }
     }
 
+    fun normalizeSongTitleKey(rawTitle: String): String {
+        val cleaned = sanitizeTitle(rawTitle).lowercase()
+        val sb = StringBuilder(cleaned.length)
+        for (ch in cleaned) {
+            if (ch.isLetterOrDigit()) {
+                sb.append(ch)
+            }
+        }
+        return sb.toString()
+    }
+
+    /**
+     * Preserves 100% of YouTube Music's native Automix Radio sequence while
+     * deduplicating identical song titles (different uploaders/covers/MVs)
+     * and moving tracks with repeated user skips to the tail.
+     */
     fun rankRadioTracks(
         candidates: List<Track>,
         scores: Map<String, Int>,
@@ -51,10 +67,24 @@ object KuroNativeCore {
         preserveNeuralOrder: Boolean = true
     ): List<Track> {
         if (candidates.size <= 1) return candidates
-        if (!preserveNeuralOrder) {
-            return fallbackRankGuestRadio(candidates, scores, topArtists)
+        val primary = ArrayList<Track>(candidates.size)
+        val skippedTail = ArrayList<Track>()
+        val seenTitleKeys = HashSet<String>(candidates.size)
+
+        for (track in candidates) {
+            val titleKey = normalizeSongTitleKey(track.title)
+            if (titleKey.isNotEmpty() && !seenTitleKeys.add(titleKey)) {
+                continue
+            }
+            val score = scores[track.id] ?: 0
+            if (score <= -4) {
+                skippedTail.add(track)
+            } else {
+                primary.add(track)
+            }
         }
-        return fallbackRankPrivilegeRadio(candidates, scores, topArtists)
+        primary.addAll(skippedTail)
+        return primary
     }
 
     private fun unpackTracks(packed: String): List<Track>? {
@@ -186,61 +216,6 @@ object KuroNativeCore {
             .replace(CLEAN_NOISE_REGEX, "")
             .replace(CLEAN_PIPE_REGEX, "")
             .trim()
-    }
-
-    private fun fallbackRankGuestRadio(
-        candidates: List<Track>,
-        scores: Map<String, Int>,
-        topArtists: List<String>
-    ): List<Track> {
-        val topSet = topArtists.mapTo(HashSet(topArtists.size)) { it.trim().lowercase() }
-        return candidates.sortedByDescending { track ->
-            val raw = scores[track.id] ?: 0
-            var s = if (raw < 0) raw * 2 else raw.coerceAtMost(8)
-            if (track.artist.trim().lowercase() in topSet && raw >= 0) s += 3
-            s
-        }
-    }
-
-    private fun fallbackRankPrivilegeRadio(
-        candidates: List<Track>,
-        scores: Map<String, Int>,
-        topArtists: List<String>
-    ): List<Track> {
-        val topSet = topArtists.mapTo(HashSet(topArtists.size)) { it.trim().lowercase() }
-        val total = candidates.size.coerceAtLeast(1)
-
-        val scored = candidates.mapIndexed { idx, track ->
-            val baseOrderBonus = ((total - idx) * 6) / total
-            val raw = scores[track.id] ?: 0
-            var affinity = if (raw < 0) (raw * 3).coerceAtLeast(-30) else raw.coerceAtMost(10)
-            if (track.artist.trim().lowercase() in topSet && raw >= 0) {
-                affinity += 4
-            }
-            Triple(baseOrderBonus + affinity, idx, track)
-        }.sortedWith(compareByDescending<Triple<Int, Int, Track>> { it.first }.thenBy { it.second })
-
-        val result = ArrayList<Track>(scored.size)
-        val deferred = ArrayList<Track>()
-        val artistCounts = HashMap<String, Int>()
-
-        for ((score, _, track) in scored) {
-            if (score <= -6) {
-                deferred.add(track)
-                continue
-            }
-            val artistKey = track.artist.trim().lowercase()
-            val count = artistCounts[artistKey] ?: 0
-            val sameAsPrev = result.lastOrNull()?.artist?.trim()?.lowercase() == artistKey
-            if (sameAsPrev || count >= 2) {
-                deferred.add(track)
-            } else {
-                artistCounts[artistKey] = count + 1
-                result.add(track)
-            }
-        }
-        result.addAll(deferred)
-        return result
     }
 
     private fun isJunkLyricLine(text: String): Boolean {

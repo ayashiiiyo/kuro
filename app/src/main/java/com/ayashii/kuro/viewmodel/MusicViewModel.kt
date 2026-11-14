@@ -270,7 +270,17 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         if (candidates.isEmpty()) return
         val fresh = synchronized(playlistQueue) {
             val existingIds = playlistQueue.mapTo(HashSet()) { it.id }
-            tasteManager.rankRadioTracks(candidates.filter { it.id !in existingIds })
+            val existingTitles = playlistQueue.mapNotNullTo(HashSet()) {
+                com.ayashii.kuro.data.native.KuroNativeCore.normalizeSongTitleKey(it.title).takeIf(String::isNotEmpty)
+            }
+            val filtered = ArrayList<Track>(candidates.size)
+            for (cand in candidates) {
+                if (cand.id in existingIds) continue
+                val titleKey = com.ayashii.kuro.data.native.KuroNativeCore.normalizeSongTitleKey(cand.title)
+                if (titleKey.isNotEmpty() && !existingTitles.add(titleKey)) continue
+                filtered.add(cand)
+            }
+            tasteManager.rankRadioTracks(filtered)
         }
         if (fresh.isNotEmpty()) {
             fresh.forEach { queueManager.addToQueue(it) }

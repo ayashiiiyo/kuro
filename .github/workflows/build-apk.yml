@@ -109,19 +109,18 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.8.14 — Native Parsing Speedups, Smarter Radio & Search History
+          ## Kuro v3.8.15 — Pure YouTube Music Engine, Audio Sub-Qualities & Cascade Motion Blur
 
-          - **Faster Native Parsing**:
-            - Rust now returns packed track and lyric payloads for YTM search, radio, and LiriQo, cutting JNI object overhead.
-            - Title sanitizer recognizes more official-video/lyric/remaster noise patterns.
-          - **Smarter Radio**:
-            - Personalized AUTOMIX discover/familiar tuning for signed-in users, with artist de-clustering for more varied queues.
-          - **Search History**:
-            - Search recents are tracked separately from recently played with clear/remove support.
-          - **UI & Playback Polish**:
-            - Cascading section transitions with cached blur steps and lighter pager motion blur on 32-bit devices.
-            - Playback reporting to YouTube Music and duplicate update-receiver cleanup.
-          - Published signed release, per-ABI, and debug APKs.
+          - **100% Pure YouTube Music Radio & Search Engine**:
+            - Delegated Automix Radio (`RDAMVM`) sequence directly to YouTube Music AI with normalized title deduplication and negative skip penalty.
+            - Prioritized Official Songs (`YTM_PARAMS_SONGS`) at the top of search results and switched search autocomplete to native YouTube Music suggestions (`/youtubei/v1/music/get_search_suggestions`).
+            - Playing a track from Search now immediately launches YouTube Music Automix Radio instead of queueing duplicate search results.
+          - **Expandable Audio Sub-Qualities (Codec & Bitrate Selector)**:
+            - Added selectable sub-qualities under High (`WebM Opus ~160 kbps`, `M4A AAC 128-256 kbps`), Normal (`M4A 128 kbps`, `Opus ~128 kbps`), and Data Saver (`Opus 70 kbps`, `Opus 50 kbps`, `HE-AAC 48 kbps`).
+          - **Cascade + Quantized Motion Blur (32-bit Android Go & 64-bit)**:
+            - Added zero-recomposition RenderNode staggered cascade transition from Home to Search and pre-cached quantized blur steps.
+          - **Rust `kuro-core` Packed JNI & Bug Fixes**:
+            - Added zero-JSON-reparse packed JNI transport, isolated Search recents from Home history, and synced logged-in playback history to YouTube Music.
           EOF
           gh release delete "$RELEASE_TAG" --yes --cleanup-tag 2>/dev/null || true
           gh release create "$RELEASE_TAG" \
@@ -129,7 +128,7 @@ jobs:
             "${{ steps.apk.outputs.arm64_path }}" \
             "${{ steps.apk.outputs.arm32_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (Ultra-Compact APK, Touchscreen Gestures, Widget & YTM Search Fix)" \
+            --title "Kuro $RELEASE_TAG (Pure YT Music Engine, Audio Sub-Qualities & Cascade Motion Blur)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 

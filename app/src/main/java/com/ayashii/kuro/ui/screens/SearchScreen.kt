@@ -524,7 +524,7 @@ fun SearchScreen(
                                             onClick = {
                                                 focusManager.clearFocus()
                                                 keyboardController?.hide()
-                                                viewModel.playTrack(track, searchResults)
+                                                viewModel.playTrackFromSearch(track)
                                             },
                                             onLongClick = {
                                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -690,7 +690,7 @@ fun SearchScreen(
                                             onClick = {
                                                 focusManager.clearFocus()
                                                 keyboardController?.hide()
-                                                viewModel.playTrack(track, searchRecents)
+                                                viewModel.playTrackFromSearch(track)
                                             },
                                             onLongClick = {
                                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)

@@ -598,9 +598,20 @@ class PlaybackService : MediaSessionService() {
                         if (queueSnapshot.size <= 2 || remaining <= 3) {
                             val radioTracks = repository.getRadioTracks(track.id)
                             if (radioTracks.isNotEmpty()) {
-                                val existingIds = PlayerQueueManager.queueState.value.mapTo(HashSet()) { it.id }
+                                val currentQ = PlayerQueueManager.queueState.value
+                                val existingIds = currentQ.mapTo(HashSet()) { it.id }
+                                val existingTitles = currentQ.mapNotNullTo(HashSet()) {
+                                    com.ayashii.kuro.data.native.KuroNativeCore.normalizeSongTitleKey(it.title).takeIf(String::isNotEmpty)
+                                }
+                                val uniqueRadio = radioTracks.filter { cand ->
+                                    if (cand.id in existingIds) false
+                                    else {
+                                        val tk = com.ayashii.kuro.data.native.KuroNativeCore.normalizeSongTitleKey(cand.title)
+                                        tk.isEmpty() || existingTitles.add(tk)
+                                    }
+                                }
                                 val ranked = TasteManager.getInstance(this@PlaybackService)
-                                    .rankRadioTracks(radioTracks.filter { it.id !in existingIds })
+                                    .rankRadioTracks(uniqueRadio)
                                 ranked.forEach { PlayerQueueManager.addToQueue(it) }
                             }
                         }

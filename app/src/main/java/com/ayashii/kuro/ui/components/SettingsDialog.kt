@@ -63,6 +63,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.ayashii.kuro.R
 import com.ayashii.kuro.data.settings.AppLanguage
 import com.ayashii.kuro.data.settings.AudioQuality
+import com.ayashii.kuro.data.settings.AudioSubQuality
 import com.ayashii.kuro.data.settings.LyricsLanguage
 import com.ayashii.kuro.data.settings.SettingsManager
 import com.ayashii.kuro.data.settings.ThemeMode
@@ -84,6 +85,7 @@ fun SettingsDialog(
     val currentLanguage by settingsManager.language.collectAsState()
     val currentLyricsLanguage by settingsManager.lyricsLanguage.collectAsState()
     val currentQuality by settingsManager.audioQuality.collectAsState()
+    val currentSubQuality by settingsManager.audioSubQuality.collectAsState()
     val autoTranslate by settingsManager.autoTranslate.collectAsState()
 
     val calculatingLabel = stringResource(R.string.common_calculating)
@@ -166,49 +168,112 @@ fun SettingsDialog(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
+                val isIndonesianLocale = remember(currentLanguage) {
+                    val loc = settingsManager.resolveEffectiveLocale(currentLanguage).language.lowercase()
+                    loc == "in" || loc == "id"
+                }
+
                 AudioQuality.values().forEach { quality ->
                     val isSelected = currentQuality == quality
-                    Row(
+                    val subOptions = remember(quality) { AudioSubQuality.optionsFor(quality) }
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 4.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(if (isSelected) colors.card else colors.surface)
                             .border(1.dp, if (isSelected) colors.accent else colors.border, RoundedCornerShape(12.dp))
-                            .clickable { settingsManager.setAudioQuality(quality) }
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(quality.titleRes),
-                                style = Typography.bodyMedium,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                color = colors.textPrimary
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = stringResource(quality.descRes),
-                                style = Typography.bodySmall,
-                                color = colors.textMuted
-                            )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { settingsManager.setAudioQuality(quality) }
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(quality.titleRes),
+                                    style = Typography.bodyMedium,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = colors.textPrimary
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = if (isSelected) "${stringResource(quality.descRes)} • ${currentSubQuality.badge}" else stringResource(quality.descRes),
+                                    style = Typography.bodySmall,
+                                    color = colors.textMuted
+                                )
+                            }
+
+                            if (isSelected) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .clip(CircleShape)
+                                        .background(colors.accent),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = stringResource(R.string.common_selected),
+                                        tint = colors.background,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
                         }
 
-                        if (isSelected) {
-                            Box(
+                        AnimatedVisibility(visible = isSelected && subOptions.size > 1) {
+                            Column(
                                 modifier = Modifier
-                                    .size(24.dp)
-                                    .clip(CircleShape)
-                                    .background(colors.accent),
-                                contentAlignment = Alignment.Center
+                                    .fillMaxWidth()
+                                    .padding(start = 12.dp, end = 12.dp, bottom = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = stringResource(R.string.common_selected),
-                                    tint = colors.background,
-                                    modifier = Modifier.size(16.dp)
-                                )
+                                HorizontalDivider(color = colors.border.copy(alpha = 0.6f), thickness = 1.dp)
+                                Spacer(modifier = Modifier.height(2.dp))
+                                subOptions.forEach { sub ->
+                                    val isSubSelected = currentSubQuality == sub
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(if (isSubSelected) colors.surface else Color.Transparent)
+                                            .border(
+                                                1.dp,
+                                                if (isSubSelected) colors.accent.copy(alpha = 0.85f) else colors.border.copy(alpha = 0.5f),
+                                                RoundedCornerShape(10.dp)
+                                            )
+                                            .clickable { settingsManager.setAudioSubQuality(sub) }
+                                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = sub.badge,
+                                                style = Typography.bodySmall.copy(fontSize = 13.sp),
+                                                fontWeight = if (isSubSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                                color = colors.textPrimary
+                                            )
+                                            Text(
+                                                text = if (isIndonesianLocale) sub.subtitleId else sub.subtitleEn,
+                                                style = Typography.bodySmall.copy(fontSize = 11.sp),
+                                                color = colors.textMuted
+                                            )
+                                        }
+                                        if (isSubSelected) {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = colors.accent,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

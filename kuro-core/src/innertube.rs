@@ -82,6 +82,8 @@ pub fn parse_automix_radio(json_str: &str, current_video_id: &str) -> Vec<Parsed
         None => return tracks,
     };
 
+    let mut seen_titles = HashSet::new();
+
     for item in items {
         let renderer = match item.get("playlistPanelVideoRenderer") {
             Some(r) => r,
@@ -101,6 +103,16 @@ pub fn parse_automix_radio(json_str: &str, current_video_id: &str) -> Vec<Parsed
             .pointer("/title/runs/0/text")
             .and_then(|v| v.as_str())
             .unwrap_or("");
+
+        let cleaned_title = clean_title(raw_title);
+        let norm_title: String = cleaned_title
+            .to_lowercase()
+            .chars()
+            .filter(|c| c.is_alphanumeric())
+            .collect();
+        if !norm_title.is_empty() && !seen_titles.insert(norm_title) {
+            continue;
+        }
 
         let raw_artist = renderer
             .pointer("/longBylineText/runs/0/text")
@@ -124,7 +136,7 @@ pub fn parse_automix_radio(json_str: &str, current_video_id: &str) -> Vec<Parsed
 
         tracks.push(ParsedTrack {
             id: video_id.to_string(),
-            title: clean_title(raw_title),
+            title: cleaned_title,
             artist: raw_artist.replace(" - Topic", "").trim().to_string(),
             url: format!("https://www.youtube.com/watch?v={}", video_id),
             thumbnail_url: upgrade_thumbnail(thumb_url),
