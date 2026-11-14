@@ -210,6 +210,9 @@ fun FullPlayerSheet(
         currentLyrics?.let { LrcParser.sanitizeLines(it.lines) } ?: emptyList()
     }
     val hasLyricsAvailable = validLyricsLines.isNotEmpty()
+    val sanitizedLyricsData = remember(currentLyrics, validLyricsLines) {
+        currentLyrics?.copy(lines = validLyricsLines)
+    }
     val nestedScrollConnection = remember(scrollState, hasLyricsAvailable) {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
@@ -509,10 +512,6 @@ fun FullPlayerSheet(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-
-            val sanitizedLyricsData = remember(currentLyrics, validLyricsLines) {
-                currentLyrics?.copy(lines = validLyricsLines)
-            }
 
             LiveLyricSnippet(
                 lyricsData = sanitizedLyricsData,
