@@ -18,6 +18,7 @@
     <string name="widget_previous_desc">Previous track</string>
     <string name="widget_next_desc">Next track</string>
     <string name="widget_favorite_desc">Favorite track</string>
+    <string name="widget_repeat_desc">Repeat mode</string>
 
     <!-- Common actions -->
     <string name="action_close">Close</string>
@@ -137,6 +138,8 @@ You</string>
     <string name="player_save_watch_later">Save to Watch Later</string>
     <string name="player_add_to_playlist">Add to playlist</string>
     <string name="player_liked_saved">Liked (Saved)</string>
+    <string name="player_save">Save</string>
+    <string name="player_saved">Saved</string>
     <string name="player_add_liked">Add to Liked Songs</string>
     <string name="player_add_to_queue">Add to Queue</string>
     <string name="player_go_to_queue">Go to Queue</string>

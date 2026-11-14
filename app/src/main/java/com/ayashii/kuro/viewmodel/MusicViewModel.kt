@@ -717,7 +717,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             isFavorite = favorite
         )
         _currentTrack.value = resolved
-        queueManager.updateCurrentTrack(resolved)
+        if (queueManager.queueState.value.isEmpty()) {
+            queueManager.playTrack(resolved, listOf(resolved))
+        } else {
+            queueManager.updateCurrentTrack(resolved)
+        }
         triggerLyricsAndRadioForTrack(resolved)
         _isPlaying.value = controller.isPlaying
         if (controller.duration > 0) _duration.value = controller.duration
@@ -954,7 +958,14 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun playTrackFromSearch(track: Track) {
-        playTrack(track, listOf(track))
+        val searchPool = _searchResults.value
+        val initialQueue = if (searchPool.size > 1 && searchPool.any { it.id == track.id }) {
+            val others = searchPool.filter { it.id != track.id }.take(15)
+            listOf(track) + others
+        } else {
+            listOf(track)
+        }
+        playTrack(track, initialQueue)
     }
 
     fun playTrack(track: Track, newQueue: List<Track> = emptyList()) {
@@ -1146,10 +1157,16 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun getPositionMs(): Long = _playbackPosition.value
 
+    private var lastSkipPreviousTapWallMs = 0L
+
     fun skipNext(userInitiated: Boolean = true, isErrorRecovery: Boolean = false) {
-        val currentQueue = queueManager.queueState.value
-        if (currentQueue.isEmpty()) return
         val current = _currentTrack.value
+        if (queueManager.queueState.value.isEmpty() && current != null) {
+            queueManager.playTrack(current, listOf(current))
+            updateQueueState()
+        }
+        if (queueManager.queueState.value.isEmpty()) return
+
         if (current != null && trackStartTime > 0L) {
             val playedSec = (System.currentTimeMillis() - trackStartTime) / 1000L
             if (playedSec in 1..14) {
@@ -1174,16 +1191,65 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     } catch (_: Exception) {}
                 }
             }
-        } else {
-            _isPlaying.value = false
-            mediaController?.pause()
+        } else if (current != null) {
+            _isLoadingTrack.value = true
+            viewModelScope.launch {
+                val fetched = withContext(Dispatchers.IO) {
+                    try {
+                        val isLoggedIn = authState.value != null
+                        val tuner = if (isLoggedIn) "AUTOMIX_SETTING_DISCOVER" else "AUTOMIX_SETTING_NORMAL"
+                        val radio = repository.getRadioTracks(current.id, tuner).filter { it.id != current.id }
+                        if (radio.isNotEmpty()) {
+                            radio
+                        } else {
+                            val artistPool = if (current.artist.isNotBlank() && current.artist != "Unknown Artist") {
+                                repository.searchTracks(current.artist).filter { it.id != current.id }
+                            } else emptyList()
+                            if (artistPool.isNotEmpty()) {
+                                artistPool
+                            } else {
+                                _trendingTracks.value.filter { it.id != current.id }.ifEmpty {
+                                    repository.getTrendingTracks().filter { it.id != current.id }
+                                }
+                            }
+                        }
+                    } catch (_: Exception) {
+                        _trendingTracks.value.filter { it.id != current.id }
+                    }
+                }
+                if (fetched.isNotEmpty()) {
+                    appendRadioTracks(fetched)
+                    val newlyAddedNext = queueManager.getNextTrack(userInitiated = userInitiated, isErrorRecovery = isErrorRecovery)
+                    if (newlyAddedNext != null) {
+                        currentIndex = queueManager.currentIndex.value
+                        updateQueueState()
+                        playTrackExecution(newlyAddedNext)
+                        return@launch
+                    }
+                }
+                _isLoadingTrack.value = false
+            }
         }
     }
 
     fun skipPrevious() {
-        val currentQueue = queueManager.queueState.value
-        if (currentQueue.isEmpty()) return
         val current = _currentTrack.value
+        if (queueManager.queueState.value.isEmpty() && current != null) {
+            queueManager.playTrack(current, listOf(current))
+            updateQueueState()
+        }
+        if (queueManager.queueState.value.isEmpty()) return
+
+        val now = SystemClock.elapsedRealtime()
+        val isDoubleTap = (now - lastSkipPreviousTapWallMs) <= 3500L
+        lastSkipPreviousTapWallMs = now
+
+        val posMs = mediaController?.currentPosition?.coerceAtLeast(0L) ?: _playbackPosition.value
+        if (!isDoubleTap && posMs > 3500L) {
+            seekTo(0L)
+            return
+        }
+
         if (current != null && trackStartTime > 0L) {
             val playedSec = (System.currentTimeMillis() - trackStartTime) / 1000L
             if (playedSec in 1..14) {
@@ -1195,6 +1261,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             currentIndex = queueManager.currentIndex.value
             updateQueueState()
             playTrackExecution(prevTrack)
+        } else {
+            seekTo(0L)
         }
     }
 
@@ -1209,6 +1277,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         if (next == Player.REPEAT_MODE_ONE) {
             _currentTrack.value?.let { tasteManager.recordTrackRepeated(it) }
         }
+        syncWidgetState()
     }
 
     fun toggleFavorite(track: Track) {
@@ -1223,6 +1292,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
         _favorites.value = currentFavs
         saveStoredFavorites(currentFavs)
+        try {
+            getApplication<Application>().sendBroadcast(
+                Intent(WIDGET_FAVORITES_CHANGED).setPackage(getApplication<Application>().packageName)
+            )
+        } catch (_: Exception) {}
         syncWidgetState()
 
         if (_currentTrack.value?.id == track.id) {

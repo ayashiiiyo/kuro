@@ -297,7 +297,7 @@ object PlayerQueueManager : IPlayerQueueManager {
             }
 
             return if (nextIndex in queue.indices) {
-                if (_currentIndex.value in queue.indices) {
+                if (_currentIndex.value in queue.indices && _currentIndex.value != nextIndex) {
                     playbackHistory.addLast(_currentIndex.value)
                     if (playbackHistory.size > 200) playbackHistory.removeFirst()
                 }
@@ -355,22 +355,13 @@ object PlayerQueueManager : IPlayerQueueManager {
 
     override fun hasNext(): Boolean {
         synchronized(lock) {
-            if (queue.isEmpty()) return false
-            if (_repeatMode.value == Player.REPEAT_MODE_ALL || _repeatMode.value == Player.REPEAT_MODE_ONE) return true
-            if (_isShuffle.value) {
-                return shuffleDeck.isNotEmpty()
-            }
-            return _currentIndex.value + 1 < queue.size
+            return queue.isNotEmpty() || _currentTrack.value != null
         }
     }
 
     override fun hasPrevious(): Boolean {
         synchronized(lock) {
-            if (queue.isEmpty()) return false
-            if (playbackHistory.isNotEmpty()) return true
-            if (_repeatMode.value == Player.REPEAT_MODE_ALL && queue.size > 1) return true
-            if (!_isShuffle.value && _currentIndex.value > 0) return true
-            return false
+            return queue.isNotEmpty() || _currentTrack.value != null
         }
     }
 

@@ -16,9 +16,12 @@ import android.graphics.Shader
 import android.graphics.drawable.BitmapDrawable
 import android.view.View
 import android.widget.RemoteViews
+import android.os.Bundle
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
+import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
+import com.ayashii.kuro.data.player.PlayerQueueManager
 import androidx.palette.graphics.Palette
 import coil.Coil
 import coil.request.ImageRequest
@@ -43,6 +46,7 @@ private const val KEY_TRACK = "track"
 private const val KEY_PLAYING = "playing"
 private const val KEY_POSITION = "position"
 private const val KEY_DURATION = "duration"
+private const val KEY_REPEAT_MODE = "repeat_mode"
 
 private object WidgetRenderer {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -72,11 +76,12 @@ private object WidgetRenderer {
             cachedArtworkBitmap = null
             cachedAccentColor = Color.parseColor("#1E1F24")
         }
+        val repeatMode = prefs.getInt(KEY_REPEAT_MODE, Player.REPEAT_MODE_OFF)
         compactIds.forEach { id ->
-            render(context, manager, id, false, track, prefs.getBoolean(KEY_PLAYING, false), prefs.getLong(KEY_POSITION, 0), prefs.getLong(KEY_DURATION, 0))
+            render(context, manager, id, false, track, prefs.getBoolean(KEY_PLAYING, false), prefs.getLong(KEY_POSITION, 0), prefs.getLong(KEY_DURATION, 0), repeatMode)
         }
         squareIds.forEach { id ->
-            render(context, manager, id, true, track, prefs.getBoolean(KEY_PLAYING, false), prefs.getLong(KEY_POSITION, 0), prefs.getLong(KEY_DURATION, 0))
+            render(context, manager, id, true, track, prefs.getBoolean(KEY_PLAYING, false), prefs.getLong(KEY_POSITION, 0), prefs.getLong(KEY_DURATION, 0), repeatMode)
         }
         track?.let {
             if (artworkLoadedFor != it.id && artworkLoadInProgressFor != it.id) {
@@ -104,7 +109,7 @@ private object WidgetRenderer {
         return Triple(widthPx, heightPx, cornerRadiusPx)
     }
 
-    private fun render(context: Context, manager: AppWidgetManager, id: Int, square: Boolean, track: Track?, playing: Boolean, position: Long, duration: Long) {
+    private fun render(context: Context, manager: AppWidgetManager, id: Int, square: Boolean, track: Track?, playing: Boolean, position: Long, duration: Long, repeatMode: Int) {
         val views = RemoteViews(context.packageName, if (square) R.layout.widget_kuro_square else R.layout.widget_kuro_compact)
         val open = Intent(context, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -147,8 +152,16 @@ private object WidgetRenderer {
                 R.id.widget_favorite,
                 if (track?.isFavorite == true) R.drawable.ic_widget_heart_filled else R.drawable.ic_widget_heart_outline
             )
+            val repeatRes = when (repeatMode) {
+                Player.REPEAT_MODE_ONE -> R.drawable.ic_notif_repeat_one
+                Player.REPEAT_MODE_ALL -> R.drawable.ic_notif_repeat_all
+                else -> R.drawable.ic_notif_repeat_off
+            }
+            views.setImageViewResource(R.id.widget_repeat, repeatRes)
+            views.setContentDescription(R.id.widget_repeat, context.getString(R.string.widget_repeat_desc))
             setAction(context, views, R.id.widget_previous, KuroWidgetActionReceiver.ACTION_PREVIOUS, id * 10 + 3)
             setAction(context, views, R.id.widget_favorite, KuroWidgetActionReceiver.ACTION_FAVORITE, id * 10 + 4)
+            setAction(context, views, R.id.widget_repeat, KuroWidgetActionReceiver.ACTION_REPEAT, id * 10 + 5)
         }
         manager.updateAppWidget(id, views)
     }
@@ -307,6 +320,7 @@ class KuroWidgetActionReceiver : android.content.BroadcastReceiver() {
         const val ACTION_NEXT = "com.ayashii.kuro.widget.NEXT"
         const val ACTION_PREVIOUS = "com.ayashii.kuro.widget.PREVIOUS"
         const val ACTION_FAVORITE = "com.ayashii.kuro.widget.FAVORITE"
+        const val ACTION_REPEAT = "com.ayashii.kuro.widget.REPEAT"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -362,6 +376,12 @@ class KuroWidgetActionReceiver : android.content.BroadcastReceiver() {
                         }
                     }
                     ACTION_FAVORITE -> toggleFavorite(appContext, controller)
+                    ACTION_REPEAT -> {
+                        controller.sendCustomCommand(
+                            SessionCommand(PlaybackService.CUSTOM_ACTION_REPEAT, Bundle.EMPTY),
+                            Bundle.EMPTY
+                        )
+                    }
                 }
                 persist(appContext, controller)
             } catch (e: Exception) {
@@ -438,7 +458,9 @@ internal fun persist(context: Context, controller: Player) {
     }
     prefs.edit().putBoolean(KEY_PLAYING, controller.playWhenReady)
         .putLong(KEY_POSITION, controller.currentPosition.coerceAtLeast(0))
-        .putLong(KEY_DURATION, controller.duration.coerceAtLeast(0)).apply()
+        .putLong(KEY_DURATION, controller.duration.coerceAtLeast(0))
+        .putInt(KEY_REPEAT_MODE, PlayerQueueManager.repeatMode.value)
+        .apply()
 }
 
 private fun isFavorite(context: Context, id: String): Boolean {

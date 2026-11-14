@@ -18,6 +18,7 @@
     <string name="widget_previous_desc">Lagu sebelumnya</string>
     <string name="widget_next_desc">Lagu berikutnya</string>
     <string name="widget_favorite_desc">Lagu favorit</string>
+    <string name="widget_repeat_desc">Mode ulangi</string>
 
     <!-- Common actions -->
     <string name="action_close">Tutup</string>
@@ -137,6 +138,8 @@ Untukmu</string>
     <string name="player_save_watch_later">Simpan ke Putar Nanti</string>
     <string name="player_add_to_playlist">Tambah ke playlist</string>
     <string name="player_liked_saved">Disukai (Tersimpan)</string>
+    <string name="player_save">Simpan</string>
+    <string name="player_saved">Tersimpan</string>
     <string name="player_add_liked">Tambah ke Lagu Disukai</string>
     <string name="player_add_to_queue">Tambah ke Antrean</string>
     <string name="player_go_to_queue">Lihat Antrean</string>

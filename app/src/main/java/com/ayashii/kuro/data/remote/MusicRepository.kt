@@ -769,11 +769,14 @@ class MusicRepository {
             }
 
             val items = queueTab?.optJSONObject("content")
-                ?.optJSONObject("playlistPanelRenderer")?.optJSONArray("contents") ?: return@withContext emptyList()
+                ?.optJSONObject("playlistPanelRenderer")?.optJSONArray("contents") ?: org.json.JSONArray()
 
             val radioList = mutableListOf<Track>()
             for (i in 0 until items.length()) {
-                val r = items.optJSONObject(i)?.optJSONObject("playlistPanelVideoRenderer") ?: continue
+                val rawItem = items.optJSONObject(i) ?: continue
+                val unwrapped = rawItem.optJSONObject("playlistPanelVideoWrapperRenderer")
+                    ?.optJSONObject("primaryRenderer") ?: rawItem
+                val r = unwrapped.optJSONObject("playlistPanelVideoRenderer") ?: continue
                 val vid = r.optString("videoId", "")
                 if (vid.isBlank() || vid == videoId) continue
 
@@ -800,10 +803,41 @@ class MusicRepository {
             }
             if (radioList.isNotEmpty()) {
                 synchronized(radioCache) { radioCache.put(cacheKey, Pair(radioList, now)) }
+                return@withContext radioList
             }
-            radioList
         } catch (e: Exception) {
             Log.e("MusicRepository", "getRadioTracks error: ${e.message}")
+        }
+        val npRelated = fetchNewPipeRelatedTracks(videoId)
+        if (npRelated.isNotEmpty()) {
+            synchronized(radioCache) { radioCache.put(cacheKey, Pair(npRelated, now)) }
+        }
+        npRelated
+    }
+
+    private fun fetchNewPipeRelatedTracks(videoId: String): List<Track> {
+        return try {
+            val streamInfo = StreamInfo.getInfo(service, "https://www.youtube.com/watch?v=$videoId")
+            streamInfo.relatedItems
+                .filterIsInstance<StreamInfoItem>()
+                .mapNotNull { item ->
+                    val vid = item.url.substringAfter("v=").substringBefore("&").trim()
+                    if (vid.isBlank() || vid == videoId) return@mapNotNull null
+                    val rawThumb = item.thumbnails.maxByOrNull { it.width * it.height }?.url
+                        ?: item.thumbnails.lastOrNull()?.url
+                        ?: item.thumbnails.firstOrNull()?.url
+                        ?: ""
+                    Track(
+                        id = vid,
+                        url = "https://www.youtube.com/watch?v=$vid",
+                        title = cleanTrackTitle(item.name ?: "Unknown Title"),
+                        artist = item.uploaderName?.replace(" - Topic", "")?.trim() ?: "Unknown Artist",
+                        thumbnailUrl = upgradeThumbnailUrl(rawThumb),
+                        durationSeconds = item.duration.coerceAtLeast(0L)
+                    )
+                }
+        } catch (e: Exception) {
+            Log.d("MusicRepository", "NewPipe related tracks fallback failed: ${e.message}")
             emptyList()
         }
     }

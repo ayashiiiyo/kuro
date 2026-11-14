@@ -31,9 +31,16 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.session.CommandButton
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
+import com.ayashii.kuro.widget.WIDGET_FAVORITES_CHANGED
+import com.google.common.util.concurrent.Futures
+import org.json.JSONArray
+import org.json.JSONObject
 import coil.Coil
 import coil.request.CachePolicy
 import coil.request.ImageRequest
@@ -271,6 +278,13 @@ class PlaybackService : MediaSessionService() {
     private var restoringSession = false
     private var pauseTimeoutJob: Job? = null
     private var servicePlayJob: Job? = null
+    private val favSyncReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == WIDGET_FAVORITES_CHANGED) {
+                updateNotificationCustomLayout()
+            }
+        }
+    }
 
     companion object {
         private const val TAG = "KuroPlaybackService"
@@ -280,6 +294,8 @@ class PlaybackService : MediaSessionService() {
         const val ACTION_PLAY_PAUSE = "com.ayashii.kuro.ACTION_PLAY_PAUSE"
         const val ACTION_NEXT = "com.ayashii.kuro.ACTION_NEXT"
         const val ACTION_PREV = "com.ayashii.kuro.ACTION_PREV"
+        const val CUSTOM_ACTION_FAVORITE = "com.ayashii.kuro.CUSTOM_ACTION_FAVORITE"
+        const val CUSTOM_ACTION_REPEAT = "com.ayashii.kuro.CUSTOM_ACTION_REPEAT"
     }
 
     @OptIn(UnstableApi::class)
@@ -369,6 +385,8 @@ class PlaybackService : MediaSessionService() {
                     val nextTrack = PlayerQueueManager.getNextTrack(userInitiated = false)
                     if (nextTrack != null) {
                         playTrack(nextTrack)
+                    } else {
+                        advanceToNextTrack(userInitiated = false)
                     }
                 }
                 updatePauseTimeout(exoPlayer)
@@ -399,37 +417,28 @@ class PlaybackService : MediaSessionService() {
             override fun isCommandAvailable(command: Int): Boolean {
                 return when (command) {
                     Player.COMMAND_SEEK_TO_NEXT,
-                    Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> PlayerQueueManager.hasNext()
+                    Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> PlayerQueueManager.hasNext() || mediaItemCount > 0
                     Player.COMMAND_SEEK_TO_PREVIOUS,
-                    Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> PlayerQueueManager.hasPrevious()
+                    Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> PlayerQueueManager.hasPrevious() || mediaItemCount > 0
                     else -> super.isCommandAvailable(command)
                 }
             }
 
             override fun getAvailableCommands(): Player.Commands {
-                val builder = super.getAvailableCommands().buildUpon()
-                if (PlayerQueueManager.hasNext()) {
-                    builder.add(Player.COMMAND_SEEK_TO_NEXT)
-                    builder.add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
-                } else {
-                    builder.remove(Player.COMMAND_SEEK_TO_NEXT)
-                    builder.remove(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
-                }
-                if (PlayerQueueManager.hasPrevious()) {
-                    builder.add(Player.COMMAND_SEEK_TO_PREVIOUS)
-                    builder.add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
-                } else {
-                    builder.remove(Player.COMMAND_SEEK_TO_PREVIOUS)
-                    builder.remove(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
-                }
-                return builder.build()
+                return super.getAvailableCommands().buildUpon()
+                    .add(Player.COMMAND_SEEK_TO_NEXT)
+                    .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+                    .add(Player.COMMAND_SEEK_TO_PREVIOUS)
+                    .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+                    .build()
             }
 
+            override fun hasNextMediaItem(): Boolean = true
+
+            override fun hasPreviousMediaItem(): Boolean = true
+
             override fun seekToNext() {
-                val nextTrack = PlayerQueueManager.getNextTrack(userInitiated = true)
-                if (nextTrack != null) {
-                    playTrack(nextTrack)
-                }
+                advanceToNextTrack(userInitiated = true)
             }
 
             override fun seekToNextMediaItem() {
@@ -437,10 +446,7 @@ class PlaybackService : MediaSessionService() {
             }
 
             override fun seekToPrevious() {
-                val prevTrack = PlayerQueueManager.getPreviousTrack()
-                if (prevTrack != null) {
-                    playTrack(prevTrack)
-                }
+                handlePreviousOrRestart()
             }
 
             override fun seekToPreviousMediaItem() {
@@ -473,11 +479,189 @@ class PlaybackService : MediaSessionService() {
         mediaSession = MediaSession.Builder(this, forwardingPlayer)
             .setSessionActivity(pendingIntent)
             .setBitmapLoader(KuroNotificationBitmapLoader(this, serviceScope))
+            .setCallback(object : MediaSession.Callback {
+                override fun onConnect(
+                    session: MediaSession,
+                    controller: MediaSession.ControllerInfo
+                ): MediaSession.ConnectionResult {
+                    val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
+                        .add(SessionCommand(CUSTOM_ACTION_FAVORITE, Bundle.EMPTY))
+                        .add(SessionCommand(CUSTOM_ACTION_REPEAT, Bundle.EMPTY))
+                        .build()
+                    val playerCommands = MediaSession.ConnectionResult.DEFAULT_PLAYER_COMMANDS.buildUpon()
+                        .add(Player.COMMAND_SEEK_TO_NEXT)
+                        .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+                        .add(Player.COMMAND_SEEK_TO_PREVIOUS)
+                        .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+                        .build()
+                    return MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+                        .setAvailableSessionCommands(sessionCommands)
+                        .setAvailablePlayerCommands(playerCommands)
+                        .setCustomLayout(buildNotificationCustomLayout())
+                        .build()
+                }
+
+                override fun onCustomCommand(
+                    session: MediaSession,
+                    controller: MediaSession.ControllerInfo,
+                    customCommand: SessionCommand,
+                    args: Bundle
+                ): ListenableFuture<SessionResult> {
+                    when (customCommand.customAction) {
+                        CUSTOM_ACTION_FAVORITE -> {
+                            toggleCurrentTrackFavoriteFromNotification()
+                            updateNotificationCustomLayout()
+                        }
+                        CUSTOM_ACTION_REPEAT -> {
+                            PlayerQueueManager.toggleRepeat()
+                            val nextRepeat = PlayerQueueManager.repeatMode.value
+                            player?.repeatMode = if (nextRepeat == Player.REPEAT_MODE_ONE) {
+                                Player.REPEAT_MODE_ONE
+                            } else {
+                                Player.REPEAT_MODE_OFF
+                            }
+                            if (nextRepeat == Player.REPEAT_MODE_ONE) {
+                                PlayerQueueManager.currentTrack.value?.let {
+                                    TasteManager.getInstance(this@PlaybackService).recordTrackRepeated(it)
+                                }
+                            }
+                            updateNotificationCustomLayout()
+                            syncNotificationAndWidgets()
+                        }
+                    }
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+            })
             .build()
+        updateNotificationCustomLayout()
+
+        serviceScope.launch {
+            PlayerQueueManager.repeatMode.collect {
+                updateNotificationCustomLayout()
+            }
+        }
+        serviceScope.launch {
+            PlayerQueueManager.currentTrack.collect {
+                updateNotificationCustomLayout()
+            }
+        }
+        try {
+            androidx.core.content.ContextCompat.registerReceiver(
+                this,
+                favSyncReceiver,
+                android.content.IntentFilter(WIDGET_FAVORITES_CHANGED),
+                androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+            )
+        } catch (_: Exception) {}
+    }
+
+    private fun isCurrentTrackFavorite(): Boolean {
+        val current = PlayerQueueManager.currentTrack.value
+        val mediaId = current?.id?.takeIf { it.isNotBlank() }
+            ?: player?.currentMediaItem?.mediaId?.takeIf { it.isNotBlank() }
+            ?: return false
+        val prefs = getSharedPreferences("kuro_favorites", Context.MODE_PRIVATE)
+        val raw = prefs.getString("fav_list", null) ?: return current?.isFavorite == true
+        return try {
+            val arr = JSONArray(raw)
+            (0 until arr.length()).any { arr.optJSONObject(it)?.optString("id") == mediaId }
+        } catch (_: Exception) {
+            current?.isFavorite == true
+        }
+    }
+
+    private fun buildNotificationCustomLayout(): List<CommandButton> {
+        val isFav = isCurrentTrackFavorite()
+        val favButton = CommandButton.Builder()
+            .setDisplayName(getString(if (isFav) R.string.player_saved else R.string.player_save))
+            .setIconResId(if (isFav) R.drawable.ic_widget_heart_filled else R.drawable.ic_widget_heart_outline)
+            .setSessionCommand(SessionCommand(CUSTOM_ACTION_FAVORITE, Bundle.EMPTY))
+            .build()
+
+        val repeatMode = PlayerQueueManager.repeatMode.value
+        val repeatIcon = when (repeatMode) {
+            Player.REPEAT_MODE_ONE -> R.drawable.ic_notif_repeat_one
+            Player.REPEAT_MODE_ALL -> R.drawable.ic_notif_repeat_all
+            else -> R.drawable.ic_notif_repeat_off
+        }
+        val repeatButton = CommandButton.Builder()
+            .setDisplayName("Repeat")
+            .setIconResId(repeatIcon)
+            .setSessionCommand(SessionCommand(CUSTOM_ACTION_REPEAT, Bundle.EMPTY))
+            .build()
+
+        return listOf(favButton, repeatButton)
+    }
+
+    private fun updateNotificationCustomLayout() {
+        val session = mediaSession ?: return
+        session.setCustomLayout(buildNotificationCustomLayout())
+    }
+
+    private fun toggleCurrentTrackFavoriteFromNotification() {
+        val activePlayer = player
+        val current = PlayerQueueManager.currentTrack.value
+        val persisted = loadPersistedTrack(this)
+        val metadata = activePlayer?.currentMediaItem?.mediaMetadata
+        val id = current?.id?.takeIf { it.isNotBlank() }
+            ?: activePlayer?.currentMediaItem?.mediaId?.takeIf { it.isNotBlank() }
+            ?: persisted?.id
+            ?: return
+
+        val prefs = getSharedPreferences("kuro_favorites", Context.MODE_PRIVATE)
+        val array = try { JSONArray(prefs.getString("fav_list", "[]")) } catch (_: Exception) { JSONArray() }
+        val match = (0 until array.length()).firstOrNull { array.optJSONObject(it)?.optString("id") == id }
+        val isNowLiked = match == null
+        if (match != null) {
+            val next = JSONArray()
+            for (index in 0 until array.length()) {
+                if (index != match) next.put(array.getJSONObject(index))
+            }
+            prefs.edit().putString("fav_list", next.toString()).apply()
+        } else {
+            val newEntry = JSONObject().apply {
+                put("id", id)
+                put("url", current?.url?.takeIf { it.isNotBlank() }
+                    ?: metadata?.extras?.getString(WIDGET_SOURCE_URL_KEY)
+                    ?: activePlayer?.currentMediaItem?.localConfiguration?.uri?.toString()
+                    ?: persisted?.url.orEmpty())
+                put("title", current?.title?.takeIf { it.isNotBlank() }
+                    ?: metadata?.title?.toString()
+                    ?: persisted?.title.orEmpty())
+                put("artist", current?.artist?.takeIf { it.isNotBlank() }
+                    ?: metadata?.artist?.toString()
+                    ?: persisted?.artist.orEmpty())
+                put("thumbnailUrl", current?.thumbnailUrl?.takeIf { it.isNotBlank() }
+                    ?: metadata?.artworkUri?.toString()
+                    ?: persisted?.thumbnailUrl.orEmpty())
+                put("durationSeconds", current?.durationSeconds?.takeIf { it > 0L }
+                    ?: (activePlayer?.duration?.takeIf { it > 0 }?.div(1000L))
+                    ?: persisted?.durationSeconds ?: 0L)
+            }
+            val next = JSONArray()
+            next.put(newEntry)
+            for (index in 0 until array.length()) {
+                next.put(array.getJSONObject(index))
+            }
+            prefs.edit().putString("fav_list", next.toString()).apply()
+            if (current != null) {
+                TasteManager.getInstance(this).recordTrackLiked(current)
+            }
+        }
+
+        if (current != null && current.id == id) {
+            PlayerQueueManager.updateCurrentTrack(current.copy(isFavorite = isNowLiked))
+        }
+        sendBroadcast(Intent(WIDGET_FAVORITES_CHANGED).setPackage(packageName))
+        syncNotificationAndWidgets()
+        serviceScope.launch(Dispatchers.IO) {
+            repository.setTrackLikeStatus(id, isLiked = isNowLiked)
+        }
     }
 
     private fun syncNotificationAndWidgets() {
         val activePlayer = player ?: return
+        updateNotificationCustomLayout()
         persist(this@PlaybackService, activePlayer)
         serviceScope.launch(Dispatchers.IO) {
             updateKuroWidgets(this@PlaybackService)
@@ -518,6 +702,70 @@ class PlaybackService : MediaSessionService() {
         } else {
             pauseTimeoutJob?.cancel()
             pauseTimeoutJob = null
+        }
+    }
+
+    private var lastPreviousTapWallMs = 0L
+
+    private fun handlePreviousOrRestart() {
+        val activePlayer = player ?: return
+        val now = android.os.SystemClock.elapsedRealtime()
+        val isDoubleTap = (now - lastPreviousTapWallMs) <= 3500L
+        lastPreviousTapWallMs = now
+
+        if (!isDoubleTap && activePlayer.currentPosition > 3500L) {
+            activePlayer.seekTo(0L)
+            syncNotificationAndWidgets()
+            return
+        }
+
+        val prevTrack = PlayerQueueManager.getPreviousTrack()
+        if (prevTrack != null) {
+            playTrack(prevTrack)
+        } else {
+            activePlayer.seekTo(0L)
+            if (!activePlayer.playWhenReady) {
+                activePlayer.play()
+            }
+            syncNotificationAndWidgets()
+        }
+    }
+
+    private fun advanceToNextTrack(userInitiated: Boolean, isErrorRecovery: Boolean = false) {
+        val nextTrack = PlayerQueueManager.getNextTrack(userInitiated = userInitiated, isErrorRecovery = isErrorRecovery)
+        if (nextTrack != null) {
+            playTrack(nextTrack)
+            return
+        }
+        val current = PlayerQueueManager.currentTrack.value ?: return
+        servicePlayJob?.cancel()
+        servicePlayJob = serviceScope.launch {
+            try {
+                val radioTracks = withContext(Dispatchers.IO) {
+                    repository.getRadioTracks(current.id)
+                }.filter { it.id != current.id }
+                if (radioTracks.isNotEmpty()) {
+                    val ranked = TasteManager.getInstance(this@PlaybackService).rankRadioTracks(radioTracks)
+                    ranked.forEach { PlayerQueueManager.addToQueue(it) }
+                    val fetchedNext = PlayerQueueManager.getNextTrack(userInitiated = userInitiated, isErrorRecovery = isErrorRecovery)
+                    if (fetchedNext != null) {
+                        playTrack(fetchedNext)
+                        return@launch
+                    }
+                }
+                val fallbackPool = withContext(Dispatchers.IO) {
+                    repository.getTrendingTracks()
+                }.filter { it.id != current.id }
+                if (fallbackPool.isNotEmpty()) {
+                    fallbackPool.forEach { PlayerQueueManager.addToQueue(it) }
+                    val fallbackNext = PlayerQueueManager.getNextTrack(userInitiated = userInitiated, isErrorRecovery = isErrorRecovery)
+                    if (fallbackNext != null) {
+                        playTrack(fallbackNext)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error advancing to next radio track: ${e.message}")
+            }
         }
     }
 
@@ -650,6 +898,9 @@ class PlaybackService : MediaSessionService() {
             try {
                 val track = loadPersistedTrack(this@PlaybackService) ?: return@launch
                 if (track.url.isBlank()) return@launch
+                if (PlayerQueueManager.queueState.value.isEmpty()) {
+                    PlayerQueueManager.playTrack(track, listOf(track))
+                }
                 val quality = SettingsManager.getInstance().audioQuality.value
                 val resolved = withContext(Dispatchers.IO) {
                     runCatching { repository.getAudioStream(track.url, quality) }.getOrNull()
@@ -701,6 +952,9 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        try {
+            unregisterReceiver(favSyncReceiver)
+        } catch (_: Exception) {}
         pauseTimeoutJob?.cancel()
         pauseTimeoutJob = null
         servicePlayJob?.cancel()

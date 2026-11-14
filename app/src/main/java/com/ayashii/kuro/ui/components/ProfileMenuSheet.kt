@@ -372,7 +372,7 @@ fun ProfileMenuSheet(
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(colors.card)
                                     .clickable {
-                                        viewModel.playTrack(track)
+                                        viewModel.playTrack(track, recentlyPlayed)
                                         showRecentsDialog = false
                                         onDismiss()
                                     }

@@ -701,7 +701,7 @@ fun HomeScreen(
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(colors.card)
                                     .clickable {
-                                        viewModel.playTrack(track)
+                                        viewModel.playTrack(track, recentlyPlayed)
                                         showRecentsDialog = false
                                     }
                                     .padding(8.dp),

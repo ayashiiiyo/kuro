@@ -863,6 +863,27 @@ suite.assert_true(
     "Missing one or more v3.8.12 remediation components"
 )
 
+innertube_rs = suite.read_file("kuro-core/src/innertube.rs")
+v3816_check = (
+    "hasNextMediaItem(): Boolean = true" in service
+    and "hasPreviousMediaItem(): Boolean = true" in service
+    and "CUSTOM_ACTION_FAVORITE" in service
+    and "CUSTOM_ACTION_REPEAT" in service
+    and "handlePreviousOrRestart" in service
+    and "lastSkipPreviousTapWallMs" in music_vm
+    and "playlistPanelVideoWrapperRenderer" in innertube_rs
+    and "playlistPanelVideoWrapperRenderer" in music_repo
+    and "_currentIndex.value != nextIndex" in player_queue
+    and "widget_repeat" in widget_square_xml
+    and "ACTION_REPEAT" in widgets
+)
+suite.assert_true(
+    v3816_check,
+    "KURO-V3816-01",
+    "MediaSession notification transport & custom buttons (Prev/Next/Favorite/Repeat), 3.5s double-tap previous, wrapper-aware Automix parser, and non-pausing skipNext",
+    "Missing one or more v3.8.16 notification/playback fixes"
+)
+
 # ==============================================================================
 # SUMMARY & VERDICT
 # ==============================================================================

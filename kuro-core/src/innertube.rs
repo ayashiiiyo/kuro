@@ -85,7 +85,10 @@ pub fn parse_automix_radio(json_str: &str, current_video_id: &str) -> Vec<Parsed
     let mut seen_titles = HashSet::new();
 
     for item in items {
-        let renderer = match item.get("playlistPanelVideoRenderer") {
+        let unwrapped = item
+            .pointer("/playlistPanelVideoWrapperRenderer/primaryRenderer")
+            .unwrap_or(item);
+        let renderer = match unwrapped.get("playlistPanelVideoRenderer") {
             Some(r) => r,
             None => continue,
         };
