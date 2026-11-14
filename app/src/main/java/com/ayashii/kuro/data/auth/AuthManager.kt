@@ -243,15 +243,49 @@ class AuthManager private constructor(private val context: Context) {
         }
     }
 
+    @Synchronized
+    fun mergeResponseCookies(setCookieHeaders: List<String>) {
+        val current = _authState.value ?: return
+        if (setCookieHeaders.isEmpty()) return
+        val merged = LinkedHashMap<String, String>(parseCookies(current.cookie))
+        var changed = false
+        for (rawHeader in setCookieHeaders) {
+            val pair = rawHeader.substringBefore(";").trim()
+            val eqIdx = pair.indexOf("=")
+            if (eqIdx <= 0) continue
+            val key = pair.substring(0, eqIdx).trim()
+            val value = pair.substring(eqIdx + 1).trim()
+            if (key.isEmpty()) continue
+            if (value.isEmpty() || value.equals("deleted", ignoreCase = true)) {
+                if (merged.remove(key) != null) changed = true
+            } else if (merged[key] != value) {
+                merged[key] = value
+                changed = true
+            }
+        }
+        if (changed) {
+            val updatedCookie = merged.entries.joinToString("; ") { "${it.key}=${it.value}" }
+            prefs.edit()
+                .putString(KEY_COOKIE, updatedCookie)
+                .putLong(KEY_LAST_CHECK, System.currentTimeMillis())
+                .apply()
+            _authState.value = current.copy(cookie = updatedCookie)
+        }
+    }
+
     fun refreshAccountInfoIfNeeded(force: Boolean = false) {
         val current = _authState.value ?: return
         if (current.cookie.isBlank()) return
+        val lastCheck = prefs.getLong(KEY_LAST_CHECK, 0L)
+        val isStale = (System.currentTimeMillis() - lastCheck) >= 12L * 60L * 60L * 1000L
         val needsRefresh = force ||
+            isStale ||
             current.avatarUrl.isBlank() ||
             current.name.isBlank() ||
             current.name == "YouTube User"
         if (needsRefresh) {
             authScope.launch {
+                prefs.edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).apply()
                 fetchAccountInfo(current.cookie)
             }
         }
@@ -568,6 +602,7 @@ class AuthManager private constructor(private val context: Context) {
         private const val KEY_AVATAR = "yt_avatar"
         private const val KEY_AUTH_USER = "yt_auth_user"
         private const val KEY_PAGE_ID = "yt_page_id"
+        private const val KEY_LAST_CHECK = "yt_last_check"
 
         @Volatile
         private var instance: AuthManager? = null

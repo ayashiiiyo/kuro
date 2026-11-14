@@ -1030,11 +1030,15 @@ fun PlayerScrubber(
     modifier: Modifier = Modifier
 ) {
     val currentPositionMs by viewModel.playbackPosition.collectAsState()
+    val bufferedPositionMs by viewModel.bufferedPosition.collectAsState()
     val durationMs by viewModel.duration.collectAsState()
 
     val effectiveDuration = if (durationMs > 0) durationMs else (track.durationSeconds * 1000L).coerceAtLeast(1L)
     val progress = if (effectiveDuration > 0) {
         (currentPositionMs.toFloat() / effectiveDuration.toFloat()).coerceIn(0f, 1f)
+    } else 0f
+    val bufferedProgress = if (effectiveDuration > 0) {
+        (bufferedPositionMs.toFloat() / effectiveDuration.toFloat()).coerceIn(0f, 1f)
     } else 0f
 
     var isDragging by remember { mutableStateOf(false) }
@@ -1049,23 +1053,41 @@ fun PlayerScrubber(
     val colors = KuroAppTheme.colors
 
     Column(modifier = modifier.fillMaxWidth()) {
-        Slider(
-            value = displayProgress,
-            onValueChange = { newProgress ->
-                isDragging = true
-                dragProgress = newProgress
-            },
-            onValueChangeFinished = {
-                viewModel.seekTo((dragProgress * effectiveDuration).toLong())
-                isDragging = false
-            },
-            colors = SliderDefaults.colors(
-                thumbColor = colors.textPrimary,
-                activeTrackColor = colors.textPrimary,
-                inactiveTrackColor = colors.border
-            ),
-            modifier = Modifier.fillMaxWidth()
-        )
+        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp)
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(colors.border.copy(alpha = 0.45f))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(bufferedProgress)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(colors.textSecondary.copy(alpha = 0.45f))
+                )
+            }
+            Slider(
+                value = displayProgress,
+                onValueChange = { newProgress ->
+                    isDragging = true
+                    dragProgress = newProgress
+                },
+                onValueChangeFinished = {
+                    viewModel.seekTo((dragProgress * effectiveDuration).toLong())
+                    isDragging = false
+                },
+                colors = SliderDefaults.colors(
+                    thumbColor = colors.textPrimary,
+                    activeTrackColor = colors.textPrimary,
+                    inactiveTrackColor = Color.Transparent
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
 
         Row(
             modifier = Modifier

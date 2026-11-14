@@ -98,6 +98,7 @@ fun LibraryScreen(
 ) {
     val favorites by viewModel.favorites.collectAsState()
     val playlists by viewModel.playlists.collectAsState()
+    val offlineTracks by viewModel.offlineTracks.collectAsState()
     val isLoadingTrack by viewModel.isLoadingTrack.collectAsState()
     val isPlayerExpanded by viewModel.isPlayerExpanded.collectAsState()
     val currentTrack by viewModel.currentTrack.collectAsState()
@@ -105,7 +106,7 @@ fun LibraryScreen(
     val favoriteIds by remember(favorites) { derivedStateOf { favorites.mapTo(HashSet()) { it.id } } }
 
     var selectedTab by rememberSaveable { mutableStateOf(0) }
-    val libPagerState = rememberPagerState(initialPage = selectedTab, pageCount = { 2 })
+    val libPagerState = rememberPagerState(initialPage = selectedTab, pageCount = { 3 })
     val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(libPagerState.currentPage) {
@@ -191,7 +192,7 @@ fun LibraryScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = if (selectedTab == 0) stringResource(R.string.lib_fav_count, favorites.size) else stringResource(R.string.lib_playlist_count, playlists.size),
+                                text = when (selectedTab) { 0 -> stringResource(R.string.lib_fav_count, favorites.size); 1 -> stringResource(R.string.lib_playlist_count, playlists.size); else -> "${offlineTracks.size} lagu offline" },
                                 style = Typography.bodyMedium,
                                 color = colors.textMuted
                             )
@@ -273,6 +274,27 @@ fun LibraryScreen(
                                 color = if (selectedTab == 1) colors.background else colors.textPrimary
                             )
                         }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(if (selectedTab == 2) colors.accent else colors.card)
+                                .border(1.dp, if (selectedTab == 2) colors.accent else colors.border, RoundedCornerShape(20.dp))
+                                .clickable {
+                                    selectedTab = 2
+                                    coroutineScope.launch {
+                                        libPagerState.animateScrollToPage(2, animationSpec = KuroMotion.appleFluidSpring())
+                                    }
+                                }
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Offline (${offlineTracks.size})",
+                                style = Typography.labelMedium.copy(fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Medium),
+                                color = if (selectedTab == 2) colors.background else colors.textPrimary
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
@@ -335,7 +357,7 @@ fun LibraryScreen(
                                         }
                                     }
                                 }
-                            } else {
+                            } else if (tab == 1) {
                                 LazyColumn(modifier = Modifier.fillMaxSize()) {
                                     item {
                                         Row(
@@ -453,6 +475,38 @@ fun LibraryScreen(
 
                                     item {
                                         Spacer(modifier = Modifier.height(130.dp))
+                                    }
+                                }
+                            } else {
+                                if (offlineTracks.isEmpty()) {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "Belum ada lagu offline",
+                                            style = Typography.bodyMedium,
+                                            color = colors.textMuted
+                                        )
+                                    }
+                                } else {
+                                    val offlineQueue = remember(offlineTracks) { offlineTracks.map { it.track } }
+                                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                                        items(offlineTracks, key = { "offline_${it.track.id}" }) { item ->
+                                            val isFav = item.track.id in favoriteIds
+                                            TrackItem(
+                                                track = item.track.copy(isFavorite = isFav),
+                                                isPlaying = currentTrack?.id == item.track.id,
+                                                isLoading = isLoadingTrack && currentTrack?.id == item.track.id,
+                                                onClick = { viewModel.playTrack(item.track, offlineQueue) },
+                                                onFavoriteClick = { viewModel.toggleFavorite(item.track) },
+                                                onMoreClick = { trackForOptions = item.track },
+                                                onSwipeAddToQueue = { viewModel.addToQueue(item.track) }
+                                            )
+                                        }
+                                        item {
+                                            Spacer(modifier = Modifier.height(130.dp))
+                                        }
                                     }
                                 }
                             }

@@ -22,6 +22,8 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.AddCircleOutline
 import androidx.compose.material.icons.outlined.Bedtime
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.FormatListBulleted
@@ -56,7 +58,10 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.ayashii.kuro.R
 import com.ayashii.kuro.data.model.Track
+import com.ayashii.kuro.data.settings.AudioSubQuality
 import com.ayashii.kuro.data.settings.SettingsManager
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import com.ayashii.kuro.ui.theme.KuroAppTheme
 import com.ayashii.kuro.ui.theme.Typography
 import com.ayashii.kuro.viewmodel.MusicViewModel
@@ -83,6 +88,11 @@ fun TrackOptionsBottomSheet(
         viewModel.isTrackInWatchLater(track.id)
     }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
+    var showDownloadQualityDialog by remember { mutableStateOf(false) }
+    val offlineTracks by viewModel.offlineTracks.collectAsState()
+    val downloadProgress by viewModel.downloadProgress.collectAsState()
+    val activeProgress = downloadProgress[track.id]
+    val isOffline = remember(offlineTracks, track.id) { offlineTracks.any { it.track.id == track.id } }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -191,6 +201,24 @@ fun TrackOptionsBottomSheet(
             )
 
             TrackOptionItem(
+                icon = if (isOffline) Icons.Default.DownloadDone else Icons.Outlined.Download,
+                title = when {
+                    activeProgress != null -> "Downloading (${(activeProgress * 100).toInt()}%)"
+                    isOffline -> "Hapus dari Offline"
+                    else -> "Download Offline"
+                },
+                iconTint = if (isOffline) colors.accent else colors.textPrimary,
+                onClick = {
+                    if (isOffline) {
+                        viewModel.deleteOfflineTrack(track.id)
+                        onDismiss()
+                    } else if (activeProgress == null) {
+                        showDownloadQualityDialog = true
+                    }
+                }
+            )
+
+            TrackOptionItem(
                 icon = Icons.Outlined.AddCircleOutline,
                 title = stringResource(R.string.player_add_to_playlist),
                 onClick = {
@@ -247,6 +275,42 @@ fun TrackOptionsBottomSheet(
 
             Spacer(modifier = Modifier.height(24.dp))
         }
+    }
+
+    if (showDownloadQualityDialog) {
+        AlertDialog(
+            onDismissRequest = { showDownloadQualityDialog = false },
+            title = { Text("Pilih Kualitas Download", style = Typography.titleLarge, color = colors.textPrimary) },
+            text = {
+                Column {
+                    AudioSubQuality.values().forEach { sub ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    viewModel.downloadTrack(track, sub)
+                                    showDownloadQualityDialog = false
+                                    onDismiss()
+                                }
+                                .padding(vertical = 10.dp, horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(sub.badge, style = Typography.bodyMedium, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                                Text(sub.subtitleId, style = Typography.bodySmall, color = colors.textMuted)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showDownloadQualityDialog = false }) {
+                    Text("Batal", color = colors.textMuted)
+                }
+            },
+            containerColor = colors.surface
+        )
     }
 
     if (showSleepTimerDialog) {

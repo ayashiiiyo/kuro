@@ -23,7 +23,7 @@ class MusicRepository {
 
     private val service = ServiceList.YouTube
     private val CACHE_EXPIRY_MS = 20 * 60 * 1000L
-    private val HOME_CACHE_TTL = 10 * 60 * 1000L
+    private val HOME_CACHE_TTL = 2 * 60 * 1000L
     private val SEARCH_CACHE_TTL = 5 * 60 * 1000L
     private val RADIO_CACHE_TTL = 30 * 60 * 1000L
 
@@ -649,12 +649,14 @@ class MusicRepository {
         emptyList()
     }
 
-    suspend fun getHomeShelves(): List<HomeSection> = withContext(Dispatchers.IO) {
+    suspend fun getHomeShelves(forceRefresh: Boolean = false): List<HomeSection> = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
-        synchronized(homeCacheLock) {
-            homeCache?.let { (cached, time) ->
-                if (now - time < HOME_CACHE_TTL) {
-                    return@withContext cached
+        if (!forceRefresh) {
+            synchronized(homeCacheLock) {
+                homeCache?.let { (cached, time) ->
+                    if (now - time < HOME_CACHE_TTL) {
+                        return@withContext cached
+                    }
                 }
             }
         }
@@ -1091,9 +1093,10 @@ class MusicRepository {
 
     suspend fun getAudioStreamUrl(
         url: String,
-        quality: com.ayashii.kuro.data.settings.AudioQuality = com.ayashii.kuro.data.settings.AudioQuality.HIGH
+        quality: com.ayashii.kuro.data.settings.AudioQuality = com.ayashii.kuro.data.settings.AudioQuality.HIGH,
+        subQualityOverride: com.ayashii.kuro.data.settings.AudioSubQuality? = null
     ): String? = withContext(Dispatchers.IO) {
-        val subQuality = resolveActiveSubQuality(quality)
+        val subQuality = subQualityOverride ?: resolveActiveSubQuality(quality)
         val cacheKey = "$url#${quality.name}#${subQuality.name}"
         val now = System.currentTimeMillis()
         synchronized(streamUrlCache) {
@@ -1297,6 +1300,11 @@ class MusicRepository {
                 ?.optString("baseUrl", "")
                 .orEmpty()
 
+            val watchtimeUrl = playerJson.optJSONObject("playbackTracking")
+                ?.optJSONObject("videostatsWatchtimeUrl")
+                ?.optString("baseUrl", "")
+                .orEmpty()
+
             if (trackingUrl.startsWith("http")) {
                 val sep = if (trackingUrl.contains("?")) "&" else "?"
                 val finalTrackingUrl = "${trackingUrl}${sep}ver=2&c=WEB_REMIX&cpn=$cpn&el=detailpage"
@@ -1308,6 +1316,19 @@ class MusicRepository {
                     .get()
                 auth.applyAuthToRequest(pingBuilder, null, origin)
                 HttpClientProvider.client.newCall(pingBuilder.build()).execute().close()
+
+                if (watchtimeUrl.startsWith("http")) {
+                    val wSep = if (watchtimeUrl.contains("?")) "&" else "?"
+                    val finalWatchUrl = "${watchtimeUrl}${wSep}ver=2&c=WEB_REMIX&cpn=$cpn&el=detailpage&st=0&et=30&cmt=30&state=playing"
+                    val watchBuilder = okhttp3.Request.Builder()
+                        .url(finalWatchUrl)
+                        .header("User-Agent", YTM_USER_AGENT)
+                        .header("Origin", origin)
+                        .header("Referer", "$origin/")
+                        .get()
+                    auth.applyAuthToRequest(watchBuilder, null, origin)
+                    HttpClientProvider.client.newCall(watchBuilder.build()).execute().close()
+                }
                 return@withContext true
             }
             false

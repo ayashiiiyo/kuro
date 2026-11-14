@@ -291,12 +291,24 @@ fun ProfileMenuSheet(
         }
     }
 
-    val statsVersion by viewModel.tasteManager.statsVersion.collectAsState()
+    val favorites by viewModel.favorites.collectAsState()
 
     if (showStatsDialog) {
-        val totalPlays = remember(showStatsDialog, statsVersion) { viewModel.tasteManager.getTotalPlays() }
-        val uniqueArtists = remember(showStatsDialog, statsVersion) { viewModel.tasteManager.getUniqueArtistsCount() }
-        val topArtists = remember(showStatsDialog, statsVersion) { viewModel.tasteManager.getTopArtists(5) }
+        val totalPlays = remember(showStatsDialog, recentlyPlayed) { recentlyPlayed.size }
+        val uniqueArtists = remember(showStatsDialog, recentlyPlayed, favorites) {
+            (recentlyPlayed + favorites).mapNotNull { it.artist.trim().takeIf { a -> a.isNotBlank() && a != "Unknown Artist" }?.lowercase() }.distinct().size
+        }
+        val topArtists = remember(showStatsDialog, recentlyPlayed, favorites) {
+            (recentlyPlayed + favorites)
+                .map { it.artist.trim() }
+                .filter { it.isNotBlank() && it != "Unknown Artist" }
+                .groupingBy { it }
+                .eachCount()
+                .entries
+                .sortedByDescending { it.value }
+                .take(5)
+                .map { Pair(it.key, it.value) }
+        }
 
         AlertDialog(
             onDismissRequest = { showStatsDialog = false },

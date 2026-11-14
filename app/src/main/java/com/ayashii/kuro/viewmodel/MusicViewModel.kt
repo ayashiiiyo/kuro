@@ -20,7 +20,12 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.ayashii.kuro.data.model.HomeSection
 import com.ayashii.kuro.data.model.Track
+import com.ayashii.kuro.data.cache.HistoryStore
+import com.ayashii.kuro.data.cache.UiSnapshot
+import com.ayashii.kuro.data.cache.UiStateCache
+import com.ayashii.kuro.data.offline.OfflineMusicManager
 import com.ayashii.kuro.data.player.PlayerQueueManager
+import com.ayashii.kuro.data.settings.AudioSubQuality
 import com.ayashii.kuro.data.remote.MusicRepository
 import com.ayashii.kuro.service.PlaybackService
 import com.ayashii.kuro.widget.WIDGET_FAVORITES_CHANGED
@@ -59,6 +64,12 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _playbackPosition = MutableStateFlow(0L)
     val playbackPosition = _playbackPosition.asStateFlow()
+
+    private val _bufferedPosition = MutableStateFlow(0L)
+    val bufferedPosition = _bufferedPosition.asStateFlow()
+
+    private val _restoredPage = MutableStateFlow(0)
+    val restoredPage = _restoredPage.asStateFlow()
 
     private val _duration = MutableStateFlow(0L)
     val duration = _duration.asStateFlow()
@@ -156,13 +167,26 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     val audioDeviceState = audioOutputManager.deviceState
     fun openAudioOutputSettings() = audioOutputManager.openAudioSettings()
 
-    val tasteManager = com.ayashii.kuro.data.recommendation.TasteManager.getInstance(getApplication())
-    val recentlyPlayed = tasteManager.recentlyPlayed
-    val searchRecents = tasteManager.searchRecents
-    val onRepeatTracks = tasteManager.onRepeatTracks
+    private val historyStore = HistoryStore.getInstance(getApplication())
+    val recentlyPlayed = historyStore.recentlyPlayed
+    val searchRecents = historyStore.searchRecents
 
-    fun removeFromRecents(trackId: String) = tasteManager.removeFromRecents(trackId)
-    fun clearRecentSearches() = tasteManager.clearRecents()
+    fun removeFromRecents(trackId: String) = historyStore.removeFromRecents(trackId)
+    fun clearRecentSearches() = historyStore.clearRecents()
+
+    private val offlineManager = OfflineMusicManager.getInstance(getApplication())
+    val offlineTracks = offlineManager.offlineTracks
+    val downloadProgress = offlineManager.downloadProgress
+
+    fun downloadTrack(track: Track, subQuality: AudioSubQuality = settingsManager.downloadSubQuality.value) {
+        offlineManager.downloadTrack(track, subQuality)
+    }
+
+    fun deleteOfflineTrack(trackId: String) {
+        offlineManager.deleteOfflineTrack(trackId)
+    }
+
+    fun isTrackDownloaded(trackId: String): Boolean = offlineManager.isDownloaded(trackId)
 
     val playlistManager = com.ayashii.kuro.data.playlist.PlaylistManager.getInstance(getApplication())
     val playlists = playlistManager.playlists
@@ -280,7 +304,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 if (titleKey.isNotEmpty() && !existingTitles.add(titleKey)) continue
                 filtered.add(cand)
             }
-            tasteManager.rankRadioTracks(filtered)
+            filtered
         }
         if (fresh.isNotEmpty()) {
             fresh.forEach { queueManager.addToQueue(it) }
@@ -758,6 +782,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 if (!isSeeking && (now - lastGroundTruthSync >= 500L)) {
                     mediaController?.let { ctrl ->
                         val actualPos = ctrl.currentPosition.coerceAtLeast(0L)
+                        _bufferedPosition.value = ctrl.bufferedPosition.coerceAtLeast(0L)
                         val realDuration = ctrl.duration
                         if (realDuration > 0) {
                             _duration.value = realDuration
@@ -917,14 +942,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun playTrackFromSearch(track: Track) {
-        val searchPool = _searchResults.value
-        val initialQueue = if (searchPool.size > 1 && searchPool.any { it.id == track.id }) {
-            val others = searchPool.filter { it.id != track.id }.take(15)
-            listOf(track) + others
-        } else {
-            listOf(track)
-        }
-        playTrack(track, initialQueue)
+        playTrack(track, listOf(track))
     }
 
     fun playTrack(track: Track, newQueue: List<Track> = emptyList()) {
@@ -981,7 +999,12 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
             hasRetriedFallback = false
             trackStartTime = System.currentTimeMillis()
-            val resolvedStream = repository.getAudioStream(activeTrack.url, settingsManager.audioQuality.value)
+            val localOfflineUri = offlineManager.getLocalAudioUri(activeTrack.id)
+            val resolvedStream = if (localOfflineUri != null) {
+                com.ayashii.kuro.data.remote.ResolvedStream(url = localOfflineUri, mimeType = null)
+            } else {
+                repository.getAudioStream(activeTrack.url, settingsManager.audioQuality.value)
+            }
             if (resolvedStream != null) {
                 val updatedTrack = activeTrack.copy(
                     streamUrl = resolvedStream.url,
@@ -990,10 +1013,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 _currentTrack.value = updatedTrack
                 queueManager.updateCurrentTrack(updatedTrack)
 
-                tasteManager.recordTrackPlayed(updatedTrack)
-                if (authState.value != null) {
+                historyStore.recordTrackPlayed(updatedTrack)
+                if (localOfflineUri == null && authState.value != null) {
                     launch(Dispatchers.IO) {
                         repository.reportPlaybackToYouTubeMusic(updatedTrack.id)
+                        repository.invalidateHomeCache()
                     }
                 }
 
@@ -1126,12 +1150,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
         if (queueManager.queueState.value.isEmpty()) return
 
-        if (current != null && trackStartTime > 0L) {
-            val playedSec = (System.currentTimeMillis() - trackStartTime) / 1000L
-            if (playedSec in 1..14) {
-                tasteManager.recordTrackSkipped(current)
-            }
-        }
         if (repeatMode.value == Player.REPEAT_MODE_ONE && !userInitiated && !isErrorRecovery) {
             _currentTrack.value?.let { playTrack(it) }
             return
@@ -1209,12 +1227,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        if (current != null && trackStartTime > 0L) {
-            val playedSec = (System.currentTimeMillis() - trackStartTime) / 1000L
-            if (playedSec in 1..14) {
-                tasteManager.recordTrackSkipped(current)
-            }
-        }
         val prevTrack = queueManager.getPreviousTrack()
         if (prevTrack != null) {
             currentIndex = queueManager.currentIndex.value
@@ -1233,9 +1245,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         queueManager.toggleRepeat()
         val next = queueManager.repeatMode.value
         mediaController?.repeatMode = if (next == Player.REPEAT_MODE_ONE) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
-        if (next == Player.REPEAT_MODE_ONE) {
-            _currentTrack.value?.let { tasteManager.recordTrackRepeated(it) }
-        }
         syncWidgetState()
     }
 
@@ -1247,7 +1256,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             currentFavs.removeAll { it.id == track.id }
         } else {
             currentFavs.add(0, track.copy(isFavorite = true))
-            tasteManager.recordTrackLiked(track)
         }
         _favorites.value = currentFavs
         saveStoredFavorites(currentFavs)
@@ -1268,6 +1276,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch(Dispatchers.IO) {
             repository.setTrackLikeStatus(track.id, isLiked = newLikeState)
+            repository.invalidateHomeCache()
         }
     }
 
@@ -1314,6 +1323,55 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun logout() {
         com.ayashii.kuro.data.auth.AuthManager.getInstance().logout()
+    }
+
+    fun onAppBackgrounded(currentPage: Int) {
+        val snapshot = UiSnapshot(
+            lastPage = currentPage,
+            isPlayerExpanded = _isPlayerExpanded.value,
+            homeSections = _homeSections.value,
+            trendingTracks = _trendingTracks.value
+        )
+        viewModelScope.launch(Dispatchers.IO) {
+            UiStateCache.saveSnapshot(getApplication(), snapshot)
+        }
+        progressJob?.cancel()
+        lyricsJob?.cancel()
+        searchJob?.cancel()
+        suggestJob?.cancel()
+        genreJob?.cancel()
+
+        _homeSections.value = emptyList()
+        _trendingTracks.value = emptyList()
+        _searchResults.value = emptyList()
+        _genreTracks.value = emptyList()
+        _suggestions.value = emptyList()
+        _currentLyrics.value = null
+    }
+
+    fun onAppForegrounded() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val snapshot = UiStateCache.loadSnapshot(getApplication())
+            if (snapshot != null) {
+                _restoredPage.value = snapshot.lastPage
+                if (_homeSections.value.isEmpty() && snapshot.homeSections.isNotEmpty()) {
+                    _homeSections.value = snapshot.homeSections
+                }
+                if (_trendingTracks.value.isEmpty() && snapshot.trendingTracks.isNotEmpty()) {
+                    _trendingTracks.value = snapshot.trendingTracks
+                }
+            }
+            withContext(Dispatchers.Main) {
+                if (_isPlaying.value) {
+                    startProgressTracking()
+                }
+            }
+            val needsRefresh = snapshot == null ||
+                (System.currentTimeMillis() - snapshot.savedAtMs) > 2 * 60 * 1000L
+            if (needsRefresh || _homeSections.value.isEmpty()) {
+                loadTrending()
+            }
+        }
     }
 
     override fun onCleared() {

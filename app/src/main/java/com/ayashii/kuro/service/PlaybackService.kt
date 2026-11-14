@@ -49,7 +49,14 @@ import com.ayashii.kuro.MainActivity
 import com.ayashii.kuro.R
 import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.data.player.PlayerQueueManager
-import com.ayashii.kuro.data.recommendation.TasteManager
+import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
+import androidx.media3.datasource.cache.SimpleCache
+import com.ayashii.kuro.data.auth.AuthManager
+import com.ayashii.kuro.data.cache.HistoryStore
+import com.ayashii.kuro.data.offline.OfflineMusicManager
+import java.io.File
 import com.ayashii.kuro.data.remote.MusicRepository
 import com.ayashii.kuro.data.settings.SettingsManager
 import com.ayashii.kuro.widget.WIDGET_SOURCE_URL_KEY
@@ -320,7 +327,19 @@ class PlaybackService : MediaSessionService() {
             .setMp4ExtractorFlags(androidx.media3.extractor.mp4.Mp4Extractor.FLAG_WORKAROUND_IGNORE_EDIT_LISTS)
             .setFragmentedMp4ExtractorFlags(androidx.media3.extractor.mp4.FragmentedMp4Extractor.FLAG_WORKAROUND_IGNORE_EDIT_LISTS)
 
-        val mediaSourceFactory = DefaultMediaSourceFactory(httpDataSourceFactory, extractorsFactory)
+        val streamCacheDir = File(cacheDir, "exo_stream_cache").apply { mkdirs() }
+        val streamCache = SimpleCache(
+            streamCacheDir,
+            LeastRecentlyUsedCacheEvictor(128L * 1024L * 1024L),
+            StandaloneDatabaseProvider(this)
+        )
+        streamSimpleCache = streamCache
+        val cacheDataSourceFactory = CacheDataSource.Factory()
+            .setCache(streamCache)
+            .setUpstreamDataSourceFactory(httpDataSourceFactory)
+            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+
+        val mediaSourceFactory = DefaultMediaSourceFactory(cacheDataSourceFactory, extractorsFactory)
 
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
@@ -374,7 +393,7 @@ class PlaybackService : MediaSessionService() {
                 } else if (playbackState == Player.STATE_ENDED) {
                     val current = PlayerQueueManager.currentTrack.value
                     if (current != null) {
-                        TasteManager.getInstance(this@PlaybackService).recordTrackPlayed(current)
+                        HistoryStore.getInstance(this@PlaybackService).recordTrackPlayed(current)
                     }
                     if (PlayerQueueManager.consumeSleepTimerEndOfTrack()) {
                         exoPlayer.pause()
@@ -520,11 +539,6 @@ class PlaybackService : MediaSessionService() {
                             } else {
                                 Player.REPEAT_MODE_OFF
                             }
-                            if (nextRepeat == Player.REPEAT_MODE_ONE) {
-                                PlayerQueueManager.currentTrack.value?.let {
-                                    TasteManager.getInstance(this@PlaybackService).recordTrackRepeated(it)
-                                }
-                            }
                             updateNotificationCustomLayout()
                             syncNotificationAndWidgets()
                         }
@@ -644,9 +658,6 @@ class PlaybackService : MediaSessionService() {
                 next.put(array.getJSONObject(index))
             }
             prefs.edit().putString("fav_list", next.toString()).apply()
-            if (current != null) {
-                TasteManager.getInstance(this).recordTrackLiked(current)
-            }
         }
 
         if (current != null && current.id == id) {
@@ -745,7 +756,7 @@ class PlaybackService : MediaSessionService() {
                     repository.getRadioTracks(current.id)
                 }.filter { it.id != current.id }
                 if (radioTracks.isNotEmpty()) {
-                    val ranked = TasteManager.getInstance(this@PlaybackService).rankRadioTracks(radioTracks)
+                    val ranked = radioTracks
                     ranked.forEach { PlayerQueueManager.addToQueue(it) }
                     val fetchedNext = PlayerQueueManager.getNextTrack(userInitiated = userInitiated, isErrorRecovery = isErrorRecovery)
                     if (fetchedNext != null) {
@@ -775,8 +786,13 @@ class PlaybackService : MediaSessionService() {
         servicePlayJob = serviceScope.launch {
             try {
                 val quality = SettingsManager.getInstance().audioQuality.value
-                val resolved = withContext(Dispatchers.IO) {
-                    runCatching { repository.getAudioStream(track.url, quality) }.getOrNull()
+                val offlineUri = OfflineMusicManager.getInstance(this@PlaybackService).getLocalAudioUri(track.id)
+                val resolved = if (offlineUri != null) {
+                    com.ayashii.kuro.data.remote.ResolvedStream(url = offlineUri, mimeType = null)
+                } else {
+                    withContext(Dispatchers.IO) {
+                        runCatching { repository.getAudioStream(track.url, quality) }.getOrNull()
+                    }
                 }
                 if (resolved == null) {
                     Log.e(TAG, "Failed to resolve stream for ${track.title}")
@@ -800,7 +816,12 @@ class PlaybackService : MediaSessionService() {
                 )
                 PlayerQueueManager.updateCurrentTrack(updatedTrack)
                 PlayerQueueManager.recordPlaybackSuccess()
-                TasteManager.getInstance(this@PlaybackService).recordTrackPlayed(updatedTrack)
+                HistoryStore.getInstance(this@PlaybackService).recordTrackPlayed(updatedTrack)
+                if (offlineUri == null && AuthManager.getInstance().isLoggedIn()) {
+                    launch(Dispatchers.IO) {
+                        runCatching { repository.reportPlaybackToYouTubeMusic(updatedTrack.id) }
+                    }
+                }
 
                 val metadata = buildTrackMediaMetadata(updatedTrack)
 
@@ -858,9 +879,7 @@ class PlaybackService : MediaSessionService() {
                                         tk.isEmpty() || existingTitles.add(tk)
                                     }
                                 }
-                                val ranked = TasteManager.getInstance(this@PlaybackService)
-                                    .rankRadioTracks(uniqueRadio)
-                                ranked.forEach { PlayerQueueManager.addToQueue(it) }
+                                uniqueRadio.forEach { PlayerQueueManager.addToQueue(it) }
                             }
                         }
                         val updatedQueue = PlayerQueueManager.queueState.value
@@ -902,8 +921,13 @@ class PlaybackService : MediaSessionService() {
                     PlayerQueueManager.playTrack(track, listOf(track))
                 }
                 val quality = SettingsManager.getInstance().audioQuality.value
-                val resolved = withContext(Dispatchers.IO) {
-                    runCatching { repository.getAudioStream(track.url, quality) }.getOrNull()
+                val offlineUri = OfflineMusicManager.getInstance(this@PlaybackService).getLocalAudioUri(track.id)
+                val resolved = if (offlineUri != null) {
+                    com.ayashii.kuro.data.remote.ResolvedStream(url = offlineUri, mimeType = null)
+                } else {
+                    withContext(Dispatchers.IO) {
+                        runCatching { repository.getAudioStream(track.url, quality) }.getOrNull()
+                    }
                 } ?: return@launch
 
                 val metadata = buildTrackMediaMetadata(track)
@@ -966,6 +990,8 @@ class PlaybackService : MediaSessionService() {
             mediaSession = null
         }
         player = null
+        runCatching { streamSimpleCache?.release() }
+        streamSimpleCache = null
         super.onDestroy()
     }
 }

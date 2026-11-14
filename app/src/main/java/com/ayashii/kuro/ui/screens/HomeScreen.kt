@@ -236,7 +236,7 @@ fun HomeScreen(
                                 track = track.copy(isFavorite = isFav),
                                 isPlaying = currentTrack?.id == track.id,
                                 isLoading = isLoadingTrack && currentTrack?.id == track.id,
-                                onClick = { viewModel.playTrackFromSearch(track) },
+                                onClick = { viewModel.playTrack(track, listOf(track)) },
                                 onFavoriteClick = { viewModel.toggleFavorite(track) },
                                 onMoreClick = { trackForOptions = track },
                                 onSwipeAddToQueue = { viewModel.addToQueue(track) }
@@ -600,7 +600,7 @@ fun HomeScreen(
                                     YtmMusicCard(
                                         track = track,
                                         isPlaying = currentTrack?.id == track.id,
-                                        onClick = { viewModel.playTrackFromSearch(track) },
+                                        onClick = { viewModel.playTrack(track, listOf(track)) },
                                         onLongClick = { trackForOptions = track }
                                     )
                                 }
@@ -624,7 +624,7 @@ fun HomeScreen(
                             track = track.copy(isFavorite = isFav),
                             isPlaying = currentTrack?.id == track.id,
                             isLoading = isLoadingTrack && currentTrack?.id == track.id,
-                            onClick = { viewModel.playTrackFromSearch(track) },
+                            onClick = { viewModel.playTrack(track, listOf(track)) },
                             onFavoriteClick = { viewModel.toggleFavorite(track) },
                             onMoreClick = { trackForOptions = track },
                             onSwipeAddToQueue = { viewModel.addToQueue(track) }

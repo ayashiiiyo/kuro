@@ -578,9 +578,15 @@ suite.assert_true(
     "RECEIVER_NOT_EXPORTED flag not found in AudioOutputManager"
 )
 
-taste_mgr = suite.read_file("app/src/main/java/com/ayashii/kuro/data/recommendation/TasteManager.kt")
+history_store_path = "app/src/main/java/com/ayashii/kuro/data/cache/HistoryStore.kt"
+taste_mgr_path = "app/src/main/java/com/ayashii/kuro/data/recommendation/TasteManager.kt"
+if os.path.exists(os.path.join(ROOT_DIR, taste_mgr_path)):
+    taste_mgr = suite.read_file(taste_mgr_path)
+    st08_taste = "persistTasteDataAsync" in taste_mgr and "coroutineScope.launch" in taste_mgr
+else:
+    taste_mgr = suite.read_file(history_store_path)
+    st08_taste = "saveListAsync" in taste_mgr and "scope.launch" in taste_mgr
 st08_favs = "saveStoredFavorites" in music_vm and "Dispatchers.IO" in music_vm
-st08_taste = "persistTasteDataAsync" in taste_mgr and "coroutineScope.launch" in taste_mgr
 suite.assert_true(
     st08_favs and st08_taste,
     "ST-08",
@@ -841,7 +847,7 @@ suite.assert_true(
 )
 
 theme_kt = suite.read_file("app/src/main/java/com/ayashii/kuro/ui/theme/Theme.kt")
-taste_mgr = suite.read_file("app/src/main/java/com/ayashii/kuro/data/recommendation/TasteManager.kt")
+taste_mgr = suite.read_file(taste_mgr_path if os.path.exists(os.path.join(ROOT_DIR, taste_mgr_path)) else history_store_path)
 v3812_check = (
     "unwrap_netease_json_line" in liriqo_rs
     and "unwrapNetEaseJsonText" in lrc_parser
@@ -854,7 +860,7 @@ v3812_check = (
     and "artworkBreathingScale" not in full_player
     and "miniArtScale" not in mini_player
     and "bgRecedeScale" not in main_activity
-    and "20000L" in taste_mgr
+    and ("20000L" in taste_mgr or "20_000L" in taste_mgr)
 )
 suite.assert_true(
     v3812_check,

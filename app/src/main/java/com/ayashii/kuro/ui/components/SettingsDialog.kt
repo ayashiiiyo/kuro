@@ -1,6 +1,12 @@
 package com.ayashii.kuro.ui.components
 
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -87,6 +93,24 @@ fun SettingsDialog(
     val currentQuality by settingsManager.audioQuality.collectAsState()
     val currentSubQuality by settingsManager.audioSubQuality.collectAsState()
     val autoTranslate by settingsManager.autoTranslate.collectAsState()
+    val downloadTreeUri by settingsManager.downloadTreeUri.collectAsState()
+    val downloadSubQuality by settingsManager.downloadSubQuality.collectAsState()
+    var showDownloadQualityPicker by remember { mutableStateOf(false) }
+
+    val folderPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }
+            settingsManager.setDownloadTreeUri(uri.toString())
+            Toast.makeText(context, "Folder download disimpan", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     val calculatingLabel = stringResource(R.string.common_calculating)
     var cacheSize by remember { mutableStateOf(calculatingLabel) }
@@ -440,6 +464,135 @@ fun SettingsDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(colors.card)
+                        .border(1.dp, colors.border, RoundedCornerShape(12.dp))
+                        .clickable { folderPickerLauncher.launch(null) }
+                        .padding(horizontal = 14.dp, vertical = 11.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Icon(
+                            imageVector = Icons.Outlined.FolderOpen,
+                            contentDescription = null,
+                            tint = colors.textPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "Folder Musik Offline",
+                                style = Typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = colors.textPrimary
+                            )
+                            Text(
+                                text = downloadTreeUri?.let { Uri.parse(it).lastPathSegment ?: it } ?: "Default (Penyimpanan Internal)",
+                                style = Typography.bodySmall,
+                                color = colors.textMuted,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                    if (downloadTreeUri != null) {
+                        Text(
+                            text = "Reset",
+                            style = Typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.accent,
+                            modifier = Modifier
+                                .clickable { settingsManager.setDownloadTreeUri(null) }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(colors.card)
+                        .border(1.dp, colors.border, RoundedCornerShape(12.dp))
+                        .clickable { showDownloadQualityPicker = !showDownloadQualityPicker }
+                        .padding(horizontal = 14.dp, vertical = 11.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Icon(
+                            imageVector = Icons.Outlined.Download,
+                            contentDescription = null,
+                            tint = colors.textPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "Kualitas Download Default",
+                                style = Typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = colors.textPrimary
+                            )
+                            Text(
+                                text = downloadSubQuality.badge,
+                                style = Typography.bodySmall,
+                                color = colors.textMuted
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = if (showDownloadQualityPicker) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = colors.textPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                AnimatedVisibility(visible = showDownloadQualityPicker) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        AudioSubQuality.values().forEach { sub ->
+                            val selected = sub == downloadSubQuality
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (selected) colors.accent.copy(alpha = 0.14f) else colors.card)
+                                    .border(1.dp, if (selected) colors.accent else colors.border, RoundedCornerShape(10.dp))
+                                    .clickable {
+                                        settingsManager.setDownloadSubQuality(sub)
+                                        showDownloadQualityPicker = false
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(sub.badge, style = Typography.bodySmall, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                                    Text(sub.subtitleId, style = Typography.labelSmall, color = colors.textMuted)
+                                }
+                                if (selected) {
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = colors.accent, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+                HorizontalDivider(color = colors.border, thickness = 1.dp)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -513,6 +666,135 @@ fun SettingsDialog(
                                 tint = colors.textPrimary,
                                 modifier = Modifier.size(20.dp)
                             )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+                HorizontalDivider(color = colors.border, thickness = 1.dp)
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(colors.card)
+                        .border(1.dp, colors.border, RoundedCornerShape(12.dp))
+                        .clickable { folderPickerLauncher.launch(null) }
+                        .padding(horizontal = 14.dp, vertical = 11.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Icon(
+                            imageVector = Icons.Outlined.FolderOpen,
+                            contentDescription = null,
+                            tint = colors.textPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "Folder Musik Offline",
+                                style = Typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = colors.textPrimary
+                            )
+                            Text(
+                                text = downloadTreeUri?.let { Uri.parse(it).lastPathSegment ?: it } ?: "Default (Penyimpanan Internal)",
+                                style = Typography.bodySmall,
+                                color = colors.textMuted,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                    if (downloadTreeUri != null) {
+                        Text(
+                            text = "Reset",
+                            style = Typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.accent,
+                            modifier = Modifier
+                                .clickable { settingsManager.setDownloadTreeUri(null) }
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(colors.card)
+                        .border(1.dp, colors.border, RoundedCornerShape(12.dp))
+                        .clickable { showDownloadQualityPicker = !showDownloadQualityPicker }
+                        .padding(horizontal = 14.dp, vertical = 11.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Icon(
+                            imageVector = Icons.Outlined.Download,
+                            contentDescription = null,
+                            tint = colors.textPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "Kualitas Download Default",
+                                style = Typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = colors.textPrimary
+                            )
+                            Text(
+                                text = downloadSubQuality.badge,
+                                style = Typography.bodySmall,
+                                color = colors.textMuted
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = if (showDownloadQualityPicker) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = colors.textPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                AnimatedVisibility(visible = showDownloadQualityPicker) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        AudioSubQuality.values().forEach { sub ->
+                            val selected = sub == downloadSubQuality
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (selected) colors.accent.copy(alpha = 0.14f) else colors.card)
+                                    .border(1.dp, if (selected) colors.accent else colors.border, RoundedCornerShape(10.dp))
+                                    .clickable {
+                                        settingsManager.setDownloadSubQuality(sub)
+                                        showDownloadQualityPicker = false
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(sub.badge, style = Typography.bodySmall, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                                    Text(sub.subtitleId, style = Typography.labelSmall, color = colors.textMuted)
+                                }
+                                if (selected) {
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = colors.accent, modifier = Modifier.size(16.dp))
+                                }
+                            }
                         }
                     }
                 }

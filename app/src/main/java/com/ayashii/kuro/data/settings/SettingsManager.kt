@@ -182,6 +182,31 @@ class SettingsManager private constructor(private val context: Context) {
     private val _autoTranslate = MutableStateFlow(prefs.getBoolean(KEY_AUTO_TRANSLATE, true))
     val autoTranslate: StateFlow<Boolean> = _autoTranslate.asStateFlow()
 
+    private val _downloadTreeUri = MutableStateFlow(prefs.getString(KEY_DOWNLOAD_TREE_URI, null))
+    val downloadTreeUri: StateFlow<String?> = _downloadTreeUri.asStateFlow()
+
+    private val _downloadSubQuality = MutableStateFlow(loadDownloadSubQuality())
+    val downloadSubQuality: StateFlow<AudioSubQuality> = _downloadSubQuality.asStateFlow()
+
+    private fun loadDownloadSubQuality(): AudioSubQuality {
+        val name = prefs.getString(KEY_DOWNLOAD_SUB_QUALITY, AudioSubQuality.HIGH_M4A_256.name) ?: AudioSubQuality.HIGH_M4A_256.name
+        return try {
+            AudioSubQuality.valueOf(name)
+        } catch (_: Exception) {
+            AudioSubQuality.HIGH_M4A_256
+        }
+    }
+
+    fun setDownloadTreeUri(uri: String?) {
+        _downloadTreeUri.value = uri
+        prefs.edit().putString(KEY_DOWNLOAD_TREE_URI, uri).apply()
+    }
+
+    fun setDownloadSubQuality(subQuality: AudioSubQuality) {
+        _downloadSubQuality.value = subQuality
+        prefs.edit().putString(KEY_DOWNLOAD_SUB_QUALITY, subQuality.name).apply()
+    }
+
     private fun loadThemeMode(): ThemeMode {
         val name = prefs.getString(KEY_THEME_MODE, ThemeMode.SYSTEM.name) ?: ThemeMode.SYSTEM.name
         return try {

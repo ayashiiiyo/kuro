@@ -231,12 +231,11 @@ fun LoginWebViewDialog(
                                     cookieManager.getCookie("https://m.youtube.com"),
                                     cookieManager.getCookie(currentUrl)
                                 )
-                                val hasAuth = cookies.contains("SAPISID") ||
-                                    cookies.contains("__Secure-3PAPISID") ||
-                                    cookies.contains("__Secure-1PAPISID") ||
-                                    cookies.contains("LOGIN_INFO")
+                                val hasAuth = cookies.contains("SAPISID=") ||
+                                    cookies.contains("__Secure-3PAPISID=") ||
+                                    cookies.contains("__Secure-1PAPISID=")
 
-                                if (!hasAuth || (!currentUrl.contains("music.youtube.com") && !currentUrl.contains("youtube.com"))) {
+                                if (!hasAuth || !currentUrl.contains("music.youtube.com")) {
                                     return
                                 }
 

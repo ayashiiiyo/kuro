@@ -63,7 +63,6 @@ fun VibeScreen(
     modifier: Modifier = Modifier
 ) {
     val colors = KuroAppTheme.colors
-    val onRepeatTracks by viewModel.onRepeatTracks.collectAsState()
     val recentlyPlayed by viewModel.recentlyPlayed.collectAsState()
     val trendingTracks by viewModel.trendingTracks.collectAsState()
     val favorites by viewModel.favorites.collectAsState()
@@ -95,7 +94,6 @@ fun VibeScreen(
     )
 
     val seedArtwork = currentTrack?.thumbnailUrlForDisplay(512)
-        ?: onRepeatTracks.firstOrNull()?.thumbnailUrlForDisplay(512)
         ?: favorites.firstOrNull()?.thumbnailUrlForDisplay(512)
     val dominantColor = rememberDynamicDominantColor(seedArtwork)
 
@@ -107,10 +105,21 @@ fun VibeScreen(
         }
     }
 
-    val statsVersion by viewModel.tasteManager.statsVersion.collectAsState()
-    val totalPlays = remember(statsVersion, recentlyPlayed, onRepeatTracks) { viewModel.tasteManager.getTotalPlays() }
-    val uniqueArtists = remember(statsVersion, recentlyPlayed, onRepeatTracks) { viewModel.tasteManager.getUniqueArtistsCount() }
-    val topArtists = remember(statsVersion, recentlyPlayed, onRepeatTracks) { viewModel.tasteManager.getTopArtists(5) }
+    val totalPlays = remember(recentlyPlayed) { recentlyPlayed.size }
+    val uniqueArtists = remember(recentlyPlayed, favorites) {
+        (recentlyPlayed + favorites).mapNotNull { it.artist.trim().takeIf { a -> a.isNotBlank() && a != "Unknown Artist" }?.lowercase() }.distinct().size
+    }
+    val topArtists = remember(recentlyPlayed, favorites) {
+        (recentlyPlayed + favorites)
+            .map { it.artist.trim() }
+            .filter { it.isNotBlank() && it != "Unknown Artist" }
+            .groupingBy { it }
+            .eachCount()
+            .entries
+            .sortedByDescending { it.value }
+            .take(5)
+            .map { Pair(it.key, it.value) }
+    }
 
     LazyColumn(
         modifier = modifier
@@ -338,7 +347,7 @@ fun VibeScreen(
                     track = track.copy(isFavorite = isFav),
                     isPlaying = currentTrack?.id == track.id,
                     isLoading = isLoadingTrack && currentTrack?.id == track.id,
-                    onClick = { viewModel.playTrackFromSearch(track) },
+                    onClick = { viewModel.playTrack(track, listOf(track)) },
                     onFavoriteClick = { viewModel.toggleFavorite(track) },
                     onMoreClick = { trackForOptions = track },
                     onSwipeAddToQueue = { viewModel.addToQueue(track) }

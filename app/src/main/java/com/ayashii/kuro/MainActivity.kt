@@ -123,6 +123,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private val viewModel: MusicViewModel by viewModels()
+    private var lastActivePage: Int = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -142,8 +143,26 @@ class MainActivity : ComponentActivity() {
         setContent {
             val themeMode by viewModel.themeMode.collectAsState()
             KuroTheme(themeMode = themeMode) {
-                MainAppScreen(viewModel = viewModel)
+                MainAppScreen(viewModel = viewModel, onPageChanged = { lastActivePage = it })
             }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        viewModel.onAppForegrounded()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        runCatching { coil.Coil.imageLoader(this).memoryCache?.clear() }
+        viewModel.onAppBackgrounded(lastActivePage)
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+            runCatching { coil.Coil.imageLoader(this).memoryCache?.clear() }
         }
     }
 
@@ -162,9 +181,13 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun MainAppScreen(viewModel: MusicViewModel) {
+fun MainAppScreen(viewModel: MusicViewModel, onPageChanged: (Int) -> Unit = {}) {
     val navItems = Screen.bottomNavItems
-    val pagerState = rememberPagerState(initialPage = 0, pageCount = { navItems.size })
+    val restoredPage by viewModel.restoredPage.collectAsState()
+    val pagerState = rememberPagerState(initialPage = restoredPage.coerceIn(0, navItems.lastIndex), pageCount = { navItems.size })
+    LaunchedEffect(pagerState.currentPage) {
+        onPageChanged(pagerState.currentPage)
+    }
     val coroutineScope = rememberCoroutineScope()
 
     val currentTrack by viewModel.currentTrack.collectAsState()
