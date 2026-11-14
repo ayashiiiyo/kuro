@@ -236,7 +236,7 @@ fun HomeScreen(
                                 track = track.copy(isFavorite = isFav),
                                 isPlaying = currentTrack?.id == track.id,
                                 isLoading = isLoadingTrack && currentTrack?.id == track.id,
-                                onClick = { viewModel.playTrack(track, genreTracks) },
+                                onClick = { viewModel.playTrackFromSearch(track) },
                                 onFavoriteClick = { viewModel.toggleFavorite(track) },
                                 onMoreClick = { trackForOptions = track },
                                 onSwipeAddToQueue = { viewModel.addToQueue(track) }
@@ -261,7 +261,7 @@ fun HomeScreen(
                 ) {
                     val homeTracks = trendingTracks.ifEmpty { homeSections.flatMap { it.tracks } }.distinctBy { it.id }
 
-                    val startListeningTracks = (recentlyPlayed.ifEmpty { homeTracks }).distinctBy { it.id }.take(3)
+                    val startListeningTracks = (homeSections.firstOrNull()?.tracks ?: homeTracks).distinctBy { it.id }.take(3)
                     if (startListeningTracks.isNotEmpty()) {
                         item(key = "start_listening_header") {
                             Column(
@@ -341,6 +341,7 @@ fun HomeScreen(
 
                     val startIds = startListeningTracks.mapTo(HashSet()) { it.id }
                     val mixTracks = homeTracks.filter { it.id !in startIds }.take(8).ifEmpty { homeTracks.drop(3).take(8) }
+                    val mixIds = mixTracks.mapTo(HashSet()) { it.id }
                     if (mixTracks.isNotEmpty()) {
                         item(key = "to_get_you_started_header") {
                             Text(
@@ -420,7 +421,7 @@ fun HomeScreen(
                         }
                     }
 
-                    val quickPicks = (recentlyPlayed.ifEmpty { homeTracks }).distinctBy { it.id }.take(4)
+                    val quickPicks = homeTracks.filter { it.id !in startIds && it.id !in mixIds }.take(4).ifEmpty { homeTracks.take(4) }
                     if (quickPicks.isNotEmpty()) {
                         item(key = "quick_picks_title") {
                             Row(
@@ -599,7 +600,7 @@ fun HomeScreen(
                                     YtmMusicCard(
                                         track = track,
                                         isPlaying = currentTrack?.id == track.id,
-                                        onClick = { viewModel.playTrack(track, section.tracks) },
+                                        onClick = { viewModel.playTrackFromSearch(track) },
                                         onLongClick = { trackForOptions = track }
                                     )
                                 }
@@ -623,7 +624,7 @@ fun HomeScreen(
                             track = track.copy(isFavorite = isFav),
                             isPlaying = currentTrack?.id == track.id,
                             isLoading = isLoadingTrack && currentTrack?.id == track.id,
-                            onClick = { viewModel.playTrack(track, trendingTracks) },
+                            onClick = { viewModel.playTrackFromSearch(track) },
                             onFavoriteClick = { viewModel.toggleFavorite(track) },
                             onMoreClick = { trackForOptions = track },
                             onSwipeAddToQueue = { viewModel.addToQueue(track) }

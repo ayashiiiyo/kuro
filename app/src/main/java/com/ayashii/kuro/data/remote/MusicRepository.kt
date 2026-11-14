@@ -918,10 +918,15 @@ class MusicRepository {
                 ?.optJSONArray("contents") ?: return emptyList()
 
             for (s in 0 until sections.length()) {
-                val shelfObj = sections.optJSONObject(s)?.optJSONObject("musicCarouselShelfRenderer") ?: continue
-                val hRuns = shelfObj.optJSONObject("header")
+                val secNode = sections.optJSONObject(s) ?: continue
+                val shelfObj = secNode.optJSONObject("musicCarouselShelfRenderer")
+                    ?: secNode.optJSONObject("musicShelfRenderer")
+                    ?: continue
+
+                val headerRenderer = shelfObj.optJSONObject("header")
                     ?.optJSONObject("musicCarouselShelfBasicHeaderRenderer")
-                    ?.optJSONObject("title")?.optJSONArray("runs")
+                val hRuns = headerRenderer?.optJSONObject("title")?.optJSONArray("runs")
+                    ?: shelfObj.optJSONObject("title")?.optJSONArray("runs")
                 var shelfTitle = ""
                 if (hRuns != null) {
                     val sb = StringBuilder()
@@ -932,9 +937,7 @@ class MusicRepository {
                 }
                 if (shelfTitle.isBlank()) shelfTitle = defaultTitle
 
-                val sRuns = shelfObj.optJSONObject("header")
-                    ?.optJSONObject("musicCarouselShelfBasicHeaderRenderer")
-                    ?.optJSONObject("strapline")?.optJSONArray("runs")
+                val sRuns = headerRenderer?.optJSONObject("strapline")?.optJSONArray("runs")
                 var strapline = ""
                 if (sRuns != null) {
                     val sb = StringBuilder()
@@ -949,7 +952,12 @@ class MusicRepository {
                 for (i in 0 until items.length()) {
                     val it = items.optJSONObject(i) ?: continue
                     val track = parseSingleTrackItem(it)
-                    if (track != null) tracks.add(track)
+                    if (track != null && tracks.none { existing ->
+                            com.ayashii.kuro.data.native.KuroNativeCore.isDuplicateOrVariantTrack(track, existing)
+                        }
+                    ) {
+                        tracks.add(track)
+                    }
                 }
 
                 if (tracks.isNotEmpty()) {
@@ -1017,6 +1025,23 @@ class MusicRepository {
                         ?.optJSONObject("watchEndpoint")
                         ?.optString("videoId", "")
                         .orEmpty()
+                }
+                if (videoId.isBlank()) {
+                    val menuItems = r.optJSONObject("menu")?.optJSONObject("menuRenderer")?.optJSONArray("items")
+                    if (menuItems != null) {
+                        for (m in 0 until menuItems.length()) {
+                            val mVid = menuItems.optJSONObject(m)
+                                ?.optJSONObject("menuNavigationItemRenderer")
+                                ?.optJSONObject("navigationEndpoint")
+                                ?.optJSONObject("watchEndpoint")
+                                ?.optString("videoId", "")
+                                .orEmpty()
+                            if (mVid.isNotBlank()) {
+                                videoId = mVid
+                                break
+                            }
+                        }
+                    }
                 }
                 if (videoId.isBlank()) return null
 

@@ -386,9 +386,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         if (queueManager.queueState.value.size <= 2 || remaining <= 3) {
             viewModelScope.launch(Dispatchers.IO) {
                 try {
-                    val isLoggedIn = authState.value != null
-                    val tuner = if (isLoggedIn) "AUTOMIX_SETTING_DISCOVER" else "AUTOMIX_SETTING_NORMAL"
-                    val radioTracks = repository.getRadioTracks(track.id, tuner)
+                    val radioTracks = repository.getRadioTracks(track.id)
                     if (radioTracks.isNotEmpty()) {
                         appendRadioTracks(radioTracks)
                         val currentList = queueManager.queueState.value
@@ -819,44 +817,10 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     fun loadTrending() {
         viewModelScope.launch {
             _isLoadingTrending.value = true
-            val isLoggedIn = authState.value != null
-            val rawShelves = repository.getHomeShelves().toMutableList()
-            val onRepeat = tasteManager.onRepeatTracks.value
-            if (onRepeat.isNotEmpty()) {
-                rawShelves.add(0, HomeSection(
-                    title = settingsManager.getLocalizedString(com.ayashii.kuro.R.string.home_on_repeat_title),
-                    subtitle = settingsManager.getLocalizedString(com.ayashii.kuro.R.string.home_on_repeat_sub),
-                    tracks = onRepeat
-                ))
-            }
-            if (isLoggedIn) {
-                val seedCandidates = (onRepeat + _favorites.value + tasteManager.recentlyPlayed.value)
-                    .distinctBy { it.id }
-                    .take(2)
-                if (seedCandidates.isNotEmpty()) {
-                    val discoveryPool = mutableListOf<Track>()
-                    for ((idx, seed) in seedCandidates.withIndex()) {
-                        val mode = if (idx == 0) "AUTOMIX_SETTING_DISCOVER" else "AUTOMIX_SETTING_FAMILIAR"
-                        val rTracks = repository.getRadioTracks(seed.id, mode)
-                        discoveryPool.addAll(rTracks.take(10))
-                    }
-                    val rankedMix = tasteManager.rankRadioTracks(discoveryPool.distinctBy { it.id })
-                    if (rankedMix.isNotEmpty()) {
-                        val insertPos = if (rawShelves.isNotEmpty()) 1 else 0
-                        rawShelves.add(
-                            insertPos,
-                            HomeSection(
-                                title = settingsManager.getLocalizedString(com.ayashii.kuro.R.string.home_mix_personal),
-                                subtitle = authState.value?.name?.takeIf { it.isNotBlank() } ?: "YouTube Music AI",
-                                tracks = rankedMix.take(16)
-                            )
-                        )
-                    }
-                }
-            }
-            _homeSections.value = rawShelves
-            val tracks = if (rawShelves.isNotEmpty()) {
-                rawShelves.flatMap { it.tracks }.distinctBy { it.id }
+            val ytmShelves = repository.getHomeShelves()
+            _homeSections.value = ytmShelves
+            val tracks = if (ytmShelves.isNotEmpty()) {
+                ytmShelves.flatMap { it.tracks }.distinctBy { it.id }
             } else {
                 repository.getTrendingTracks()
             }
@@ -929,25 +893,20 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         genreJob = viewModelScope.launch {
             _isLoadingGenre.value = true
             try {
-                val isLoggedIn = authState.value != null
-                if (isLoggedIn) {
-                    val topArtist = tasteManager.getTopArtists(3).firstOrNull()?.first
-                    val primaryResults = repository.searchTracks("$genre music hits")
-                    val seedTrack = primaryResults.firstOrNull()
-                    val radioSupplement = if (seedTrack != null) {
-                        repository.getRadioTracks(seedTrack.id, "AUTOMIX_SETTING_DISCOVER").take(12)
-                    } else if (!topArtist.isNullOrBlank()) {
-                        repository.searchTracks("$genre $topArtist").take(8)
-                    } else {
-                        emptyList()
-                    }
-                    val combined = (primaryResults.take(8) + radioSupplement + primaryResults.drop(8))
-                        .distinctBy { it.id }
-                    _genreTracks.value = tasteManager.rankRadioTracks(combined)
+                val results = repository.searchTracks(genre)
+                val seed = results.firstOrNull()
+                val ytmRadio = if (seed != null) {
+                    repository.getRadioTracks(seed.id)
                 } else {
-                    val results = repository.searchTracks("$genre music hits")
-                    _genreTracks.value = results
+                    emptyList()
                 }
+                val combined = ArrayList<Track>(results.size + ytmRadio.size)
+                for (t in (results.take(5) + ytmRadio + results.drop(5))) {
+                    if (combined.none { com.ayashii.kuro.data.native.KuroNativeCore.isDuplicateOrVariantTrack(t, it) }) {
+                        combined.add(t)
+                    }
+                }
+                _genreTracks.value = combined
             } catch (e: Exception) {
                 Log.e("KuroMusicViewModel", "Load genre tracks error: ${e.message}")
                 _genreTracks.value = emptyList()

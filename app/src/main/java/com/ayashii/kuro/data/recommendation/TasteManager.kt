@@ -187,13 +187,7 @@ class TasteManager private constructor(context: Context) {
     }
 
     private fun refreshOnRepeat() {
-        val sorted = scoresMap.entries
-            .filter { it.value > 3 }
-            .sortedByDescending { it.value }
-            .take(15)
-
-        val list = sorted.mapNotNull { trackDataMap[it.key] }
-        _onRepeatTracks.value = list
+        _onRepeatTracks.value = emptyList()
     }
 
     private fun persistTasteDataAsync() {
@@ -352,21 +346,14 @@ class TasteManager private constructor(context: Context) {
      * - Heavily penalized if repeatedly skipped
      */
     fun rankRadioTracks(candidates: List<Track>): List<Track> {
-        if (candidates.isEmpty()) return candidates
-        val isLoggedIn = try {
-            com.ayashii.kuro.data.auth.AuthManager.getInstance().isLoggedIn()
-        } catch (_: Throwable) {
-            false
+        if (candidates.size <= 1) return candidates
+        val out = ArrayList<Track>(candidates.size)
+        for (cand in candidates) {
+            if (out.none { com.ayashii.kuro.data.native.KuroNativeCore.isDuplicateOrVariantTrack(cand, it) }) {
+                out.add(cand)
+            }
         }
-        val topArtistLimit = if (isLoggedIn) 12 else 5
-        val topArtistList = getTopArtists(topArtistLimit).map { it.first }
-
-        return com.ayashii.kuro.data.native.KuroNativeCore.rankRadioTracks(
-            candidates = candidates,
-            scores = scoresMap,
-            topArtists = topArtistList,
-            preserveNeuralOrder = isLoggedIn
-        )
+        return out
     }
 
     fun getUniqueArtistsCount(): Int {

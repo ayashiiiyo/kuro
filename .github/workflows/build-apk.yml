@@ -109,17 +109,14 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.8.16 — Playback & Notification Controls Fix
+          ## Kuro v3.8.17 — 100% YouTube Music Engine
 
-          - **Media Notification Controls**:
-            - Added custom Favorite and Repeat buttons with live state, synced with the widget favorite action.
-            - Repeat toggles now update playback mode and the notification icon immediately.
-          - **Playback Fixes**:
-            - Next/Previous no longer dead-ends at queue end: they seed radio or restart the current track.
-            - Playing from Search builds a proper queue, and recently played tracks play in context.
-            - Added a NewPipe related-tracks fallback when Automix returns nothing.
-          - **Widget**:
-            - Square widget now has a repeat-mode button and persists repeat state.
+          - **Pure YouTube Music Algorithm**:
+            - Removed Kuro's local ranking/scoring so Home shelves, search, Automix radio, and Vibe follow YouTube Music's native order untouched.
+            - Covers and duplicate variants are deduplicated by normalized title without re-sorting the queue.
+          - **Home & Search**:
+            - Parse both carousel and shelf renderers for complete Home content, with videoId fallback through menu endpoints.
+            - Home, genre, and Vibe track clicks now start YouTube Music Automix radio directly.
           - Published signed release, per-ABI, and debug APKs.
           EOF
           gh release delete "$RELEASE_TAG" --yes --cleanup-tag 2>/dev/null || true
@@ -128,7 +125,7 @@ jobs:
             "${{ steps.apk.outputs.arm64_path }}" \
             "${{ steps.apk.outputs.arm32_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (Playback & Notification Controls Fix)" \
+            --title "Kuro $RELEASE_TAG (100% YouTube Music Engine)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 

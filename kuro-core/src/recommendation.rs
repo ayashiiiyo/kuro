@@ -1,6 +1,5 @@
-use crate::sanitizer::clean_title;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CandidateTrack {
@@ -22,44 +21,10 @@ pub struct TasteProfile {
     pub top_artists: Vec<String>,
 }
 
-fn normalize_title_key(raw: &str) -> String {
-    let cleaned = clean_title(raw).to_lowercase();
-    let mut out = String::with_capacity(cleaned.len());
-    for ch in cleaned.chars() {
-        if ch.is_alphanumeric() {
-            out.push(ch);
-        }
-    }
-    out
-}
-
 /**
- * Preserves YouTube Music's native neural-network radio ordering while
- * deduplicating identical song titles (covers/alternate uploads) and
- * pushing repeatedly skipped tracks (negative score) to the end.
+ * Pure pass-through: Kuro local recommendation ranking is disabled so
+ * 100% of YouTube Music's native algorithm sequence is preserved untouched.
  */
-pub fn rank_candidates(candidates: Vec<CandidateTrack>, profile: &TasteProfile) -> Vec<CandidateTrack> {
-    if candidates.len() <= 1 {
-        return candidates;
-    }
-
-    let mut primary = Vec::with_capacity(candidates.len());
-    let mut skipped_tail = Vec::new();
-    let mut seen_titles = HashSet::new();
-
-    for track in candidates {
-        let title_key = normalize_title_key(&track.title);
-        if !title_key.is_empty() && !seen_titles.insert(title_key) {
-            continue;
-        }
-        let raw_score = *profile.scores.get(&track.id).unwrap_or(&0);
-        if raw_score <= -4 {
-            skipped_tail.push(track);
-        } else {
-            primary.push(track);
-        }
-    }
-
-    primary.extend(skipped_tail);
-    primary
+pub fn rank_candidates(candidates: Vec<CandidateTrack>, _profile: &TasteProfile) -> Vec<CandidateTrack> {
+    candidates
 }

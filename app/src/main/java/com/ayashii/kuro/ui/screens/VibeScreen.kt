@@ -99,13 +99,12 @@ fun VibeScreen(
         ?: favorites.firstOrNull()?.thumbnailUrlForDisplay(512)
     val dominantColor = rememberDynamicDominantColor(seedArtwork)
 
-    val candidatePool = remember(selectedMoodIndex, onRepeatTracks, recentlyPlayed, favorites, trendingTracks, genreTracks) {
-        val base = when (selectedMoodIndex) {
-            1 -> onRepeatTracks.ifEmpty { favorites }.ifEmpty { recentlyPlayed }
-            2, 3, 4 -> genreTracks.ifEmpty { (onRepeatTracks + recentlyPlayed + trendingTracks).distinctBy { it.id } }
-            else -> (onRepeatTracks + favorites + recentlyPlayed + trendingTracks).distinctBy { it.id }
+    val candidatePool = remember(selectedMoodIndex, favorites, trendingTracks, genreTracks) {
+        when (selectedMoodIndex) {
+            1 -> favorites.ifEmpty { trendingTracks }
+            2, 3, 4 -> genreTracks.ifEmpty { trendingTracks }
+            else -> trendingTracks
         }
-        viewModel.tasteManager.rankRadioTracks(base).ifEmpty { trendingTracks }
     }
 
     val statsVersion by viewModel.tasteManager.statsVersion.collectAsState()
@@ -339,7 +338,7 @@ fun VibeScreen(
                     track = track.copy(isFavorite = isFav),
                     isPlaying = currentTrack?.id == track.id,
                     isLoading = isLoadingTrack && currentTrack?.id == track.id,
-                    onClick = { viewModel.playTrack(track, candidatePool) },
+                    onClick = { viewModel.playTrackFromSearch(track) },
                     onFavoriteClick = { viewModel.toggleFavorite(track) },
                     onMoreClick = { trackForOptions = track },
                     onSwipeAddToQueue = { viewModel.addToQueue(track) }

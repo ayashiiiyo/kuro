@@ -55,6 +55,20 @@ object KuroNativeCore {
         return sb.toString()
     }
 
+    fun isDuplicateOrVariantTrack(a: Track, b: Track): Boolean {
+        if (a.id == b.id) return true
+        val titleA = normalizeSongTitleKey(a.title)
+        val titleB = normalizeSongTitleKey(b.title)
+        if (titleA.isEmpty() || titleB.isEmpty()) return false
+        if (titleA == titleB) return true
+        val artistA = normalizeSongTitleKey(a.artist)
+        val artistB = normalizeSongTitleKey(b.artist)
+        if (artistA.isEmpty() || artistA != artistB) return false
+        val shorter = if (titleA.length <= titleB.length) titleA else titleB
+        val longer = if (titleA.length <= titleB.length) titleB else titleA
+        return longer.startsWith(shorter) && longer.length - shorter.length <= 12
+    }
+
     /**
      * Preserves 100% of YouTube Music's native Automix Radio sequence while
      * deduplicating identical song titles (different uploaders/covers/MVs)
@@ -63,28 +77,16 @@ object KuroNativeCore {
     fun rankRadioTracks(
         candidates: List<Track>,
         scores: Map<String, Int>,
-        topArtists: List<String>,
-        preserveNeuralOrder: Boolean = true
+        topArtists: List<String>
     ): List<Track> {
         if (candidates.size <= 1) return candidates
-        val primary = ArrayList<Track>(candidates.size)
-        val skippedTail = ArrayList<Track>()
-        val seenTitleKeys = HashSet<String>(candidates.size)
-
+        val deduplicated = ArrayList<Track>(candidates.size)
         for (track in candidates) {
-            val titleKey = normalizeSongTitleKey(track.title)
-            if (titleKey.isNotEmpty() && !seenTitleKeys.add(titleKey)) {
-                continue
-            }
-            val score = scores[track.id] ?: 0
-            if (score <= -4) {
-                skippedTail.add(track)
-            } else {
-                primary.add(track)
+            if (deduplicated.none { isDuplicateOrVariantTrack(track, it) }) {
+                deduplicated.add(track)
             }
         }
-        primary.addAll(skippedTail)
-        return primary
+        return deduplicated
     }
 
     private fun unpackTracks(packed: String): List<Track>? {
