@@ -109,14 +109,16 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.8.17 — 100% YouTube Music Engine
+          ## Kuro v3.9.2 — Watch Later, YTM Library Sync & Playback Fallbacks
 
-          - **Pure YouTube Music Algorithm**:
-            - Removed Kuro's local ranking/scoring so Home shelves, search, Automix radio, and Vibe follow YouTube Music's native order untouched.
-            - Covers and duplicate variants are deduplicated by normalized title without re-sorting the queue.
-          - **Home & Search**:
-            - Parse both carousel and shelf renderers for complete Home content, with videoId fallback through menu endpoints.
-            - Home, genre, and Vibe track clicks now start YouTube Music Automix radio directly.
+          - **Watch Later**:
+            - Watch Later is now a dedicated persisted list with its own Library tab, legacy playlist migration, and a track-options toggle.
+          - **YouTube Music Library Sync**:
+            - Liked songs are fetched with paginated InnerTube browse + continuations and a NewPipe fallback; user playlists sync into local playlists via `remoteId`.
+          - **Playback Reliability**:
+            - Retry a track with a fallback stream URL before skipping, allow up to 5 recovery attempts, and keep notification play/next/previous actions consistent.
+          - **Queue & UI**:
+            - Queue state is driven solely by `PlayerQueueManager`, removing duplicate local queue bookkeeping; Library now has Favorites, Playlists, Watch Later, and Offline tabs.
           - Published signed release, per-ABI, and debug APKs.
           EOF
           gh release delete "$RELEASE_TAG" --yes --cleanup-tag 2>/dev/null || true
@@ -125,7 +127,7 @@ jobs:
             "${{ steps.apk.outputs.arm64_path }}" \
             "${{ steps.apk.outputs.arm32_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (100% YouTube Music Engine)" \
+            --title "Kuro $RELEASE_TAG (Watch Later, YTM Library Sync & Playback Fallbacks)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 

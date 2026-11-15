@@ -82,10 +82,10 @@ fun TrackOptionsBottomSheet(
     val scrollState = rememberScrollState()
     val colors = KuroAppTheme.colors
     val context = LocalContext.current
-    val playlists by viewModel.playlists.collectAsState()
+    val watchLaterTracks by viewModel.watchLaterTracks.collectAsState()
     val lyricsLang by remember { SettingsManager.getInstance().lyricsLanguage }.collectAsState()
-    val isInWatchLater = remember(playlists, track.id) {
-        viewModel.isTrackInWatchLater(track.id)
+    val isInWatchLater = remember(watchLaterTracks, track.id) {
+        watchLaterTracks.any { it.id == track.id }
     }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
     var showDownloadQualityDialog by remember { mutableStateOf(false) }

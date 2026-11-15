@@ -41,7 +41,6 @@ object PlayerQueueManager : IPlayerQueueManager {
     private val queue = ArrayList<Track>()
     private val playbackHistory = ArrayDeque<Int>()
     private val shuffleDeck = ArrayList<Int>()
-    private var lastAutoAdvanceTimestamp = 0L
     @Volatile
     var sleepTimerEndOfTrack: Boolean = false
 
@@ -262,14 +261,6 @@ object PlayerQueueManager : IPlayerQueueManager {
         synchronized(lock) {
             if (queue.isEmpty()) return null
 
-            if (!userInitiated) {
-                val now = System.currentTimeMillis()
-                if (now - lastAutoAdvanceTimestamp < 900L) {
-                    return _currentTrack.value ?: queue.getOrNull(_currentIndex.value)
-                }
-                lastAutoAdvanceTimestamp = now
-            }
-
             if (_repeatMode.value == Player.REPEAT_MODE_ONE && !userInitiated && !isErrorRecovery) {
                 return _currentTrack.value ?: queue.getOrNull(_currentIndex.value)
             }
@@ -355,7 +346,12 @@ object PlayerQueueManager : IPlayerQueueManager {
 
     override fun hasNext(): Boolean {
         synchronized(lock) {
-            return queue.isNotEmpty() || _currentTrack.value != null
+            if (queue.isEmpty()) return false
+            return when {
+                _repeatMode.value == Player.REPEAT_MODE_ALL -> true
+                _isShuffle.value -> shuffleDeck.isNotEmpty()
+                else -> _currentIndex.value + 1 < queue.size
+            }
         }
     }
 

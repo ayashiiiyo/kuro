@@ -98,6 +98,7 @@ fun LibraryScreen(
 ) {
     val favorites by viewModel.favorites.collectAsState()
     val playlists by viewModel.playlists.collectAsState()
+    val watchLaterTracks by viewModel.watchLaterTracks.collectAsState()
     val offlineTracks by viewModel.offlineTracks.collectAsState()
     val isLoadingTrack by viewModel.isLoadingTrack.collectAsState()
     val isPlayerExpanded by viewModel.isPlayerExpanded.collectAsState()
@@ -106,7 +107,7 @@ fun LibraryScreen(
     val favoriteIds by remember(favorites) { derivedStateOf { favorites.mapTo(HashSet()) { it.id } } }
 
     var selectedTab by rememberSaveable { mutableStateOf(0) }
-    val libPagerState = rememberPagerState(initialPage = selectedTab, pageCount = { 3 })
+    val libPagerState = rememberPagerState(initialPage = selectedTab, pageCount = { 4 })
     val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(libPagerState.currentPage) {
@@ -192,19 +193,27 @@ fun LibraryScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = when (selectedTab) { 0 -> stringResource(R.string.lib_fav_count, favorites.size); 1 -> stringResource(R.string.lib_playlist_count, playlists.size); else -> "${offlineTracks.size} lagu offline" },
+                                text = when (selectedTab) {
+                                    0 -> stringResource(R.string.lib_fav_count, favorites.size)
+                                    1 -> stringResource(R.string.lib_playlist_count, playlists.size)
+                                    2 -> "${watchLaterTracks.size} lagu disimpan"
+                                    else -> "${offlineTracks.size} lagu offline"
+                                },
                                 style = Typography.bodyMedium,
                                 color = colors.textMuted
                             )
                         }
 
-                        if (selectedTab == 0 && currentAccount != null) {
+                        if ((selectedTab == 0 || selectedTab == 1) && currentAccount != null) {
                             Row(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(16.dp))
                                     .background(colors.card)
                                     .border(1.dp, colors.border, RoundedCornerShape(16.dp))
-                                    .clickable { viewModel.syncLikedSongs() }
+                                    .clickable {
+                                        if (selectedTab == 0) viewModel.syncLikedSongs()
+                                        else viewModel.syncUserPlaylists()
+                                    }
                                     .padding(horizontal = 12.dp, vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -290,9 +299,30 @@ fun LibraryScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "Offline (${offlineTracks.size})",
+                                text = "Putar Nanti (${watchLaterTracks.size})",
                                 style = Typography.labelMedium.copy(fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Medium),
                                 color = if (selectedTab == 2) colors.background else colors.textPrimary
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(if (selectedTab == 3) colors.accent else colors.card)
+                                .border(1.dp, if (selectedTab == 3) colors.accent else colors.border, RoundedCornerShape(20.dp))
+                                .clickable {
+                                    selectedTab = 3
+                                    coroutineScope.launch {
+                                        libPagerState.animateScrollToPage(3, animationSpec = KuroMotion.appleFluidSpring())
+                                    }
+                                }
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Offline (${offlineTracks.size})",
+                                style = Typography.labelMedium.copy(fontWeight = if (selectedTab == 3) FontWeight.Bold else FontWeight.Medium),
+                                color = if (selectedTab == 3) colors.background else colors.textPrimary
                             )
                         }
                     }
@@ -475,6 +505,37 @@ fun LibraryScreen(
 
                                     item {
                                         Spacer(modifier = Modifier.height(130.dp))
+                                    }
+                                }
+                            } else if (tab == 2) {
+                                if (watchLaterTracks.isEmpty()) {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "Belum ada lagu di Putar Nanti",
+                                            style = Typography.bodyMedium,
+                                            color = colors.textMuted
+                                        )
+                                    }
+                                } else {
+                                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                                        items(watchLaterTracks, key = { "wl_${it.id}" }, contentType = { "track" }) { track ->
+                                            val isFav = track.id in favoriteIds
+                                            TrackItem(
+                                                track = track.copy(isFavorite = isFav),
+                                                isPlaying = currentTrack?.id == track.id,
+                                                isLoading = isLoadingTrack && currentTrack?.id == track.id,
+                                                onClick = { viewModel.playWatchLater(startTrack = track) },
+                                                onFavoriteClick = { viewModel.toggleFavorite(track) },
+                                                onMoreClick = { trackForOptions = track },
+                                                onSwipeAddToQueue = { viewModel.addToQueue(track) }
+                                            )
+                                        }
+                                        item {
+                                            Spacer(modifier = Modifier.height(130.dp))
+                                        }
                                     }
                                 }
                             } else {

@@ -18,7 +18,8 @@ data class Playlist(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
     val createdAt: Long = System.currentTimeMillis(),
-    val tracks: List<Track> = emptyList()
+    val tracks: List<Track> = emptyList(),
+    val remoteId: String? = null
 )
 
 class PlaylistManager private constructor(context: Context) {
@@ -28,8 +29,12 @@ class PlaylistManager private constructor(context: Context) {
     private val _playlists = MutableStateFlow<List<Playlist>>(emptyList())
     val playlists: StateFlow<List<Playlist>> = _playlists.asStateFlow()
 
+    private val _watchLaterTracks = MutableStateFlow<List<Track>>(emptyList())
+    val watchLaterTracks: StateFlow<List<Track>> = _watchLaterTracks.asStateFlow()
+
     init {
         loadPlaylists()
+        loadWatchLater()
     }
 
     private fun loadPlaylists() {
@@ -42,6 +47,7 @@ class PlaylistManager private constructor(context: Context) {
                 val id = pObj.optString("id", UUID.randomUUID().toString())
                 val name = pObj.optString("name", "Playlist")
                 val createdAt = pObj.optLong("createdAt", System.currentTimeMillis())
+                val remoteId = pObj.optString("remoteId", "").takeIf { it.isNotBlank() }
 
                 val tracksArr = pObj.optJSONArray("tracks") ?: JSONArray()
                 val tracks = mutableListOf<Track>()
@@ -58,7 +64,18 @@ class PlaylistManager private constructor(context: Context) {
                         )
                     )
                 }
-                list.add(Playlist(id = id, name = name, createdAt = createdAt, tracks = tracks))
+                list.add(Playlist(id = id, name = name, createdAt = createdAt, tracks = tracks, remoteId = remoteId))
+            }
+            if (!prefs.contains(KEY_WATCH_LATER)) {
+                val legacyWatchLater = list.firstOrNull { it.name == "Putar Nanti" && it.remoteId == null }
+                if (legacyWatchLater != null) {
+                    _watchLaterTracks.value = legacyWatchLater.tracks
+                    saveWatchLater(legacyWatchLater.tracks)
+                    val migratedList = list.filter { it.id != legacyWatchLater.id }
+                    _playlists.value = migratedList
+                    savePlaylists(migratedList)
+                    return
+                }
             }
             _playlists.value = list
         } catch (_: Exception) {
@@ -77,6 +94,9 @@ class PlaylistManager private constructor(context: Context) {
                         put("id", p.id)
                         put("name", p.name)
                         put("createdAt", p.createdAt)
+                        if (!p.remoteId.isNullOrBlank()) {
+                            put("remoteId", p.remoteId)
+                        }
                         val tArr = JSONArray()
                         for (t in p.tracks) {
                             val tObj = JSONObject().apply {
@@ -98,31 +118,104 @@ class PlaylistManager private constructor(context: Context) {
         }
     }
 
-    @Synchronized
-    fun getOrCreateWatchLaterPlaylist(): Playlist {
-        val current = _playlists.value
-        val existing = current.firstOrNull { it.name == "Putar Nanti" }
-        if (existing != null) return existing
-        return createPlaylist("Putar Nanti")
+    private fun loadWatchLater() {
+        val raw = prefs.getString(KEY_WATCH_LATER, null) ?: return
+        try {
+            val arr = JSONArray(raw)
+            val list = mutableListOf<Track>()
+            for (i in 0 until arr.length()) {
+                val tObj = arr.getJSONObject(i)
+                list.add(
+                    Track(
+                        id = tObj.optString("id"),
+                        url = tObj.optString("url"),
+                        title = tObj.optString("title"),
+                        artist = tObj.optString("artist"),
+                        thumbnailUrl = tObj.optString("thumbnailUrl"),
+                        durationSeconds = tObj.optLong("durationSeconds", 0L)
+                    )
+                )
+            }
+            _watchLaterTracks.value = list
+        } catch (_: Exception) {
+            _watchLaterTracks.value = emptyList()
+        }
+    }
+
+    private fun saveWatchLater(list: List<Track>) {
+        _watchLaterTracks.value = list
+        val snapshot = ArrayList(list)
+        ioScope.launch {
+            try {
+                val arr = JSONArray()
+                for (t in snapshot) {
+                    arr.put(
+                        JSONObject().apply {
+                            put("id", t.id)
+                            put("url", t.url)
+                            put("title", t.title)
+                            put("artist", t.artist)
+                            put("thumbnailUrl", t.thumbnailUrl)
+                            put("durationSeconds", t.durationSeconds)
+                        }
+                    )
+                }
+                prefs.edit().putString(KEY_WATCH_LATER, arr.toString()).apply()
+            } catch (_: Exception) {}
+        }
     }
 
     @Synchronized
     fun isTrackInWatchLater(trackId: String): Boolean {
-        val playlist = _playlists.value.firstOrNull { it.name == "Putar Nanti" } ?: return false
-        return playlist.tracks.any { it.id == trackId }
+        return _watchLaterTracks.value.any { it.id == trackId }
     }
 
     @Synchronized
     fun toggleWatchLater(track: Track): Boolean {
-        val target = getOrCreateWatchLaterPlaylist()
-        val isSaved = target.tracks.any { it.id == track.id }
-        if (isSaved) {
-            removeTrackFromPlaylist(target.id, track.id)
-            return false
+        val current = _watchLaterTracks.value.toMutableList()
+        val exists = current.any { it.id == track.id }
+        return if (exists) {
+            current.removeAll { it.id == track.id }
+            saveWatchLater(current)
+            false
         } else {
-            addTrackToPlaylist(target.id, track)
-            return true
+            current.add(0, track)
+            saveWatchLater(current)
+            true
         }
+    }
+
+    @Synchronized
+    fun removeFromWatchLater(trackId: String) {
+        val current = _watchLaterTracks.value.filter { it.id != trackId }
+        saveWatchLater(current)
+    }
+
+    @Synchronized
+    fun upsertSyncedPlaylists(remotePlaylists: List<Triple<String, String, List<Track>>>) {
+        if (remotePlaylists.isEmpty()) return
+        val current = _playlists.value.toMutableList()
+        for ((remoteId, title, tracks) in remotePlaylists) {
+            val existingIdx = current.indexOfFirst { it.remoteId == remoteId }
+            if (existingIdx != -1) {
+                val existing = current[existingIdx]
+                current[existingIdx] = existing.copy(
+                    name = title.ifBlank { existing.name },
+                    tracks = tracks
+                )
+            } else {
+                current.add(
+                    Playlist(
+                        id = UUID.randomUUID().toString(),
+                        name = title.ifBlank { "YouTube Music Playlist" },
+                        createdAt = System.currentTimeMillis(),
+                        tracks = tracks,
+                        remoteId = remoteId
+                    )
+                )
+            }
+        }
+        savePlaylists(current)
     }
 
     @Synchronized
@@ -185,6 +278,7 @@ class PlaylistManager private constructor(context: Context) {
     companion object {
         private const val PREF_NAME = "kuro_playlists"
         private const val KEY_PLAYLISTS = "playlist_data"
+        private const val KEY_WATCH_LATER = "watch_later_tracks"
 
         @Volatile
         private var INSTANCE: PlaylistManager? = null

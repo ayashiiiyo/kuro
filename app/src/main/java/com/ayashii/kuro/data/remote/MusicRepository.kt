@@ -907,6 +907,15 @@ class MusicRepository {
         result
     }
 
+    private fun extractRunsText(obj: org.json.JSONObject?): String {
+        val runs = obj?.optJSONArray("runs") ?: return ""
+        val sb = StringBuilder()
+        for (i in 0 until runs.length()) {
+            sb.append(runs.optJSONObject(i)?.optString("text", "").orEmpty())
+        }
+        return sb.toString().trim()
+    }
+
     private fun parseYtmSections(root: org.json.JSONObject, defaultTitle: String): List<HomeSection> {
         val list = mutableListOf<HomeSection>()
         try {
@@ -1386,75 +1395,165 @@ class MusicRepository {
         }
     }
 
+    private fun postYtmBrowse(browseId: String, continuation: String? = null): org.json.JSONObject? {
+        val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
+        val cookie = auth.getCookie()
+        if (cookie.isNullOrBlank()) return null
+
+        val origin = "https://music.youtube.com"
+        val (hlCode, glCode) = resolveHlGl()
+        val payload = org.json.JSONObject().apply {
+            put("context", org.json.JSONObject().apply {
+                put("client", org.json.JSONObject().apply {
+                    put("clientName", YTM_CLIENT_NAME)
+                    put("clientVersion", YTM_CLIENT_VERSION)
+                    put("hl", hlCode)
+                    put("gl", glCode)
+                })
+            })
+            if (continuation != null) {
+                put("continuation", continuation)
+            } else {
+                put("browseId", browseId)
+            }
+        }
+
+        val client = HttpClientProvider.client
+        val reqBuilder = okhttp3.Request.Builder()
+            .url("$origin/youtubei/v1/browse")
+            .header("Content-Type", "application/json")
+            .header("User-Agent", YTM_USER_AGENT)
+            .header("Origin", origin)
+            .header("Referer", "$origin/")
+            .header("X-Origin", origin)
+            .header("X-YouTube-Client-Name", "67")
+            .header("X-YouTube-Client-Version", YTM_CLIENT_VERSION)
+
+        auth.applyAuthToRequest(reqBuilder, payload, origin)
+        val reqBody = payload.toString().toRequestBody("application/json".toMediaType())
+        reqBuilder.post(reqBody)
+
+        client.newCall(reqBuilder.build()).execute().use { resp ->
+            if (!resp.isSuccessful) return null
+            val body = resp.body?.string() ?: return null
+            return org.json.JSONObject(body)
+        }
+    }
+
+    private fun extractContinuationToken(shelf: org.json.JSONObject?): String? {
+        if (shelf == null) return null
+        val directToken = shelf.optJSONArray("continuations")
+            ?.optJSONObject(0)
+            ?.optJSONObject("nextContinuationData")
+            ?.optString("continuation")
+            ?.takeIf { it.isNotBlank() }
+        if (directToken != null) return directToken
+
+        val items = shelf.optJSONArray("contents") ?: return null
+        for (i in items.length() - 1 downTo 0) {
+            val cont = items.optJSONObject(i)
+                ?.optJSONObject("continuationItemRenderer")
+                ?.optJSONObject("continuationEndpoint")
+                ?.optJSONObject("continuationCommand")
+                ?.optString("token")
+                ?.takeIf { it.isNotBlank() }
+            if (cont != null) return cont
+        }
+        return null
+    }
+
+    private fun fetchBrowseTrackListPaginated(
+        browseId: String,
+        markFavorite: Boolean = false,
+        maxPages: Int = 25
+    ): List<Track> {
+        val trackList = mutableListOf<Track>()
+        val seenIds = HashSet<String>()
+
+        val firstJson = postYtmBrowse(browseId) ?: return emptyList()
+        val contents = firstJson.optJSONObject("contents")
+            ?.optJSONObject("singleColumnBrowseResultsRenderer")
+            ?.optJSONArray("tabs")
+            ?.optJSONObject(0)
+            ?.optJSONObject("tabRenderer")
+            ?.optJSONObject("content")
+            ?.optJSONObject("sectionListRenderer")
+            ?.optJSONArray("contents")
+
+        var shelf: org.json.JSONObject? = null
+        if (contents != null) {
+            for (i in 0 until contents.length()) {
+                val obj = contents.optJSONObject(i) ?: continue
+                shelf = obj.optJSONObject("musicShelfRenderer")
+                    ?: obj.optJSONObject("musicPlaylistShelfRenderer")
+                if (shelf != null) break
+            }
+        }
+
+        val initialItems = shelf?.optJSONArray("contents")
+        if (initialItems != null) {
+            for (i in 0 until initialItems.length()) {
+                val itemObj = initialItems.optJSONObject(i) ?: continue
+                val parsed = parseSingleTrackItem(itemObj)
+                if (parsed != null && parsed.id.isNotBlank() && seenIds.add(parsed.id)) {
+                    trackList.add(if (markFavorite) parsed.copy(isFavorite = true) else parsed)
+                }
+            }
+        }
+
+        var continuation = extractContinuationToken(shelf)
+        var pageCount = 1
+        while (continuation != null && pageCount < maxPages) {
+            val nextJson = postYtmBrowse(browseId, continuation) ?: break
+            val contShelf = nextJson.optJSONObject("continuationContents")
+                ?.optJSONObject("musicPlaylistShelfContinuation")
+                ?: nextJson.optJSONObject("continuationContents")
+                    ?.optJSONObject("musicShelfContinuation")
+            val contItems = contShelf?.optJSONArray("contents")
+                ?: nextJson.optJSONArray("onResponseReceivedActions")
+                    ?.optJSONObject(0)
+                    ?.optJSONObject("appendContinuationItemsAction")
+                    ?.optJSONArray("continuationItems")
+
+            if (contItems != null) {
+                for (i in 0 until contItems.length()) {
+                    val itemObj = contItems.optJSONObject(i) ?: continue
+                    val parsed = parseSingleTrackItem(itemObj)
+                    if (parsed != null && parsed.id.isNotBlank() && seenIds.add(parsed.id)) {
+                        trackList.add(if (markFavorite) parsed.copy(isFavorite = true) else parsed)
+                    }
+                }
+            }
+
+            var nextToken = extractContinuationToken(contShelf)
+            if (nextToken == null && contItems != null) {
+                for (i in contItems.length() - 1 downTo 0) {
+                    nextToken = contItems.optJSONObject(i)
+                        ?.optJSONObject("continuationItemRenderer")
+                        ?.optJSONObject("continuationEndpoint")
+                        ?.optJSONObject("continuationCommand")
+                        ?.optString("token")
+                        ?.takeIf { it.isNotBlank() }
+                    if (nextToken != null) break
+                }
+            }
+            if (nextToken == continuation) break
+            continuation = nextToken
+            pageCount++
+        }
+
+        return trackList
+    }
+
     suspend fun getLikedTracks(): List<Track> = withContext(Dispatchers.IO) {
         val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
         val cookie = auth.getCookie()
         if (cookie.isNullOrBlank()) return@withContext emptyList()
 
         try {
-            val origin = "https://music.youtube.com"
-            val (hlCode, glCode) = resolveHlGl()
-
-            val payload = org.json.JSONObject().apply {
-                put("context", org.json.JSONObject().apply {
-                    put("client", org.json.JSONObject().apply {
-                        put("clientName", YTM_CLIENT_NAME)
-                        put("clientVersion", YTM_CLIENT_VERSION)
-                        put("hl", hlCode)
-                        put("gl", glCode)
-                    })
-                })
-                put("browseId", "FEmusic_liked_videos")
-            }
-
-            val client = HttpClientProvider.client
-            val reqBuilder = okhttp3.Request.Builder()
-                .url("$origin/youtubei/v1/browse")
-                .header("Content-Type", "application/json")
-                .header("User-Agent", YTM_USER_AGENT)
-                .header("Origin", origin)
-                .header("Referer", "$origin/")
-                .header("X-Origin", origin)
-                .header("X-YouTube-Client-Name", "67")
-                .header("X-YouTube-Client-Version", YTM_CLIENT_VERSION)
-
-            auth.applyAuthToRequest(reqBuilder, payload, origin)
-            val reqBody = payload.toString().toRequestBody("application/json".toMediaType())
-            reqBuilder.post(reqBody)
-
-            val resp = client.newCall(reqBuilder.build()).execute()
-            val respBody = try {
-                if (resp.isSuccessful) resp.body?.string() else null
-            } finally {
-                resp.close()
-            }
-            if (respBody != null) {
-                val json = org.json.JSONObject(respBody)
-                val contents = json.optJSONObject("contents")
-                    ?.optJSONObject("singleColumnBrowseResultsRenderer")
-                    ?.optJSONArray("tabs")
-                    ?.optJSONObject(0)
-                    ?.optJSONObject("tabRenderer")
-                    ?.optJSONObject("content")
-                    ?.optJSONObject("sectionListRenderer")
-                    ?.optJSONArray("contents")
-
-                val trackList = mutableListOf<Track>()
-                val musicShelf = contents?.optJSONObject(0)?.optJSONObject("musicShelfRenderer")
-                    ?: contents?.optJSONObject(0)?.optJSONObject("musicPlaylistShelfRenderer")
-                val items = musicShelf?.optJSONArray("contents")
-                if (items != null) {
-                    for (i in 0 until items.length()) {
-                        val itemObj = items.optJSONObject(i) ?: continue
-                        val parsed = parseSingleTrackItem(itemObj)
-                        if (parsed != null && parsed.id.isNotBlank()) {
-                            trackList.add(parsed.copy(isFavorite = true))
-                        }
-                    }
-                }
-                if (trackList.isNotEmpty()) {
-                    return@withContext trackList
-                }
+            val tracks = fetchBrowseTrackListPaginated("FEmusic_liked_videos", markFavorite = true, maxPages = 30)
+            if (tracks.isNotEmpty()) {
+                return@withContext tracks
             }
         } catch (e: Exception) {
             Log.e("MusicRepository", "Liked songs InnerTube fetch error: ${e.message}", e)
@@ -1463,26 +1562,106 @@ class MusicRepository {
         try {
             val playlistExtractor = service.getPlaylistExtractor("https://www.youtube.com/playlist?list=LL")
             playlistExtractor.fetchPage()
-            val page = playlistExtractor.initialPage
-            page.items
-                .filterIsInstance<StreamInfoItem>()
-                .map { item ->
-                    val rawThumb = item.thumbnails.maxByOrNull { it.width * it.height }?.url
-                        ?: item.thumbnails.lastOrNull()?.url
-                        ?: item.thumbnails.firstOrNull()?.url
-                        ?: ""
-                    Track(
-                        id = item.url.substringAfter("v=").substringBefore("&"),
-                        url = item.url,
-                        title = cleanTrackTitle(item.name ?: "Unknown Title"),
-                        artist = item.uploaderName?.replace(" - Topic", "") ?: "Unknown Artist",
-                        thumbnailUrl = upgradeThumbnailUrl(rawThumb),
-                        durationSeconds = item.duration,
-                        isFavorite = true
-                    )
+            val allTracks = mutableListOf<Track>()
+            val seenIds = HashSet<String>()
+            var page = playlistExtractor.initialPage
+            var fallbackPages = 0
+            while (true) {
+                for (item in page.items.filterIsInstance<StreamInfoItem>()) {
+                    val vidId = item.url.substringAfter("v=").substringBefore("&")
+                    if (vidId.isNotBlank() && seenIds.add(vidId)) {
+                        val rawThumb = item.thumbnails.maxByOrNull { it.width * it.height }?.url
+                            ?: item.thumbnails.lastOrNull()?.url
+                            ?: item.thumbnails.firstOrNull()?.url
+                            ?: ""
+                        allTracks.add(
+                            Track(
+                                id = vidId,
+                                url = item.url,
+                                title = cleanTrackTitle(item.name ?: "Unknown Title"),
+                                artist = item.uploaderName?.replace(" - Topic", "") ?: "Unknown Artist",
+                                thumbnailUrl = upgradeThumbnailUrl(rawThumb),
+                                durationSeconds = item.duration,
+                                isFavorite = true
+                            )
+                        )
+                    }
                 }
+                if (!page.hasNextPage() || fallbackPages >= 20) break
+                page = playlistExtractor.getPage(page.nextPage)
+                fallbackPages++
+            }
+            allTracks
         } catch (e: Exception) {
             Log.e("MusicRepository", "Failed to fetch liked tracks via NewPipe: ${e.message}")
+            emptyList()
+        }
+    }
+
+    suspend fun getUserPlaylists(): List<Triple<String, String, List<Track>>> = withContext(Dispatchers.IO) {
+        val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
+        if (auth.getCookie().isNullOrBlank()) return@withContext emptyList()
+
+        try {
+            val json = postYtmBrowse("FEmusic_liked_playlists") ?: return@withContext emptyList()
+            val sections = json.optJSONObject("contents")
+                ?.optJSONObject("singleColumnBrowseResultsRenderer")
+                ?.optJSONArray("tabs")
+                ?.optJSONObject(0)
+                ?.optJSONObject("tabRenderer")
+                ?.optJSONObject("content")
+                ?.optJSONObject("sectionListRenderer")
+                ?.optJSONArray("contents") ?: return@withContext emptyList()
+
+            val candidates = mutableListOf<Pair<String, String>>()
+            val seenBrowseIds = HashSet<String>()
+
+            for (s in 0 until sections.length()) {
+                val sec = sections.optJSONObject(s) ?: continue
+                val gridItems = sec.optJSONObject("gridRenderer")?.optJSONArray("items")
+                if (gridItems != null) {
+                    for (i in 0 until gridItems.length()) {
+                        val twoRow = gridItems.optJSONObject(i)?.optJSONObject("musicTwoRowItemRenderer") ?: continue
+                        val browseId = twoRow.optJSONObject("navigationEndpoint")
+                            ?.optJSONObject("browseEndpoint")
+                            ?.optString("browseId")
+                            ?.takeIf { it.startsWith("VL") || it.startsWith("PL") } ?: continue
+                        if (browseId == "VLLM" || browseId == "LM") continue
+                        val title = extractRunsText(twoRow.optJSONObject("title")).ifBlank { "Playlist" }
+                        if (seenBrowseIds.add(browseId)) {
+                            candidates.add(browseId to title)
+                        }
+                    }
+                }
+                val shelfItems = sec.optJSONObject("musicShelfRenderer")?.optJSONArray("contents")
+                if (shelfItems != null) {
+                    for (i in 0 until shelfItems.length()) {
+                        val row = shelfItems.optJSONObject(i)?.optJSONObject("musicResponsiveListItemRenderer") ?: continue
+                        val browseId = row.optJSONObject("navigationEndpoint")
+                            ?.optJSONObject("browseEndpoint")
+                            ?.optString("browseId")
+                            ?.takeIf { it.startsWith("VL") || it.startsWith("PL") } ?: continue
+                        if (browseId == "VLLM" || browseId == "LM") continue
+                        val title = extractRunsText(
+                            row.optJSONArray("flexColumns")
+                                ?.optJSONObject(0)
+                                ?.optJSONObject("musicResponsiveListItemFlexColumnRenderer")
+                                ?.optJSONObject("text")
+                        ).ifBlank { "Playlist" }
+                        if (seenBrowseIds.add(browseId)) {
+                            candidates.add(browseId to title)
+                        }
+                    }
+                }
+            }
+
+            candidates.map { (browseId, title) ->
+                val normalizedId = if (browseId.startsWith("VL")) browseId else "VL$browseId"
+                val tracks = fetchBrowseTrackListPaginated(normalizedId, markFavorite = false, maxPages = 15)
+                Triple(browseId, title, tracks)
+            }
+        } catch (e: Exception) {
+            Log.e("MusicRepository", "Failed to fetch user playlists: ${e.message}", e)
             emptyList()
         }
     }

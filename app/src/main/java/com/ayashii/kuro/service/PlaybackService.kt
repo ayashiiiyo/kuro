@@ -297,6 +297,7 @@ class PlaybackService : MediaSessionService() {
     private var streamSimpleCache: SimpleCache? = null
     private var pauseTimeoutJob: Job? = null
     private var servicePlayJob: Job? = null
+    private var lastFallbackTriedTrackId: String? = null
     private val favSyncReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == WIDGET_FAVORITES_CHANGED) {
@@ -311,8 +312,10 @@ class PlaybackService : MediaSessionService() {
         const val CHANNEL_ID = "kuro_playback_channel"
         const val NOTIFICATION_ID = 1001
         const val ACTION_PLAY_PAUSE = "com.ayashii.kuro.ACTION_PLAY_PAUSE"
+        const val ACTION_PLAY_CURRENT = "com.ayashii.kuro.ACTION_PLAY_CURRENT"
         const val ACTION_NEXT = "com.ayashii.kuro.ACTION_NEXT"
         const val ACTION_PREV = "com.ayashii.kuro.ACTION_PREV"
+        const val CUSTOM_ACTION_PLAY_CURRENT = "com.ayashii.kuro.CUSTOM_ACTION_PLAY_CURRENT"
         const val CUSTOM_ACTION_FAVORITE = "com.ayashii.kuro.CUSTOM_ACTION_FAVORITE"
         const val CUSTOM_ACTION_REPEAT = "com.ayashii.kuro.CUSTOM_ACTION_REPEAT"
     }
@@ -387,16 +390,41 @@ class PlaybackService : MediaSessionService() {
                 val failedTrackId = current?.id
                 servicePlayJob?.cancel()
                 servicePlayJob = serviceScope.launch {
-                    delay(650L)
+                    if (current != null &&
+                        current.streamUrl != null &&
+                        lastFallbackTriedTrackId != failedTrackId
+                    ) {
+                        lastFallbackTriedTrackId = failedTrackId
+                        val fallbackUrl = withContext(Dispatchers.IO) {
+                            runCatching { repository.getFallbackStreamUrl(current.url) }.getOrNull()
+                        }
+                        if (fallbackUrl != null &&
+                            fallbackUrl != current.streamUrl &&
+                            PlayerQueueManager.currentTrack.value?.id == failedTrackId
+                        ) {
+                            val fallbackTrack = current.copy(streamUrl = fallbackUrl, mimeType = "audio/webm")
+                            PlayerQueueManager.updateCurrentTrack(fallbackTrack)
+                            val item = MediaItem.Builder()
+                                .setMediaId(fallbackTrack.id)
+                                .setUri(fallbackUrl)
+                                .setMimeType("audio/webm")
+                                .setMediaMetadata(buildTrackMediaMetadata(fallbackTrack))
+                                .build()
+                            exoPlayer.setMediaItem(item)
+                            exoPlayer.prepare()
+                            exoPlayer.playWhenReady = true
+                            syncNotificationAndWidgets()
+                            return@launch
+                        }
+                    }
+
+                    delay(450L)
                     if (PlayerQueueManager.currentTrack.value?.id == failedTrackId &&
                         exoPlayer.playbackState == Player.STATE_IDLE && !exoPlayer.isPlaying
                     ) {
                         val failureCount = PlayerQueueManager.recordPlaybackFailure()
-                        if (failureCount < 3) {
-                            val nextTrack = PlayerQueueManager.getNextTrack(userInitiated = false, isErrorRecovery = true)
-                            if (nextTrack != null) {
-                                playTrack(nextTrack)
-                            }
+                        if (failureCount < 5) {
+                            advanceToNextTrack(userInitiated = false, isErrorRecovery = true)
                         }
                     }
                 }
@@ -524,6 +552,7 @@ class PlaybackService : MediaSessionService() {
                     controller: MediaSession.ControllerInfo
                 ): MediaSession.ConnectionResult {
                     val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
+                        .add(SessionCommand(CUSTOM_ACTION_PLAY_CURRENT, Bundle.EMPTY))
                         .add(SessionCommand(CUSTOM_ACTION_FAVORITE, Bundle.EMPTY))
                         .add(SessionCommand(CUSTOM_ACTION_REPEAT, Bundle.EMPTY))
                         .build()
@@ -547,6 +576,9 @@ class PlaybackService : MediaSessionService() {
                     args: Bundle
                 ): ListenableFuture<SessionResult> {
                     when (customCommand.customAction) {
+                        CUSTOM_ACTION_PLAY_CURRENT -> {
+                            PlayerQueueManager.currentTrack.value?.let { playTrack(it) }
+                        }
                         CUSTOM_ACTION_FAVORITE -> {
                             toggleCurrentTrackFavoriteFromNotification()
                             updateNotificationCustomLayout()
@@ -776,8 +808,7 @@ class PlaybackService : MediaSessionService() {
                     repository.getRadioTracks(current.id)
                 }.filter { it.id != current.id }
                 if (radioTracks.isNotEmpty()) {
-                    val ranked = radioTracks
-                    ranked.forEach { PlayerQueueManager.addToQueue(it) }
+                    appendUniqueRadioTracks(radioTracks)
                     val fetchedNext = PlayerQueueManager.getNextTrack(userInitiated = userInitiated, isErrorRecovery = isErrorRecovery)
                     if (fetchedNext != null) {
                         playTrack(fetchedNext)
@@ -788,7 +819,7 @@ class PlaybackService : MediaSessionService() {
                     repository.getTrendingTracks()
                 }.filter { it.id != current.id }
                 if (fallbackPool.isNotEmpty()) {
-                    fallbackPool.forEach { PlayerQueueManager.addToQueue(it) }
+                    appendUniqueRadioTracks(fallbackPool)
                     val fallbackNext = PlayerQueueManager.getNextTrack(userInitiated = userInitiated, isErrorRecovery = isErrorRecovery)
                     if (fallbackNext != null) {
                         playTrack(fallbackNext)
@@ -800,8 +831,26 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
+    private fun appendUniqueRadioTracks(candidates: List<Track>) {
+        if (candidates.isEmpty()) return
+        val currentQ = PlayerQueueManager.queueState.value
+        val existingIds = currentQ.mapTo(HashSet()) { it.id }
+        val existingTitles = currentQ.mapNotNullTo(HashSet()) {
+            com.ayashii.kuro.data.native.KuroNativeCore.normalizeSongTitleKey(it.title).takeIf(String::isNotEmpty)
+        }
+        val uniqueRadio = candidates.filter { cand ->
+            if (cand.id in existingIds) false
+            else {
+                val tk = com.ayashii.kuro.data.native.KuroNativeCore.normalizeSongTitleKey(cand.title)
+                tk.isEmpty() || existingTitles.add(tk)
+            }
+        }
+        uniqueRadio.forEach { PlayerQueueManager.addToQueue(it) }
+    }
+
     private fun playTrack(track: Track) {
         servicePlayJob?.cancel()
+        lastFallbackTriedTrackId = null
         PlayerQueueManager.updateCurrentTrack(track)
         servicePlayJob = serviceScope.launch {
             try {
@@ -816,12 +865,13 @@ class PlaybackService : MediaSessionService() {
                 }
                 if (resolved == null) {
                     Log.e(TAG, "Failed to resolve stream for ${track.title}")
+                    try {
+                        repository.evictStreamUrl(track.url)
+                    } catch (_: Throwable) {}
                     val errorCount = PlayerQueueManager.recordPlaybackFailure()
-                    if (errorCount < 3) {
-                        val nextTrack = PlayerQueueManager.getNextTrack(userInitiated = false, isErrorRecovery = true)
-                        if (nextTrack != null) {
-                            playTrack(nextTrack)
-                        }
+                    if (errorCount < 5) {
+                        delay(300L)
+                        advanceToNextTrack(userInitiated = false, isErrorRecovery = true)
                     }
                     return@launch
                 }
@@ -887,19 +937,7 @@ class PlaybackService : MediaSessionService() {
                         if (queueSnapshot.size <= 2 || remaining <= 3) {
                             val radioTracks = repository.getRadioTracks(track.id)
                             if (radioTracks.isNotEmpty()) {
-                                val currentQ = PlayerQueueManager.queueState.value
-                                val existingIds = currentQ.mapTo(HashSet()) { it.id }
-                                val existingTitles = currentQ.mapNotNullTo(HashSet()) {
-                                    com.ayashii.kuro.data.native.KuroNativeCore.normalizeSongTitleKey(it.title).takeIf(String::isNotEmpty)
-                                }
-                                val uniqueRadio = radioTracks.filter { cand ->
-                                    if (cand.id in existingIds) false
-                                    else {
-                                        val tk = com.ayashii.kuro.data.native.KuroNativeCore.normalizeSongTitleKey(cand.title)
-                                        tk.isEmpty() || existingTitles.add(tk)
-                                    }
-                                }
-                                uniqueRadio.forEach { PlayerQueueManager.addToQueue(it) }
+                                appendUniqueRadioTracks(radioTracks)
                             }
                         }
                         val updatedQueue = PlayerQueueManager.queueState.value
@@ -982,6 +1020,7 @@ class PlaybackService : MediaSessionService() {
         super.onStartCommand(intent, flags, startId)
         when (intent?.action) {
             ACTION_PLAY_PAUSE -> player?.let { if (it.playWhenReady) it.pause() else it.play() }
+            ACTION_PLAY_CURRENT -> PlayerQueueManager.currentTrack.value?.let { playTrack(it) }
             ACTION_NEXT -> player?.seekToNext()
             ACTION_PREV -> player?.seekToPrevious()
         }
