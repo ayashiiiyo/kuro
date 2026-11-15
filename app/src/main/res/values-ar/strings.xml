@@ -26,4 +26,16 @@
     <string name="lang_system">افتراضي النظام</string>
     <string name="settings_lyrics_trans">ترجمة الكلمات</string>
     <string name="settings_lyrics_target_lang">لغة ترجمة الكلمات (DeepL)</string>
+    <string name="settings_section_audio_offline">الصوت والتنزيلات</string>
+    <string name="settings_section_appearance_lang">المظهر واللغة</string>
+    <string name="settings_section_lyrics">كلمات الأغاني</string>
+    <string name="settings_section_about">حول التطبيق</string>
+    <string name="settings_download_quality">جودة التنزيل الافتراضية</string>
+    <string name="settings_offline_folder">مجلد الموسيقى دون إنترنت</string>
+    <string name="settings_offline_folder_default">الافتراضي (التخزين الداخلي)</string>
+    <string name="settings_offline_folder_saved">تم حفظ مجلد التنزيل</string>
+    <string name="settings_action_reset">إعادة تعيين</string>
+    <string name="settings_theme_short_system">النظام</string>
+    <string name="settings_theme_short_dark">داكن</string>
+    <string name="settings_theme_short_light">فاتح</string>
 </resources>

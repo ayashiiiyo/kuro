@@ -26,4 +26,16 @@
     <string name="lang_system">Padrão do sistema</string>
     <string name="settings_lyrics_trans">Tradução de letras</string>
     <string name="settings_lyrics_target_lang">Idioma da tradução (DeepL)</string>
+    <string name="settings_section_audio_offline">ÁUDIO E OFFLINE</string>
+    <string name="settings_section_appearance_lang">APARÊNCIA E IDIOMA</string>
+    <string name="settings_section_lyrics">LETRAS</string>
+    <string name="settings_section_about">SOBRE</string>
+    <string name="settings_download_quality">Qualidade de download padrão</string>
+    <string name="settings_offline_folder">Pasta de música offline</string>
+    <string name="settings_offline_folder_default">Padrão (Armazenamento interno)</string>
+    <string name="settings_offline_folder_saved">Pasta de download salva</string>
+    <string name="settings_action_reset">Redefinir</string>
+    <string name="settings_theme_short_system">Sistema</string>
+    <string name="settings_theme_short_dark">Escuro</string>
+    <string name="settings_theme_short_light">Claro</string>
 </resources>

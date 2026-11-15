@@ -233,4 +233,16 @@ Untukmu</string>
     <string name="update_permission_title">Izinkan pemasangan aplikasi</string>
     <string name="update_permission_text">Izinkan Kuro memasang aplikasi dari sumber tidak dikenal, lalu ketuk notifikasi pembaruan lagi.</string>
     <string name="update_download_failed">Unduhan pembaruan gagal. Silakan coba lagi.</string>
+    <string name="settings_section_audio_offline">AUDIO &amp; OFFLINE</string>
+    <string name="settings_section_appearance_lang">TAMPILAN &amp; BAHASA</string>
+    <string name="settings_section_lyrics">LIRIK</string>
+    <string name="settings_section_about">TENTANG</string>
+    <string name="settings_download_quality">Kualitas Download Default</string>
+    <string name="settings_offline_folder">Folder Musik Offline</string>
+    <string name="settings_offline_folder_default">Default (Penyimpanan Internal)</string>
+    <string name="settings_offline_folder_saved">Folder download disimpan</string>
+    <string name="settings_action_reset">Reset</string>
+    <string name="settings_theme_short_system">Sistem</string>
+    <string name="settings_theme_short_dark">Gelap</string>
+    <string name="settings_theme_short_light">Terang</string>
 </resources>

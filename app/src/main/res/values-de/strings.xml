@@ -53,4 +53,16 @@
     <string name="lang_system">Systemstandard</string>
     <string name="settings_lyrics_trans">Songtext-Übersetzung</string>
     <string name="settings_lyrics_target_lang">Zielsprache für Songtexte (DeepL)</string>
+    <string name="settings_section_audio_offline">AUDIO &amp; OFFLINE</string>
+    <string name="settings_section_appearance_lang">DESIGN &amp; SPRACHE</string>
+    <string name="settings_section_lyrics">SONGTEXTE</string>
+    <string name="settings_section_about">ÜBER</string>
+    <string name="settings_download_quality">Standard-Downloadqualität</string>
+    <string name="settings_offline_folder">Offline-Musikordner</string>
+    <string name="settings_offline_folder_default">Standard (Interner Speicher)</string>
+    <string name="settings_offline_folder_saved">Download-Ordner gespeichert</string>
+    <string name="settings_action_reset">Zurücksetzen</string>
+    <string name="settings_theme_short_system">System</string>
+    <string name="settings_theme_short_dark">Dunkel</string>
+    <string name="settings_theme_short_light">Hell</string>
 </resources>

@@ -27,7 +27,10 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.BitmapLoader
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
+import okhttp3.ConnectionPool
+import okhttp3.OkHttpClient
+import java.util.concurrent.TimeUnit
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -152,10 +155,18 @@ private class KuroNotificationBitmapLoader(
     private suspend fun fetchBitmapWithFallback(primaryUrl: String): Bitmap? {
         val loader = Coil.imageLoader(context)
         val candidates = mutableListOf(primaryUrl)
-        if (primaryUrl.contains("maxresdefault")) {
-            candidates.add(primaryUrl.replace("maxresdefault.jpg", "hqdefault.jpg").replace("maxresdefault.webp", "hqdefault.jpg"))
+        if (primaryUrl.contains("maxresdefault") || primaryUrl.contains("sddefault") || primaryUrl.contains("hq720")) {
+            candidates.add(
+                primaryUrl
+                    .replace("maxresdefault.jpg", "hqdefault.jpg")
+                    .replace("maxresdefault.webp", "hqdefault.jpg")
+                    .replace("sddefault.jpg", "hqdefault.jpg")
+                    .replace("hq720.jpg", "hqdefault.jpg")
+            )
         } else if (primaryUrl.contains("=w1080-h1080")) {
             candidates.add(primaryUrl.replace("=w1080-h1080", "=w512-h512"))
+        } else if (primaryUrl.contains("=w512-h512")) {
+            candidates.add(primaryUrl.replace("=w512-h512", "=w300-h300"))
         }
 
         for (candidate in candidates.distinct()) {
@@ -317,11 +328,15 @@ class PlaybackService : MediaSessionService() {
             .setUsage(C.USAGE_MEDIA)
             .build()
 
-        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+        val streamHttpClient = OkHttpClient.Builder()
+            .connectionPool(ConnectionPool(8, 5, TimeUnit.MINUTES))
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
+
+        val httpDataSourceFactory = OkHttpDataSource.Factory(streamHttpClient)
             .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
-            .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(15_000)
-            .setReadTimeoutMs(15_000)
 
         val extractorsFactory = androidx.media3.extractor.DefaultExtractorsFactory()
             .setConstantBitrateSeekingEnabled(true)
@@ -418,6 +433,10 @@ class PlaybackService : MediaSessionService() {
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                syncNotificationAndWidgets()
+            }
+
+            override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
                 syncNotificationAndWidgets()
             }
         })

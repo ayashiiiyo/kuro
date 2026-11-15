@@ -26,4 +26,16 @@
     <string name="lang_system">Системный по умолчанию</string>
     <string name="settings_lyrics_trans">Перевод текста песен</string>
     <string name="settings_lyrics_target_lang">Язык перевода (DeepL)</string>
+    <string name="settings_section_audio_offline">АУДИО И ОФЛАЙН</string>
+    <string name="settings_section_appearance_lang">ОФОРМЛЕНИЕ И ЯЗЫК</string>
+    <string name="settings_section_lyrics">ТЕКСТЫ ПЕСЕН</string>
+    <string name="settings_section_about">О ПРИЛОЖЕНИИ</string>
+    <string name="settings_download_quality">Качество загрузки по умолчанию</string>
+    <string name="settings_offline_folder">Папка офлайн-музыки</string>
+    <string name="settings_offline_folder_default">По умолчанию (Внутренняя память)</string>
+    <string name="settings_offline_folder_saved">Папка загрузок сохранена</string>
+    <string name="settings_action_reset">Сбросить</string>
+    <string name="settings_theme_short_system">Система</string>
+    <string name="settings_theme_short_dark">Тёмная</string>
+    <string name="settings_theme_short_light">Светлая</string>
 </resources>

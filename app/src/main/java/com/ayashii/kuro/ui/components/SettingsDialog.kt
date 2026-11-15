@@ -1,12 +1,13 @@
 package com.ayashii.kuro.ui.components
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material.icons.outlined.FolderOpen
-import androidx.compose.material.icons.outlined.Download
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -14,13 +15,17 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -30,10 +35,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Language
@@ -43,6 +49,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -59,13 +66,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.ayashii.kuro.BuildConfig
 import com.ayashii.kuro.R
 import com.ayashii.kuro.data.settings.AppLanguage
 import com.ayashii.kuro.data.settings.AudioQuality
@@ -84,9 +95,13 @@ fun SettingsDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val viewContext = LocalView.current.context
     val colors = KuroAppTheme.colors
     val scope = rememberCoroutineScope()
-    val settingsManager = remember { SettingsManager.getInstance() }
+    val settingsManager = remember {
+        runCatching { SettingsManager.getInstance() }.getOrElse { SettingsManager.init(context) }
+    }
+
     val currentTheme by settingsManager.themeMode.collectAsState()
     val currentLanguage by settingsManager.language.collectAsState()
     val currentLyricsLanguage by settingsManager.lyricsLanguage.collectAsState()
@@ -95,7 +110,6 @@ fun SettingsDialog(
     val autoTranslate by settingsManager.autoTranslate.collectAsState()
     val downloadTreeUri by settingsManager.downloadTreeUri.collectAsState()
     val downloadSubQuality by settingsManager.downloadSubQuality.collectAsState()
-    var showDownloadQualityPicker by remember { mutableStateOf(false) }
 
     val folderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -108,7 +122,7 @@ fun SettingsDialog(
                 )
             }
             settingsManager.setDownloadTreeUri(uri.toString())
-            Toast.makeText(context, "Folder download disimpan", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.settings_offline_folder_saved), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -117,35 +131,51 @@ fun SettingsDialog(
     var isCheckingUpdate by remember { mutableStateOf(false) }
     var updateStatusMessage by remember { mutableStateOf<String?>(null) }
     var foundUpdateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
+
+    var showAudioQualityPicker by remember { mutableStateOf(false) }
+    var showDownloadQualityPicker by remember { mutableStateOf(false) }
     var showAppLangPicker by remember { mutableStateOf(false) }
     var showLyricsLangPicker by remember { mutableStateOf(false) }
+
     val scrollState = rememberScrollState()
 
     LaunchedEffect(Unit) {
         cacheSize = settingsManager.getFormattedCacheSizeAsync()
     }
 
+    val isIndonesianLocale = remember(currentLanguage) {
+        val loc = settingsManager.resolveEffectiveLocale(currentLanguage).language.lowercase()
+        loc == "in" || loc == "id"
+    }
+
+    val currentLangLabel = when (currentLanguage) {
+        AppLanguage.SYSTEM -> stringResource(R.string.lang_system)
+        AppLanguage.INDONESIAN -> stringResource(R.string.lang_id)
+        AppLanguage.ENGLISH -> stringResource(R.string.lang_en)
+        else -> currentLanguage.displayName
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(0.92f)
-                .padding(vertical = 24.dp)
-                .heightIn(max = 640.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(colors.surface)
-                .border(1.dp, colors.border, RoundedCornerShape(24.dp))
-                .padding(20.dp)
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = colors.background
         ) {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(scrollState)
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -159,9 +189,10 @@ fun SettingsDialog(
                     IconButton(
                         onClick = onDismiss,
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(38.dp)
                             .clip(CircleShape)
                             .background(colors.card)
+                            .border(1.dp, colors.border.copy(alpha = 0.6f), CircleShape)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
@@ -172,129 +203,402 @@ fun SettingsDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(scrollState)
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 28.dp)
+                ) {
+                    SettingsSectionHeader(text = stringResource(R.string.settings_section_audio_offline))
+                    SettingsGroupCard {
+                        SettingsActionRow(
+                            icon = Icons.Outlined.GraphicEq,
+                            title = stringResource(R.string.settings_audio_quality),
+                            subtitle = "${stringResource(currentQuality.titleRes)} • ${currentSubQuality.badge}",
+                            onClick = { showAudioQualityPicker = true }
+                        )
+                        SettingsRowDivider()
+                        SettingsActionRow(
+                            icon = Icons.Outlined.Download,
+                            title = stringResource(R.string.settings_download_quality),
+                            subtitle = downloadSubQuality.badge,
+                            onClick = { showDownloadQualityPicker = true }
+                        )
+                        SettingsRowDivider()
+                        SettingsActionRow(
+                            icon = Icons.Outlined.FolderOpen,
+                            title = stringResource(R.string.settings_offline_folder),
+                            subtitle = downloadTreeUri?.let {
+                                runCatching { Uri.parse(it).lastPathSegment }.getOrNull() ?: it
+                            } ?: stringResource(R.string.settings_offline_folder_default),
+                            onClick = { folderPickerLauncher.launch(null) },
+                            trailing = if (downloadTreeUri != null) {
+                                {
+                                    Text(
+                                        text = stringResource(R.string.settings_action_reset),
+                                        style = Typography.labelSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colors.accent,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .clickable { settingsManager.setDownloadTreeUri(null) }
+                                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            } else null
+                        )
+                        SettingsRowDivider()
+                        SettingsActionRow(
+                            icon = Icons.Outlined.DeleteOutline,
+                            title = stringResource(R.string.settings_cache),
+                            subtitle = stringResource(R.string.settings_cache_size, cacheSize),
+                            onClick = {
+                                scope.launch {
+                                    val success = settingsManager.clearCacheAsync()
+                                    if (success) {
+                                        cacheSize = settingsManager.getFormattedCacheSizeAsync()
+                                        Toast.makeText(
+                                            context,
+                                            context.getString(R.string.settings_cache_cleared),
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                }
+                            },
+                            trailing = {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(50))
+                                        .background(colors.surface)
+                                        .border(1.dp, colors.border, RoundedCornerShape(50))
+                                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.settings_cache_clear),
+                                        style = Typography.labelSmall,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = colors.textPrimary
+                                    )
+                                }
+                            }
+                        )
+                    }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Outlined.GraphicEq,
-                        contentDescription = null,
-                        tint = colors.textPrimary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = stringResource(R.string.settings_audio_quality),
-                        style = Typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = colors.textPrimary
-                    )
-                }
+                    Spacer(modifier = Modifier.height(20.dp))
 
-                Spacer(modifier = Modifier.height(10.dp))
-
-                val isIndonesianLocale = remember(currentLanguage) {
-                    val loc = settingsManager.resolveEffectiveLocale(currentLanguage).language.lowercase()
-                    loc == "in" || loc == "id"
-                }
-
-                AudioQuality.values().forEach { quality ->
-                    val isSelected = currentQuality == quality
-                    val subOptions = remember(quality) { AudioSubQuality.optionsFor(quality) }
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (isSelected) colors.card else colors.surface)
-                            .border(1.dp, if (isSelected) colors.accent else colors.border, RoundedCornerShape(12.dp))
-                    ) {
+                    SettingsSectionHeader(text = stringResource(R.string.settings_section_appearance_lang))
+                    SettingsGroupCard {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { settingsManager.setAudioQuality(quality) }
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                SettingsIconBadge(icon = Icons.Outlined.Palette)
+                                Spacer(modifier = Modifier.width(12.dp))
                                 Text(
-                                    text = stringResource(quality.titleRes),
+                                    text = stringResource(R.string.settings_theme),
                                     style = Typography.bodyMedium,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    fontWeight = FontWeight.SemiBold,
                                     color = colors.textPrimary
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = if (isSelected) "${stringResource(quality.descRes)} • ${currentSubQuality.badge}" else stringResource(quality.descRes),
-                                    style = Typography.bodySmall,
-                                    color = colors.textMuted
                                 )
                             }
 
-                            if (isSelected) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(24.dp)
-                                        .clip(CircleShape)
-                                        .background(colors.accent),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Check,
-                                        contentDescription = stringResource(R.string.common_selected),
-                                        tint = colors.background,
-                                        modifier = Modifier.size(16.dp)
-                                    )
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .background(colors.surface)
+                                    .border(1.dp, colors.border.copy(alpha = 0.6f), RoundedCornerShape(50))
+                                    .padding(3.dp),
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                val themeItems = listOf(
+                                    ThemeMode.SYSTEM to stringResource(R.string.settings_theme_short_system),
+                                    ThemeMode.DARK to stringResource(R.string.settings_theme_short_dark),
+                                    ThemeMode.LIGHT to stringResource(R.string.settings_theme_short_light)
+                                )
+                                themeItems.forEach { (mode, label) ->
+                                    val selected = currentTheme == mode
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(50))
+                                            .background(if (selected) colors.accent else Color.Transparent)
+                                            .clickable { settingsManager.setThemeMode(mode) }
+                                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = label,
+                                            style = Typography.labelSmall,
+                                            fontSize = 11.sp,
+                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (selected) colors.background else colors.textSecondary
+                                        )
+                                    }
                                 }
                             }
                         }
 
-                        AnimatedVisibility(visible = isSelected && subOptions.size > 1) {
-                            Column(
+                        SettingsRowDivider()
+
+                        SettingsActionRow(
+                            icon = Icons.Outlined.Language,
+                            title = stringResource(R.string.settings_language),
+                            subtitle = currentLangLabel,
+                            onClick = { showAppLangPicker = true }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    SettingsSectionHeader(text = stringResource(R.string.settings_section_lyrics))
+                    SettingsGroupCard {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                SettingsIconBadge(icon = Icons.Outlined.Translate)
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = stringResource(R.string.settings_lyrics_trans),
+                                        style = Typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = colors.textPrimary
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.settings_lyrics_trans_desc),
+                                        style = Typography.bodySmall,
+                                        color = colors.textMuted,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Switch(
+                                checked = autoTranslate,
+                                onCheckedChange = { settingsManager.setAutoTranslate(it) },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = colors.background,
+                                    checkedTrackColor = colors.accent,
+                                    uncheckedThumbColor = colors.textSecondary,
+                                    uncheckedTrackColor = colors.surface
+                                )
+                            )
+                        }
+
+                        AnimatedVisibility(visible = autoTranslate) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                SettingsRowDivider()
+                                SettingsActionRow(
+                                    icon = Icons.Outlined.Language,
+                                    title = stringResource(R.string.settings_lyrics_target_lang),
+                                    subtitle = "${currentLyricsLanguage.displayName} (${currentLyricsLanguage.deeplCode.uppercase()})",
+                                    onClick = { showLyricsLangPicker = true }
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    SettingsSectionHeader(text = stringResource(R.string.settings_section_about))
+                    SettingsGroupCard {
+                        SettingsActionRow(
+                            icon = Icons.Outlined.Info,
+                            title = stringResource(R.string.settings_update),
+                            subtitle = updateStatusMessage ?: "v${BuildConfig.VERSION_NAME}",
+                            onClick = {
+                                if (!isCheckingUpdate) {
+                                    scope.launch {
+                                        isCheckingUpdate = true
+                                        updateStatusMessage = context.getString(R.string.settings_update_checking)
+                                        val update = UpdateManager.getInstance(context).checkForUpdate(force = true)
+                                        isCheckingUpdate = false
+                                        if (update != null) {
+                                            foundUpdateInfo = update
+                                            updateStatusMessage = context.getString(
+                                                R.string.settings_update_found,
+                                                update.versionName
+                                            )
+                                        } else {
+                                            updateStatusMessage = context.getString(R.string.settings_update_latest)
+                                        }
+                                    }
+                                }
+                            },
+                            trailing = {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(50))
+                                        .background(colors.surface)
+                                        .border(1.dp, colors.border, RoundedCornerShape(50))
+                                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        text = if (isCheckingUpdate) "…" else stringResource(R.string.settings_update_check),
+                                        style = Typography.labelSmall,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = colors.textPrimary
+                                    )
+                                }
+                            }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Kuro v${BuildConfig.VERSION_NAME} • Media3 & Jetpack Compose",
+                            style = Typography.labelSmall,
+                            fontSize = 11.sp,
+                            color = colors.textSecondary
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = stringResource(R.string.settings_about_desc),
+                            style = Typography.labelSmall,
+                            fontSize = 10.sp,
+                            color = colors.textMuted
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (showAudioQualityPicker) {
+        AlertDialog(
+            onDismissRequest = { showAudioQualityPicker = false },
+            containerColor = colors.surface,
+            title = {
+                Text(
+                    text = stringResource(R.string.settings_audio_quality),
+                    style = Typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.textPrimary
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    AudioQuality.values().forEach { quality ->
+                        val isSelected = currentQuality == quality
+                        val subOptions = remember(quality) { AudioSubQuality.optionsFor(quality) }
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(if (isSelected) colors.card else Color.Transparent)
+                                .border(
+                                    1.dp,
+                                    if (isSelected) colors.accent else colors.border,
+                                    RoundedCornerShape(14.dp)
+                                )
+                        ) {
+                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(start = 12.dp, end = 12.dp, bottom = 10.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    .clickable { settingsManager.setAudioQuality(quality) }
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                HorizontalDivider(color = colors.border.copy(alpha = 0.6f), thickness = 1.dp)
-                                Spacer(modifier = Modifier.height(2.dp))
-                                subOptions.forEach { sub ->
-                                    val isSubSelected = currentSubQuality == sub
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .background(if (isSubSelected) colors.surface else Color.Transparent)
-                                            .border(
-                                                1.dp,
-                                                if (isSubSelected) colors.accent.copy(alpha = 0.85f) else colors.border.copy(alpha = 0.5f),
-                                                RoundedCornerShape(10.dp)
-                                            )
-                                            .clickable { settingsManager.setAudioSubQuality(sub) }
-                                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = sub.badge,
-                                                style = Typography.bodySmall.copy(fontSize = 13.sp),
-                                                fontWeight = if (isSubSelected) FontWeight.Bold else FontWeight.SemiBold,
-                                                color = colors.textPrimary
-                                            )
-                                            Text(
-                                                text = if (isIndonesianLocale) sub.subtitleId else sub.subtitleEn,
-                                                style = Typography.bodySmall.copy(fontSize = 11.sp),
-                                                color = colors.textMuted
-                                            )
-                                        }
-                                        if (isSubSelected) {
-                                            Icon(
-                                                imageVector = Icons.Default.Check,
-                                                contentDescription = null,
-                                                tint = colors.accent,
-                                                modifier = Modifier.size(16.dp)
-                                            )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = stringResource(quality.titleRes),
+                                        style = Typography.bodyMedium,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = colors.textPrimary
+                                    )
+                                    Text(
+                                        text = stringResource(quality.descRes),
+                                        style = Typography.bodySmall,
+                                        color = colors.textMuted
+                                    )
+                                }
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = stringResource(R.string.common_selected),
+                                        tint = colors.accent,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+
+                            AnimatedVisibility(visible = isSelected && subOptions.size > 1) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 10.dp, end = 10.dp, bottom = 10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    HorizontalDivider(color = colors.border.copy(alpha = 0.6f))
+                                    subOptions.forEach { sub ->
+                                        val isSubSelected = currentSubQuality == sub
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(if (isSubSelected) colors.surface else Color.Transparent)
+                                                .border(
+                                                    1.dp,
+                                                    if (isSubSelected) colors.accent.copy(alpha = 0.85f) else colors.border.copy(alpha = 0.45f),
+                                                    RoundedCornerShape(10.dp)
+                                                )
+                                                .clickable { settingsManager.setAudioSubQuality(sub) }
+                                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = sub.badge,
+                                                    style = Typography.bodySmall,
+                                                    fontWeight = if (isSubSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                                    color = colors.textPrimary
+                                                )
+                                                Text(
+                                                    text = if (isIndonesianLocale) sub.subtitleId else sub.subtitleEn,
+                                                    style = Typography.labelSmall,
+                                                    color = colors.textMuted
+                                                )
+                                            }
+                                            if (isSubSelected) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Check,
+                                                    contentDescription = null,
+                                                    tint = colors.accent,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -302,646 +606,85 @@ fun SettingsDialog(
                         }
                     }
                 }
-
-                Spacer(modifier = Modifier.height(20.dp))
-                HorizontalDivider(color = colors.border, thickness = 1.dp)
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Outlined.Palette,
-                        contentDescription = null,
-                        tint = colors.textPrimary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = stringResource(R.string.settings_theme),
-                        style = Typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = colors.textPrimary
-                    )
+            },
+            confirmButton = {
+                TextButton(onClick = { showAudioQualityPicker = false }) {
+                    Text(stringResource(R.string.action_close), color = colors.textPrimary)
                 }
+            }
+        )
+    }
 
-                Spacer(modifier = Modifier.height(10.dp))
-
-                val themeOptions = listOf(
-                    Triple(
-                        ThemeMode.SYSTEM,
-                        stringResource(R.string.settings_theme_system),
-                        stringResource(R.string.settings_theme_system_desc)
-                    ),
-                    Triple(
-                        ThemeMode.DARK,
-                        stringResource(R.string.settings_theme_dark),
-                        stringResource(R.string.settings_theme_dark_desc)
-                    ),
-                    Triple(
-                        ThemeMode.LIGHT,
-                        stringResource(R.string.settings_theme_light),
-                        stringResource(R.string.settings_theme_light_desc)
-                    )
+    if (showDownloadQualityPicker) {
+        AlertDialog(
+            onDismissRequest = { showDownloadQualityPicker = false },
+            containerColor = colors.surface,
+            title = {
+                Text(
+                    text = stringResource(R.string.settings_download_quality),
+                    style = Typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.textPrimary
                 )
-
-                themeOptions.forEach { (mode, title, desc) ->
-                    val isSelected = currentTheme == mode
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (isSelected) colors.card else colors.surface)
-                            .border(1.dp, if (isSelected) colors.accent else colors.border, RoundedCornerShape(12.dp))
-                            .clickable { settingsManager.setThemeMode(mode) }
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = title,
-                                style = Typography.bodyMedium,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                color = colors.textPrimary
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = desc,
-                                style = Typography.bodySmall,
-                                color = colors.textMuted
-                            )
-                        }
-
-                        if (isSelected) {
-                            Box(
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .clip(CircleShape)
-                                    .background(colors.accent),
-                                contentAlignment = Alignment.Center
-                            ) {
+            },
+            text = {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(AudioSubQuality.values().toList()) { sub ->
+                        val selected = sub == downloadSubQuality
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (selected) colors.card else Color.Transparent)
+                                .border(
+                                    1.dp,
+                                    if (selected) colors.accent else colors.border,
+                                    RoundedCornerShape(12.dp)
+                                )
+                                .clickable {
+                                    settingsManager.setDownloadSubQuality(sub)
+                                    showDownloadQualityPicker = false
+                                }
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = sub.badge,
+                                    style = Typography.bodySmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = colors.textPrimary
+                                )
+                                Text(
+                                    text = if (isIndonesianLocale) sub.subtitleId else sub.subtitleEn,
+                                    style = Typography.labelSmall,
+                                    color = colors.textMuted
+                                )
+                            }
+                            if (selected) {
                                 Icon(
                                     imageVector = Icons.Default.Check,
-                                    contentDescription = stringResource(R.string.common_selected),
-                                    tint = colors.background,
+                                    contentDescription = null,
+                                    tint = colors.accent,
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
                         }
                     }
                 }
-
-                Spacer(modifier = Modifier.height(20.dp))
-                HorizontalDivider(color = colors.border, thickness = 1.dp)
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Outlined.Language,
-                        contentDescription = null,
-                        tint = colors.textPrimary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column {
-                        Text(
-                            text = stringResource(R.string.settings_language),
-                            style = Typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = colors.textPrimary
-                        )
-                        Text(
-                            text = stringResource(R.string.settings_language_desc),
-                            style = Typography.bodySmall,
-                            color = colors.textMuted
-                        )
-                    }
+            },
+            confirmButton = {
+                TextButton(onClick = { showDownloadQualityPicker = false }) {
+                    Text(stringResource(R.string.action_close), color = colors.textPrimary)
                 }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                val currentLangLabel = when (currentLanguage) {
-                    AppLanguage.SYSTEM -> stringResource(R.string.lang_system)
-                    AppLanguage.INDONESIAN -> stringResource(R.string.lang_id)
-                    AppLanguage.ENGLISH -> stringResource(R.string.lang_en)
-                    else -> currentLanguage.displayName
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(colors.card)
-                        .border(1.dp, colors.accent, RoundedCornerShape(12.dp))
-                        .clickable { showAppLangPicker = true }
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = currentLangLabel,
-                            style = Typography.bodyMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = colors.textPrimary
-                        )
-                        Text(
-                            text = stringResource(R.string.settings_choose_language),
-                            style = Typography.bodySmall,
-                            color = colors.textMuted
-                        )
-                    }
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowDown,
-                        contentDescription = null,
-                        tint = colors.textPrimary,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-                HorizontalDivider(color = colors.border, thickness = 1.dp)
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(colors.card)
-                        .border(1.dp, colors.border, RoundedCornerShape(12.dp))
-                        .clickable { folderPickerLauncher.launch(null) }
-                        .padding(horizontal = 14.dp, vertical = 11.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                        Icon(
-                            imageVector = Icons.Outlined.FolderOpen,
-                            contentDescription = null,
-                            tint = colors.textPrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = "Folder Musik Offline",
-                                style = Typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = colors.textPrimary
-                            )
-                            Text(
-                                text = downloadTreeUri?.let { Uri.parse(it).lastPathSegment ?: it } ?: "Default (Penyimpanan Internal)",
-                                style = Typography.bodySmall,
-                                color = colors.textMuted,
-                                maxLines = 1
-                            )
-                        }
-                    }
-                    if (downloadTreeUri != null) {
-                        Text(
-                            text = "Reset",
-                            style = Typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = colors.accent,
-                            modifier = Modifier
-                                .clickable { settingsManager.setDownloadTreeUri(null) }
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(colors.card)
-                        .border(1.dp, colors.border, RoundedCornerShape(12.dp))
-                        .clickable { showDownloadQualityPicker = !showDownloadQualityPicker }
-                        .padding(horizontal = 14.dp, vertical = 11.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                        Icon(
-                            imageVector = Icons.Outlined.Download,
-                            contentDescription = null,
-                            tint = colors.textPrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = "Kualitas Download Default",
-                                style = Typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = colors.textPrimary
-                            )
-                            Text(
-                                text = downloadSubQuality.badge,
-                                style = Typography.bodySmall,
-                                color = colors.textMuted
-                            )
-                        }
-                    }
-                    Icon(
-                        imageVector = if (showDownloadQualityPicker) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = null,
-                        tint = colors.textPrimary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                AnimatedVisibility(visible = showDownloadQualityPicker) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        AudioSubQuality.values().forEach { sub ->
-                            val selected = sub == downloadSubQuality
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(if (selected) colors.accent.copy(alpha = 0.14f) else colors.card)
-                                    .border(1.dp, if (selected) colors.accent else colors.border, RoundedCornerShape(10.dp))
-                                    .clickable {
-                                        settingsManager.setDownloadSubQuality(sub)
-                                        showDownloadQualityPicker = false
-                                    }
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(sub.badge, style = Typography.bodySmall, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                                    Text(sub.subtitleId, style = Typography.labelSmall, color = colors.textMuted)
-                                }
-                                if (selected) {
-                                    Icon(Icons.Default.Check, contentDescription = null, tint = colors.accent, modifier = Modifier.size(16.dp))
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-                HorizontalDivider(color = colors.border, thickness = 1.dp)
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                        Icon(
-                            imageVector = Icons.Outlined.Translate,
-                            contentDescription = null,
-                            tint = colors.textPrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text(
-                                text = stringResource(R.string.settings_lyrics_trans),
-                                style = Typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = colors.textPrimary
-                            )
-                            Text(
-                                text = stringResource(R.string.settings_lyrics_trans_desc),
-                                style = Typography.bodySmall,
-                                color = colors.textMuted
-                            )
-                        }
-                    }
-
-                    Switch(
-                        checked = autoTranslate,
-                        onCheckedChange = { settingsManager.setAutoTranslate(it) },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = colors.background,
-                            checkedTrackColor = colors.accent,
-                            uncheckedThumbColor = colors.textSecondary,
-                            uncheckedTrackColor = colors.card
-                        )
-                    )
-                }
-
-                AnimatedVisibility(visible = autoTranslate) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(colors.card)
-                                .border(1.dp, colors.border, RoundedCornerShape(12.dp))
-                                .clickable { showLyricsLangPicker = true }
-                                .padding(horizontal = 14.dp, vertical = 11.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(R.string.settings_lyrics_target_lang),
-                                    style = Typography.bodySmall,
-                                    color = colors.textMuted
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = "${currentLyricsLanguage.displayName} (${currentLyricsLanguage.deeplCode.uppercase()})",
-                                    style = Typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = colors.textPrimary
-                                )
-                            }
-                            Icon(
-                                imageVector = Icons.Default.KeyboardArrowDown,
-                                contentDescription = null,
-                                tint = colors.textPrimary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-                HorizontalDivider(color = colors.border, thickness = 1.dp)
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(colors.card)
-                        .border(1.dp, colors.border, RoundedCornerShape(12.dp))
-                        .clickable { folderPickerLauncher.launch(null) }
-                        .padding(horizontal = 14.dp, vertical = 11.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                        Icon(
-                            imageVector = Icons.Outlined.FolderOpen,
-                            contentDescription = null,
-                            tint = colors.textPrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = "Folder Musik Offline",
-                                style = Typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = colors.textPrimary
-                            )
-                            Text(
-                                text = downloadTreeUri?.let { Uri.parse(it).lastPathSegment ?: it } ?: "Default (Penyimpanan Internal)",
-                                style = Typography.bodySmall,
-                                color = colors.textMuted,
-                                maxLines = 1
-                            )
-                        }
-                    }
-                    if (downloadTreeUri != null) {
-                        Text(
-                            text = "Reset",
-                            style = Typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = colors.accent,
-                            modifier = Modifier
-                                .clickable { settingsManager.setDownloadTreeUri(null) }
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(colors.card)
-                        .border(1.dp, colors.border, RoundedCornerShape(12.dp))
-                        .clickable { showDownloadQualityPicker = !showDownloadQualityPicker }
-                        .padding(horizontal = 14.dp, vertical = 11.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                        Icon(
-                            imageVector = Icons.Outlined.Download,
-                            contentDescription = null,
-                            tint = colors.textPrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = "Kualitas Download Default",
-                                style = Typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = colors.textPrimary
-                            )
-                            Text(
-                                text = downloadSubQuality.badge,
-                                style = Typography.bodySmall,
-                                color = colors.textMuted
-                            )
-                        }
-                    }
-                    Icon(
-                        imageVector = if (showDownloadQualityPicker) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = null,
-                        tint = colors.textPrimary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                AnimatedVisibility(visible = showDownloadQualityPicker) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        AudioSubQuality.values().forEach { sub ->
-                            val selected = sub == downloadSubQuality
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(if (selected) colors.accent.copy(alpha = 0.14f) else colors.card)
-                                    .border(1.dp, if (selected) colors.accent else colors.border, RoundedCornerShape(10.dp))
-                                    .clickable {
-                                        settingsManager.setDownloadSubQuality(sub)
-                                        showDownloadQualityPicker = false
-                                    }
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(sub.badge, style = Typography.bodySmall, fontWeight = FontWeight.Bold, color = colors.textPrimary)
-                                    Text(sub.subtitleId, style = Typography.labelSmall, color = colors.textMuted)
-                                }
-                                if (selected) {
-                                    Icon(Icons.Default.Check, contentDescription = null, tint = colors.accent, modifier = Modifier.size(16.dp))
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(20.dp))
-                HorizontalDivider(color = colors.border, thickness = 1.dp)
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                        Icon(
-                            imageVector = Icons.Outlined.DeleteOutline,
-                            contentDescription = null,
-                            tint = colors.textPrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text(
-                                text = stringResource(R.string.settings_cache),
-                                style = Typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = colors.textPrimary
-                            )
-                            Text(
-                                text = stringResource(R.string.settings_cache_size, cacheSize),
-                                style = Typography.bodySmall,
-                                color = colors.textMuted
-                            )
-                        }
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(colors.card)
-                            .border(1.dp, colors.border, RoundedCornerShape(12.dp))
-                            .clickable {
-                                scope.launch {
-                                    val success = settingsManager.clearCacheAsync()
-                                    if (success) {
-                                        cacheSize = settingsManager.getFormattedCacheSizeAsync()
-                                        Toast.makeText(context, context.getString(R.string.settings_cache_cleared), Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            }
-                            .padding(horizontal = 12.dp, vertical = 7.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.settings_cache_clear),
-                            style = Typography.labelSmall,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = colors.textPrimary
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = stringResource(R.string.settings_update),
-                            style = Typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = colors.textPrimary
-                        )
-                        Text(
-                            text = updateStatusMessage ?: "v${com.ayashii.kuro.BuildConfig.VERSION_NAME}",
-                            style = Typography.bodySmall,
-                            color = if (updateStatusMessage != null) colors.accent else colors.textMuted
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(colors.card)
-                            .border(1.dp, colors.border, RoundedCornerShape(20.dp))
-                            .clickable(enabled = !isCheckingUpdate) {
-                                scope.launch {
-                                    isCheckingUpdate = true
-                                    updateStatusMessage = context.getString(R.string.settings_update_checking)
-                                    val update = UpdateManager.getInstance(context).checkForUpdate(force = true)
-                                    isCheckingUpdate = false
-                                    if (update != null) {
-                                        foundUpdateInfo = update
-                                        updateStatusMessage = context.getString(R.string.settings_update_found, update.versionName)
-                                    } else {
-                                        updateStatusMessage = context.getString(R.string.settings_update_latest)
-                                    }
-                                }
-                            }
-                            .padding(horizontal = 12.dp, vertical = 7.dp)
-                    ) {
-                        Text(
-                            text = if (isCheckingUpdate) "…" else stringResource(R.string.settings_update_check),
-                            style = Typography.labelSmall,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = colors.textPrimary
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Outlined.Info,
-                            contentDescription = null,
-                            tint = colors.textSecondary,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Kuro v${com.ayashii.kuro.BuildConfig.VERSION_NAME} • Media3 & Jetpack Compose",
-                            style = Typography.labelSmall,
-                            fontSize = 11.sp,
-                            color = colors.textSecondary
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = stringResource(R.string.settings_about_desc),
-                        style = Typography.labelSmall,
-                        fontSize = 10.sp,
-                        color = colors.textMuted
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
             }
-        }
+        )
     }
 
     if (showAppLangPicker) {
@@ -983,11 +726,11 @@ fun SettingsDialog(
                                 .clickable {
                                     settingsManager.setLanguage(lang)
                                     showAppLangPicker = false
-                                    var ctx: android.content.Context? = context
-                                    while (ctx is android.content.ContextWrapper && ctx !is android.app.Activity) {
+                                    var ctx: Context? = viewContext
+                                    while (ctx is ContextWrapper && ctx !is Activity) {
                                         ctx = ctx.baseContext
                                     }
-                                    (ctx as? android.app.Activity)?.recreate()
+                                    (ctx as? Activity)?.recreate()
                                 }
                                 .padding(horizontal = 14.dp, vertical = 11.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -1050,6 +793,117 @@ fun SettingsDialog(
                 foundUpdateInfo = null
             }
         )
+    }
+}
+
+@Composable
+private fun SettingsSectionHeader(text: String) {
+    val colors = KuroAppTheme.colors
+    Text(
+        text = text,
+        style = Typography.labelSmall,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 1.1.sp,
+        color = colors.textMuted,
+        modifier = Modifier.padding(start = 8.dp, bottom = 8.dp)
+    )
+}
+
+@Composable
+private fun SettingsGroupCard(
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val colors = KuroAppTheme.colors
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(colors.card)
+            .border(1.dp, colors.border.copy(alpha = 0.6f), RoundedCornerShape(20.dp)),
+        content = content
+    )
+}
+
+@Composable
+private fun SettingsRowDivider() {
+    val colors = KuroAppTheme.colors
+    HorizontalDivider(
+        color = colors.border.copy(alpha = 0.5f),
+        thickness = 0.5.dp,
+        modifier = Modifier.padding(start = 62.dp)
+    )
+}
+
+@Composable
+private fun SettingsIconBadge(icon: ImageVector) {
+    val colors = KuroAppTheme.colors
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(colors.surface),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = colors.textPrimary,
+            modifier = Modifier.size(18.dp)
+        )
+    }
+}
+
+@Composable
+private fun SettingsActionRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+    trailing: (@Composable () -> Unit)? = null
+) {
+    val colors = KuroAppTheme.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f)
+        ) {
+            SettingsIconBadge(icon = icon)
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = Typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.textPrimary
+                )
+                Text(
+                    text = subtitle,
+                    style = Typography.bodySmall,
+                    color = colors.textMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        if (trailing != null) {
+            trailing()
+        } else {
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = colors.textMuted,
+                modifier = Modifier.size(20.dp)
+            )
+        }
     }
 }
 

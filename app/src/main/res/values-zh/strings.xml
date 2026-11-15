@@ -132,4 +132,16 @@
     <string name="settings_cache_cleared">缓存已清理</string>
     <string name="settings_update">应用更新</string>
     <string name="settings_update_check">检查更新</string>
+    <string name="settings_section_audio_offline">音频与离线</string>
+    <string name="settings_section_appearance_lang">外观与语言</string>
+    <string name="settings_section_lyrics">歌词</string>
+    <string name="settings_section_about">关于</string>
+    <string name="settings_download_quality">默认下载音质</string>
+    <string name="settings_offline_folder">离线音乐文件夹</string>
+    <string name="settings_offline_folder_default">默认（内部存储）</string>
+    <string name="settings_offline_folder_saved">已保存下载文件夹</string>
+    <string name="settings_action_reset">重置</string>
+    <string name="settings_theme_short_system">系统</string>
+    <string name="settings_theme_short_dark">深色</string>
+    <string name="settings_theme_short_light">浅色</string>
 </resources>

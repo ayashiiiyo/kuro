@@ -71,4 +71,16 @@
     <string name="settings_lyrics_trans_desc">Traducir letras automáticamente con DeepL</string>
     <string name="settings_lyrics_target_lang">Idioma de traducción de letras</string>
     <string name="settings_lyrics_target_lang_desc">Idioma de destino para DeepL</string>
+    <string name="settings_section_audio_offline">AUDIO Y SIN CONEXIÓN</string>
+    <string name="settings_section_appearance_lang">APARIENCIA E IDIOMA</string>
+    <string name="settings_section_lyrics">LETRAS</string>
+    <string name="settings_section_about">ACERCA DE</string>
+    <string name="settings_download_quality">Calidad de descarga predeterminada</string>
+    <string name="settings_offline_folder">Carpeta de música sin conexión</string>
+    <string name="settings_offline_folder_default">Predeterminado (Almacenamiento interno)</string>
+    <string name="settings_offline_folder_saved">Carpeta de descargas guardada</string>
+    <string name="settings_action_reset">Restablecer</string>
+    <string name="settings_theme_short_system">Sistema</string>
+    <string name="settings_theme_short_dark">Oscuro</string>
+    <string name="settings_theme_short_light">Claro</string>
 </resources>

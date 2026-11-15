@@ -132,4 +132,16 @@
     <string name="settings_cache_cleared">캐시가 삭제되었습니다</string>
     <string name="settings_update">앱 업데이트</string>
     <string name="settings_update_check">업데이트 확인</string>
+    <string name="settings_section_audio_offline">오디오 및 오프라인</string>
+    <string name="settings_section_appearance_lang">화면 및 언어</string>
+    <string name="settings_section_lyrics">가사</string>
+    <string name="settings_section_about">정보</string>
+    <string name="settings_download_quality">기본 다운로드 음질</string>
+    <string name="settings_offline_folder">오프라인 음악 폴더</string>
+    <string name="settings_offline_folder_default">기본값 (내부 저장소)</string>
+    <string name="settings_offline_folder_saved">다운로드 폴더가 저장되었습니다</string>
+    <string name="settings_action_reset">초기화</string>
+    <string name="settings_theme_short_system">시스템</string>
+    <string name="settings_theme_short_dark">다크</string>
+    <string name="settings_theme_short_light">라이트</string>
 </resources>

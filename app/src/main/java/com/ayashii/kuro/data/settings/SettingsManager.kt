@@ -307,7 +307,8 @@ class SettingsManager private constructor(private val context: Context) {
 
     fun resolveEffectiveLocale(lang: AppLanguage = _language.value): Locale {
         if (lang == AppLanguage.SYSTEM || lang.code.isEmpty()) {
-            val sysLoc = android.content.res.Resources.getSystem().configuration.locales.get(0)
+            val locales = android.content.res.Resources.getSystem().configuration.locales
+            val sysLoc = if (!locales.isEmpty) locales.get(0) else null
             return sysLoc ?: Locale.getDefault()
         }
         return if (lang.code == "in" || lang.code == "id") {

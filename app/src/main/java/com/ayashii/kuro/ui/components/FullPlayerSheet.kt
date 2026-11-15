@@ -467,7 +467,7 @@ fun FullPlayerSheet(
                 ) {
                     AnimatedContent(
                         targetState = track,
-                        contentKey = { it.id },
+                        contentKey = { "${it.id}_${it.thumbnailUrl}" },
                         transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(180)) },
                         label = "full_player_artwork"
                     ) { animatedTrack ->

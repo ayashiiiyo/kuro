@@ -132,4 +132,16 @@
     <string name="settings_cache_cleared">キャッシュを消去しました</string>
     <string name="settings_update">アプリの更新</string>
     <string name="settings_update_check">更新を確認</string>
+    <string name="settings_section_audio_offline">オーディオとオフライン</string>
+    <string name="settings_section_appearance_lang">外観と言語</string>
+    <string name="settings_section_lyrics">歌詞</string>
+    <string name="settings_section_about">アプリについて</string>
+    <string name="settings_download_quality">デフォルトのダウンロード音質</string>
+    <string name="settings_offline_folder">オフライン音楽フォルダ</string>
+    <string name="settings_offline_folder_default">デフォルト（内部ストレージ）</string>
+    <string name="settings_offline_folder_saved">ダウンロードフォルダを保存しました</string>
+    <string name="settings_action_reset">リセット</string>
+    <string name="settings_theme_short_system">システム</string>
+    <string name="settings_theme_short_dark">ダーク</string>
+    <string name="settings_theme_short_light">ライト</string>
 </resources>

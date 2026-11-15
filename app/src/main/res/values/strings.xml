@@ -233,4 +233,16 @@ You</string>
     <string name="update_permission_title">Allow app installs</string>
     <string name="update_permission_text">Allow Kuro to install unknown apps, then tap the update notification again.</string>
     <string name="update_download_failed">Update download failed. Please try again.</string>
+    <string name="settings_section_audio_offline">AUDIO &amp; OFFLINE</string>
+    <string name="settings_section_appearance_lang">APPEARANCE &amp; LANGUAGE</string>
+    <string name="settings_section_lyrics">LYRICS</string>
+    <string name="settings_section_about">ABOUT</string>
+    <string name="settings_download_quality">Default Download Quality</string>
+    <string name="settings_offline_folder">Offline Music Folder</string>
+    <string name="settings_offline_folder_default">Default (Internal Storage)</string>
+    <string name="settings_offline_folder_saved">Download folder saved</string>
+    <string name="settings_action_reset">Reset</string>
+    <string name="settings_theme_short_system">System</string>
+    <string name="settings_theme_short_dark">Dark</string>
+    <string name="settings_theme_short_light">Light</string>
 </resources>

@@ -209,9 +209,20 @@ fun KuroTheme(
     val colorScheme = if (isDark) DarkColorScheme else LightColorScheme
     val kuroColors = if (isDark) DarkKuroColors else LightKuroColors
 
+    val activityOwner = remember(baseContext) {
+        generateSequence(baseContext) { (it as? android.content.ContextWrapper)?.baseContext }
+            .filterIsInstance<androidx.activity.result.ActivityResultRegistryOwner>()
+            .firstOrNull()
+    }
+
     CompositionLocalProvider(
         LocalKuroColors provides kuroColors,
-        LocalContext provides localizedContext
+        LocalContext provides localizedContext,
+        *(if (activityOwner != null) {
+            arrayOf(androidx.activity.compose.LocalActivityResultRegistryOwner provides activityOwner)
+        } else {
+            emptyArray()
+        })
     ) {
         MaterialTheme(
             colorScheme = colorScheme,
