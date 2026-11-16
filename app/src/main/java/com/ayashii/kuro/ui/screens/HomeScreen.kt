@@ -229,7 +229,7 @@ fun HomeScreen(
                                 viewModel.loadTrending()
                             } else {
                                 selectedGenre = genre
-                                viewModel.selectGenre(genre)
+                                viewModel.loadGenreTracks(genre)
                             }
                         }
                         .padding(horizontal = 14.dp, vertical = 7.dp),
