@@ -94,6 +94,24 @@
     <string name="lib_shuffle">Shuffle</string>
     <string name="lib_remove_from_playlist">Remove from playlist</string>
     <string name="lib_sync_yt">Sync YT</string>
+    <string name="home_play_all">Play all</string>
+    <string name="home_daily_discover">Your daily discover</string>
+    <string name="home_mixed_for_you">Mixed for you</string>
+    <string name="home_empty">No music available right now</string>
+    <string name="lib_tab_all">All</string>
+    <string name="lib_tab_watch_later">Watch Later</string>
+    <string name="lib_tab_offline">Offline</string>
+    <string name="lib_all_count">%1$d Playlists • %2$d Favorites</string>
+    <string name="lib_watch_later_count">%1$d saved songs</string>
+    <string name="lib_offline_count">%1$d offline songs</string>
+    <string name="lib_watch_later_empty">No songs in Watch Later yet</string>
+    <string name="lib_offline_empty">No offline songs yet</string>
+    <string name="lib_auto_playlist">Auto playlist</string>
+    <string name="lib_new_fab">New</string>
+    <string name="lib_section_pinned">PINNED</string>
+    <string name="lib_section_playlists">YOUR PLAYLISTS</string>
+    <string name="lib_sort_recent">Recent</string>
+    <string name="lib_sort_az">A–Z</string>
 
     <!-- Search Screen -->
     <string name="search_title">Search</string>

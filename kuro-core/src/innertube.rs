@@ -222,10 +222,33 @@ fn parse_card_shelf(card_shelf: &serde_json::Value) -> Vec<ParsedTrack> {
     }
 
     if video_id.is_empty() {
+        video_id = card_shelf
+            .pointer("/thumbnailOverlay/musicItemThumbnailOverlayRenderer/content/musicPlayButtonRenderer/playNavigationEndpoint/watchEndpoint/videoId")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+    }
+
+    if video_id.is_empty() {
         if let Some(buttons) = card_shelf.get("buttons").and_then(|b| b.as_array()) {
             for b in buttons {
                 if let Some(vid) = b
                     .pointer("/buttonRenderer/command/watchEndpoint/videoId")
+                    .and_then(|v| v.as_str())
+                {
+                    if !vid.is_empty() {
+                        video_id = vid;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    if video_id.is_empty() {
+        if let Some(items) = card_shelf.pointer("/menu/menuRenderer/items").and_then(|m| m.as_array()) {
+            for m in items {
+                if let Some(vid) = m
+                    .pointer("/menuNavigationItemRenderer/navigationEndpoint/watchEndpoint/videoId")
                     .and_then(|v| v.as_str())
                 {
                     if !vid.is_empty() {

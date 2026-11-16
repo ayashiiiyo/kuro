@@ -94,6 +94,24 @@
     <string name="lib_shuffle">Acak</string>
     <string name="lib_remove_from_playlist">Hapus dari playlist</string>
     <string name="lib_sync_yt">Sync YT</string>
+    <string name="home_play_all">Putar semua</string>
+    <string name="home_daily_discover">Penemuan harian</string>
+    <string name="home_mixed_for_you">Mix untukmu</string>
+    <string name="home_empty">Belum ada musik saat ini</string>
+    <string name="lib_tab_all">Semua</string>
+    <string name="lib_tab_watch_later">Putar Nanti</string>
+    <string name="lib_tab_offline">Offline</string>
+    <string name="lib_all_count">%1$d Playlist • %2$d Favorit</string>
+    <string name="lib_watch_later_count">%1$d lagu disimpan</string>
+    <string name="lib_offline_count">%1$d lagu offline</string>
+    <string name="lib_watch_later_empty">Belum ada lagu di Putar Nanti</string>
+    <string name="lib_offline_empty">Belum ada lagu offline</string>
+    <string name="lib_auto_playlist">Playlist otomatis</string>
+    <string name="lib_new_fab">Baru</string>
+    <string name="lib_section_pinned">DISEMATKAN</string>
+    <string name="lib_section_playlists">PLAYLIST KAMU</string>
+    <string name="lib_sort_recent">Terbaru</string>
+    <string name="lib_sort_az">A–Z</string>
 
     <!-- Search Screen -->
     <string name="search_title">Cari</string>

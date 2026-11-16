@@ -29,7 +29,7 @@ class MusicRepository {
 
     companion object {
         private const val YTM_CLIENT_NAME = "WEB_REMIX"
-        private const val YTM_CLIENT_VERSION = "1.20241028.01.00"
+        private const val YTM_CLIENT_VERSION = "1.20260401.01.00"
         private const val YTM_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
         private const val YTM_PARAMS_SONGS = "EgWKAQIIAWoKEAkQBRAKEAMQBA=="
@@ -53,6 +53,10 @@ class MusicRepository {
         private val homeCacheLock = Any()
         private val searchCache = LruCache<String, Pair<List<Track>, Long>>(30)
         private val radioCache = LruCache<String, Pair<List<Track>, Long>>(20)
+        private val VISITOR_DATA_REGEX = Regex("\"VISITOR_DATA\"\\s*:\\s*\"([^\"]+)\"")
+
+        @Volatile
+        private var cachedVisitorData: String? = null
 
         @Volatile
         private var INSTANCE: MusicRepository? = null
@@ -67,6 +71,32 @@ class MusicRepository {
     fun invalidateHomeCache() {
         synchronized(homeCacheLock) {
             homeCache = null
+        }
+        synchronized(searchCache) {
+            searchCache.evictAll()
+        }
+    }
+
+    private fun ensureVisitorData(): String? {
+        cachedVisitorData?.let { return it }
+        return try {
+            val req = okhttp3.Request.Builder()
+                .url("https://music.youtube.com/sw.js_data")
+                .header("User-Agent", YTM_USER_AGENT)
+                .header("Referer", "https://music.youtube.com/")
+                .build()
+            HttpClientProvider.client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return null
+                val raw = resp.body?.string().orEmpty()
+                val match = VISITOR_DATA_REGEX.find(raw)?.groupValues?.getOrNull(1)
+                    ?: Regex("\"visitorData\"\\s*:\\s*\"([^\"]+)\"").find(raw)?.groupValues?.getOrNull(1)
+                if (!match.isNullOrBlank()) {
+                    cachedVisitorData = match
+                }
+                cachedVisitorData
+            }
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -340,7 +370,7 @@ class MusicRepository {
             merged.values.toList()
         }
 
-        val fallbackTracks = if (ytmTracks.isEmpty()) {
+        val fallbackTracks = if (ytmTracks.size < 8) {
             fetchNewPipeSearchTracks(query)
         } else {
             emptyList()
@@ -401,14 +431,18 @@ class MusicRepository {
             val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
             val origin = "https://music.youtube.com"
 
+            val visitorData = ensureVisitorData()
             val payload = org.json.JSONObject().apply {
                 put("context", org.json.JSONObject().apply {
                     put("client", org.json.JSONObject().apply {
                         put("clientName", YTM_CLIENT_NAME)
                         put("clientVersion", YTM_CLIENT_VERSION)
-                        val (hlCode, glCode) = resolveHlGl()
-                        put("hl", hlCode)
+                        val (_, glCode) = resolveHlGl()
+                        put("hl", "en")
                         put("gl", glCode)
+                        if (!visitorData.isNullOrBlank()) {
+                            put("visitorData", visitorData)
+                        }
                     })
                 })
                 put("query", query)
@@ -427,6 +461,9 @@ class MusicRepository {
                 .header("X-Origin", origin)
                 .header("X-YouTube-Client-Name", "67")
                 .header("X-YouTube-Client-Version", YTM_CLIENT_VERSION)
+            if (!visitorData.isNullOrBlank()) {
+                reqBuilder.header("X-Goog-Visitor-Id", visitorData)
+            }
 
             auth.applyAuthToRequest(reqBuilder, payload, origin)
 
@@ -461,6 +498,16 @@ class MusicRepository {
                     .orEmpty()
             }
             if (videoId.isBlank()) {
+                videoId = cardShelf.optJSONObject("thumbnailOverlay")
+                    ?.optJSONObject("musicItemThumbnailOverlayRenderer")
+                    ?.optJSONObject("content")
+                    ?.optJSONObject("musicPlayButtonRenderer")
+                    ?.optJSONObject("playNavigationEndpoint")
+                    ?.optJSONObject("watchEndpoint")
+                    ?.optString("videoId", "")
+                    .orEmpty()
+            }
+            if (videoId.isBlank()) {
                 val buttons = cardShelf.optJSONArray("buttons")
                 if (buttons != null) {
                     for (b in 0 until buttons.length()) {
@@ -472,6 +519,25 @@ class MusicRepository {
                             .orEmpty()
                         if (bVid.isNotBlank()) {
                             videoId = bVid
+                            break
+                        }
+                    }
+                }
+            }
+            if (videoId.isBlank()) {
+                val menuItems = cardShelf.optJSONObject("menu")
+                    ?.optJSONObject("menuRenderer")
+                    ?.optJSONArray("items")
+                if (menuItems != null) {
+                    for (m in 0 until menuItems.length()) {
+                        val mVid = menuItems.optJSONObject(m)
+                            ?.optJSONObject("menuNavigationItemRenderer")
+                            ?.optJSONObject("navigationEndpoint")
+                            ?.optJSONObject("watchEndpoint")
+                            ?.optString("videoId", "")
+                            .orEmpty()
+                        if (mVid.isNotBlank()) {
+                            videoId = mVid
                             break
                         }
                     }
@@ -851,8 +917,8 @@ class MusicRepository {
             val origin = "https://music.youtube.com"
             val client = HttpClientProvider.client
             val (hlCode, glCode) = resolveHlGl()
-
-            fun fetchBrowse(browseId: String): org.json.JSONObject? {
+            val visitorData = ensureVisitorData()
+            fun fetchBrowse(browseId: String, continuation: String? = null): org.json.JSONObject? {
                 val payload = org.json.JSONObject().apply {
                     put("context", org.json.JSONObject().apply {
                         put("client", org.json.JSONObject().apply {
@@ -860,10 +926,18 @@ class MusicRepository {
                             put("clientVersion", YTM_CLIENT_VERSION)
                             put("hl", hlCode)
                             put("gl", glCode)
+                            if (!visitorData.isNullOrBlank()) {
+                                put("visitorData", visitorData)
+                            }
                         })
                     })
-                    put("browseId", browseId)
+                    if (continuation != null) {
+                        put("continuation", continuation)
+                    } else {
+                        put("browseId", browseId)
+                    }
                 }
+
                 val reqBuilder = okhttp3.Request.Builder()
                     .url("$origin/youtubei/v1/browse")
                     .header("Content-Type", "application/json")
@@ -873,6 +947,9 @@ class MusicRepository {
                     .header("X-Origin", origin)
                     .header("X-YouTube-Client-Name", "67")
                     .header("X-YouTube-Client-Version", YTM_CLIENT_VERSION)
+                if (!visitorData.isNullOrBlank()) {
+                    reqBuilder.header("X-Goog-Visitor-Id", visitorData)
+                }
 
                 auth.applyAuthToRequest(reqBuilder, payload, origin)
                 reqBuilder.post(payload.toString().toRequestBody("application/json".toMediaType()))
@@ -893,8 +970,37 @@ class MusicRepository {
                 val homeJson = homeDeferred?.await()
                 val exploreJson = exploreDeferred.await()
 
+                val defaultHomeTitle = getLocString(com.ayashii.kuro.R.string.home_quick_picks_title, "Quick Picks")
                 if (homeJson != null) {
-                    result.addAll(parseYtmSections(homeJson, getLocString(com.ayashii.kuro.R.string.home_quick_picks_title, "Quick Picks")))
+                    result.addAll(parseYtmSections(homeJson, defaultHomeTitle))
+                    var homeCont = homeJson.optJSONObject("contents")
+                        ?.optJSONObject("singleColumnBrowseResultsRenderer")
+                        ?.optJSONArray("tabs")
+                        ?.optJSONObject(0)
+                        ?.optJSONObject("tabRenderer")
+                        ?.optJSONObject("content")
+                        ?.optJSONObject("sectionListRenderer")
+                        ?.optJSONArray("continuations")
+                        ?.optJSONObject(0)
+                        ?.optJSONObject("nextContinuationData")
+                        ?.optString("continuation")
+                        ?.takeIf { it.isNotBlank() }
+                    var contPages = 0
+                    while (homeCont != null && contPages < 2) {
+                        val nextHomeJson = fetchBrowse("FEmusic_home", homeCont) ?: break
+                        val contSecList = nextHomeJson.optJSONObject("continuationContents")
+                            ?.optJSONObject("sectionListContinuation")
+                        val contSections = contSecList?.optJSONArray("contents")
+                        if (contSections != null) {
+                            result.addAll(parseYtmSectionsArray(contSections, defaultHomeTitle))
+                        }
+                        homeCont = contSecList?.optJSONArray("continuations")
+                            ?.optJSONObject(0)
+                            ?.optJSONObject("nextContinuationData")
+                            ?.optString("continuation")
+                            ?.takeIf { it.isNotBlank() }
+                        contPages++
+                    }
                 }
                 if (exploreJson != null) {
                     val exploreShelves = parseYtmSections(exploreJson, getLocString(com.ayashii.kuro.R.string.home_trending_shelf_title, "Trending Songs"))
@@ -917,17 +1023,20 @@ class MusicRepository {
     }
 
     private fun parseYtmSections(root: org.json.JSONObject, defaultTitle: String): List<HomeSection> {
+        val tabs = root.optJSONObject("contents")
+            ?.optJSONObject("singleColumnBrowseResultsRenderer")
+            ?.optJSONArray("tabs") ?: return emptyList()
+        val sections = tabs.optJSONObject(0)
+            ?.optJSONObject("tabRenderer")
+            ?.optJSONObject("content")
+            ?.optJSONObject("sectionListRenderer")
+            ?.optJSONArray("contents") ?: return emptyList()
+        return parseYtmSectionsArray(sections, defaultTitle)
+    }
+
+    private fun parseYtmSectionsArray(sections: org.json.JSONArray, defaultTitle: String): List<HomeSection> {
         val list = mutableListOf<HomeSection>()
         try {
-            val tabs = root.optJSONObject("contents")
-                ?.optJSONObject("singleColumnBrowseResultsRenderer")
-                ?.optJSONArray("tabs") ?: return emptyList()
-            val sections = tabs.optJSONObject(0)
-                ?.optJSONObject("tabRenderer")
-                ?.optJSONObject("content")
-                ?.optJSONObject("sectionListRenderer")
-                ?.optJSONArray("contents") ?: return emptyList()
-
             for (s in 0 until sections.length()) {
                 val secNode = sections.optJSONObject(s) ?: continue
                 val shelfObj = secNode.optJSONObject("musicCarouselShelfRenderer")
@@ -1471,7 +1580,8 @@ class MusicRepository {
         val seenIds = HashSet<String>()
 
         val firstJson = postYtmBrowse(browseId) ?: return emptyList()
-        val contents = firstJson.optJSONObject("contents")
+        val contentsObj = firstJson.optJSONObject("contents")
+        val contents = contentsObj
             ?.optJSONObject("singleColumnBrowseResultsRenderer")
             ?.optJSONArray("tabs")
             ?.optJSONObject(0)
@@ -1479,6 +1589,11 @@ class MusicRepository {
             ?.optJSONObject("content")
             ?.optJSONObject("sectionListRenderer")
             ?.optJSONArray("contents")
+            ?: contentsObj
+                ?.optJSONObject("twoColumnBrowseResultsRenderer")
+                ?.optJSONObject("secondaryContents")
+                ?.optJSONObject("sectionListRenderer")
+                ?.optJSONArray("contents")
 
         var shelf: org.json.JSONObject? = null
         if (contents != null) {

@@ -230,28 +230,22 @@ fun MainAppScreen(viewModel: MusicViewModel, onPageChanged: (Int) -> Unit = {}) 
         Scaffold(
             containerColor = colors.background,
             bottomBar = {
-                Box(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(
-                            Brush.verticalGradient(
-                                0.0f to Color.Transparent,
-                                0.35f to colors.background.copy(alpha = 0.84f),
-                                1.0f to colors.background
-                            )
-                        )
-                        .navigationBarsPadding()
-                        .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 10.dp)
+                        .background(colors.surface)
                 ) {
-                    val pillShape = RoundedCornerShape(28.dp)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(colors.border.copy(alpha = 0.45f))
+                    )
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(64.dp)
-                            .shadow(elevation = 14.dp, shape = pillShape, clip = false)
-                            .clip(pillShape)
-                            .background(colors.surface.copy(alpha = 0.94f))
-                            .border(1.dp, colors.border.copy(alpha = 0.65f), pillShape)
+                            .navigationBarsPadding()
+                            .height(58.dp)
                             .pointerInput(pagerState.currentPage) {
                                 detectHorizontalDragGestures(
                                     onDragStart = { navSwipeOffsetX = 0f },
@@ -273,7 +267,7 @@ fun MainAppScreen(viewModel: MusicViewModel, onPageChanged: (Int) -> Unit = {}) 
                                     }
                                 )
                             }
-                            .padding(horizontal = 8.dp),
+                            .padding(horizontal = 4.dp),
                         horizontalArrangement = Arrangement.SpaceEvenly,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -288,8 +282,6 @@ fun MainAppScreen(viewModel: MusicViewModel, onPageChanged: (Int) -> Unit = {}) 
                             Column(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .clip(RoundedCornerShape(22.dp))
-                                    .background(if (selected) colors.card.copy(alpha = 0.9f) else Color.Transparent)
                                     .clickable(
                                         interactionSource = interactionSource,
                                         indication = null
@@ -297,7 +289,7 @@ fun MainAppScreen(viewModel: MusicViewModel, onPageChanged: (Int) -> Unit = {}) 
                                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                         navigateToPage(index)
                                     }
-                                    .padding(vertical = 7.dp),
+                                    .padding(vertical = 6.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center
                             ) {
@@ -388,7 +380,6 @@ fun MainAppScreen(viewModel: MusicViewModel, onPageChanged: (Int) -> Unit = {}) 
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 10.dp)
                         ) {
                             MiniPlayerContainer(
                                 viewModel = viewModel,

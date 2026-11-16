@@ -2,6 +2,9 @@ package com.ayashii.kuro.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -33,7 +36,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -122,8 +127,14 @@ fun HomeScreen(
 
     val haptic = LocalHapticFeedback.current
     var selectedGenre by rememberSaveable { mutableStateOf("Semua") }
-    val genres = listOf("Semua", "Pop", "Lo-Fi", "Rock", "Acoustic", "Anime", "Hip-Hop", "R&B", "Top Global")
+    val genres = listOf("Feel good", "Relax", "Sad", "Energize", "Romance", "Focus", "Workout")
     val genreRowState = rememberLazyListState()
+    val mainListState = rememberLazyListState()
+    val showTopHeader by remember {
+        derivedStateOf {
+            mainListState.firstVisibleItemIndex == 0 && mainListState.firstVisibleItemScrollOffset < 60
+        }
+    }
 
     BackHandler(enabled = !isPlayerExpanded && selectedGenre != "Semua") {
         selectedGenre = "Semua"
@@ -135,66 +146,107 @@ fun HomeScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(colors.background)
-            .padding(top = 16.dp)
+            .background(
+                Brush.verticalGradient(
+                    0.0f to colors.card.copy(alpha = 0.65f),
+                    0.18f to colors.background,
+                    1.0f to colors.background
+                )
+            )
+            .padding(top = 12.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 2.dp)
+        AnimatedVisibility(
+            visible = showTopHeader || selectedGenre != "Semua",
+            enter = expandVertically(tween(200)) + fadeIn(tween(180)),
+            exit = shrinkVertically(tween(180)) + fadeOut(tween(140))
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                AccountTopButton(
-                    account = currentAccount,
-                    onClick = { showProfileMenu = true }
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                LazyRow(
-                    state = genreRowState,
-                    contentPadding = PaddingValues(start = 2.dp, end = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    items(genres, key = { it }) { genre ->
-                        val isSelected = selectedGenre == genre
-                        val chipBg = if (isSelected) colors.accent else colors.card
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(chipBg)
-                                .then(
-                                    if (isSelected) Modifier
-                                    else Modifier.border(1.dp, colors.border.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
-                                )
-                                .clickable {
-                                    selectedGenre = genre
-                                    if (genre == "Semua") {
-                                        viewModel.loadTrending()
-                                    } else {
-                                        viewModel.loadGenreTracks(genre)
-                                    }
-                                }
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = if (genre == "Semua") stringResource(R.string.home_genre_all) else genre,
-                                style = Typography.labelMedium.copy(fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium),
-                                fontSize = 13.sp,
-                                color = if (isSelected) colors.background else colors.textPrimary
-                            )
-                        }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_notification),
+                        contentDescription = "Kuro",
+                        tint = colors.textPrimary,
+                        modifier = Modifier.size(26.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Kuro",
+                        style = Typography.headlineMedium.copy(
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = colors.textPrimary
+                    )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = { showRecentsDialog = true },
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Notifications,
+                            contentDescription = "Activity",
+                            tint = colors.textPrimary,
+                            modifier = Modifier.size(22.dp)
+                        )
                     }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    AccountTopButton(
+                        account = currentAccount,
+                        onClick = { showProfileMenu = true }
+                    )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
+        LazyRow(
+            state = genreRowState,
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            items(genres, key = { it }) { genre ->
+                val isSelected = selectedGenre == genre
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isSelected) colors.accent else colors.card.copy(alpha = 0.85f))
+                        .border(
+                            1.dp,
+                            if (isSelected) colors.accent else colors.border.copy(alpha = 0.6f),
+                            RoundedCornerShape(8.dp)
+                        )
+                        .clickable {
+                            if (isSelected) {
+                                selectedGenre = "Semua"
+                                viewModel.loadTrending()
+                            } else {
+                                selectedGenre = genre
+                                viewModel.selectGenre(genre)
+                            }
+                        }
+                        .padding(horizontal = 14.dp, vertical = 7.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = genre,
+                        style = Typography.labelMedium.copy(
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                        ),
+                        color = if (isSelected) colors.background else colors.textPrimary,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                }
+            }
+        }
 
         AnimatedContent(
             targetState = selectedGenre,
@@ -256,383 +308,224 @@ fun HomeScreen(
                 }
             } else if (homeSections.isNotEmpty() || trendingTracks.isNotEmpty()) {
                 LazyColumn(
+                    state = mainListState,
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(top = 6.dp)
+                    contentPadding = PaddingValues(top = 4.dp)
                 ) {
                     val homeTracks = trendingTracks.ifEmpty { homeSections.flatMap { it.tracks } }.distinctBy { it.id }
+                    val quickPickTracks = (homeSections.firstOrNull()?.tracks ?: homeTracks).distinctBy { it.id }.take(16)
+                    val quickPickCols = quickPickTracks.chunked(4)
 
-                    val startListeningTracks = (homeSections.firstOrNull()?.tracks ?: homeTracks).distinctBy { it.id }.take(3)
-                    if (startListeningTracks.isNotEmpty()) {
-                        item(key = "start_listening_header") {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 4.dp)
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.home_start_listening_sub),
-                                    style = Typography.bodySmall.copy(fontSize = 12.sp),
-                                    color = colors.textMuted
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = stringResource(R.string.home_start_listening),
-                                    style = Typography.headlineMedium.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold),
-                                    color = colors.textPrimary
-                                )
-                            }
-                        }
-
-                        items(startListeningTracks, key = { "start_listen_${it.id}" }, contentType = { "start_track" }) { track ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .combinedClickable(
-                                        onClick = { viewModel.playTrack(track, startListeningTracks) },
-                                        onLongClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            trackForOptions = track
-                                        }
-                                    )
-                                    .padding(horizontal = 20.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                AsyncImage(
-                                    model = track.thumbnailUrlForDisplay(192),
-                                    contentDescription = track.title,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .size(52.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(colors.card)
-                                )
-                                Spacer(modifier = Modifier.width(14.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = track.title,
-                                        style = Typography.titleMedium.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
-                                        color = colors.textPrimary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = track.artist,
-                                        style = Typography.bodySmall.copy(fontSize = 13.sp),
-                                        color = colors.textMuted,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
+                    if (quickPickCols.isNotEmpty()) {
+                        item(key = "quick_picks_header") {
+                            HomeSectionHeader(
+                                title = homeSections.firstOrNull()?.title ?: stringResource(R.string.home_quick_picks_title),
+                                actionText = stringResource(R.string.home_play_all),
+                                onActionClick = {
+                                    quickPickTracks.firstOrNull()?.let { viewModel.playTrack(it, quickPickTracks) }
                                 }
-                                IconButton(
-                                    onClick = { trackForOptions = track },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.MoreVert,
-                                        contentDescription = "Options",
-                                        tint = colors.textMuted,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    val startIds = startListeningTracks.mapTo(HashSet()) { it.id }
-                    val mixTracks = homeTracks.filter { it.id !in startIds }.take(8).ifEmpty { homeTracks.drop(3).take(8) }
-                    val mixIds = mixTracks.mapTo(HashSet()) { it.id }
-                    if (mixTracks.isNotEmpty()) {
-                        item(key = "to_get_you_started_header") {
-                            Text(
-                                text = stringResource(R.string.home_to_get_you_started),
-                                style = Typography.headlineMedium.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold),
-                                color = colors.textPrimary,
-                                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 12.dp)
                             )
                         }
-                        item(key = "to_get_you_started_carousel", contentType = "carousel") {
+                        item(key = "quick_picks_pager") {
                             LazyRow(
-                                contentPadding = PaddingValues(horizontal = 20.dp),
-                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                items(mixTracks, key = { "mix_${it.id}" }, contentType = { "mix_card" }) { track ->
-                                    Column(
-                                        modifier = Modifier
-                                            .width(152.dp)
-                                            .combinedClickable(
-                                                onClick = { viewModel.playTrack(track, mixTracks) },
+                                items(quickPickCols.size) { colIdx ->
+                                    val colTracks = quickPickCols[colIdx]
+                                    Column(modifier = Modifier.width(308.dp)) {
+                                        colTracks.forEach { track ->
+                                            HomeCompactTrackRow(
+                                                track = track,
+                                                onClick = { viewModel.playTrack(track, quickPickTracks) },
                                                 onLongClick = {
                                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                                     trackForOptions = track
-                                                }
-                                            )
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(152.dp)
-                                                .clip(RoundedCornerShape(14.dp))
-                                                .background(colors.card)
-                                        ) {
-                                            AsyncImage(
-                                                model = track.thumbnailUrlForDisplay(512),
-                                                contentDescription = track.title,
-                                                contentScale = ContentScale.Crop,
-                                                modifier = Modifier.fillMaxSize()
-                                            )
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .height(64.dp)
-                                                    .align(Alignment.BottomCenter)
-                                                    .background(
-                                                        Brush.verticalGradient(
-                                                            listOf(
-                                                                Color.Transparent,
-                                                                PureBlack.copy(alpha = 0.82f)
-                                                            )
-                                                        )
-                                                    )
-                                            )
-                                            Text(
-                                                text = formatMixBadgeLabel(track.artist),
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = PureWhite,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier
-                                                    .align(Alignment.BottomStart)
-                                                    .padding(horizontal = 10.dp, vertical = 9.dp)
+                                                },
+                                                onMoreClick = { trackForOptions = track }
                                             )
                                         }
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Text(
-                                            text = "${track.title} • ${track.artist}",
-                                            style = Typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 16.sp),
-                                            color = colors.textMuted,
-                                            maxLines = 2,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
                                     }
                                 }
                             }
                         }
                     }
 
-                    val quickPicks = homeTracks.filter { it.id !in startIds && it.id !in mixIds }.take(4).ifEmpty { homeTracks.take(4) }
-                    if (quickPicks.isNotEmpty()) {
-                        item(key = "quick_picks_title") {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(stringResource(R.string.home_play_again), style = Typography.titleLarge, color = colors.textPrimary)
-                                Text(
-                                    text = stringResource(R.string.home_view_all),
-                                    style = Typography.bodySmall,
-                                    color = colors.textMuted,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable { showRecentsDialog = true }
-                                        .padding(horizontal = 6.dp, vertical = 4.dp)
-                                )
-                            }
-                        }
-                        item(key = "quick_picks_grid", contentType = "quick_grid") {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 20.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                quickPicks.chunked(2).forEach { rowTracks ->
-                                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        rowTracks.forEach { track ->
-                                            Row(
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .height(62.dp)
-                                                    .clip(RoundedCornerShape(12.dp))
-                                                    .background(colors.card)
-                                                    .combinedClickable(
-                                                        onClick = { viewModel.playTrack(track, quickPicks) },
-                                                        onLongClick = {
-                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                            trackForOptions = track
-                                                        }
-                                                    ),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                AsyncImage(
-                                                    model = track.thumbnailUrlForDisplay(192),
-                                                    contentDescription = null,
-                                                    contentScale = ContentScale.Crop,
-                                                    modifier = Modifier
-                                                        .size(62.dp)
-                                                        .clip(RoundedCornerShape(topStart = 12.dp, bottomStart = 12.dp))
-                                                )
-                                                Text(
-                                                    text = track.title,
-                                                    style = Typography.bodyMedium,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    color = colors.textPrimary,
-                                                    maxLines = 2,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                    modifier = Modifier.padding(horizontal = 10.dp)
-                                                )
-                                            }
-                                        }
-                                        if (rowTracks.size == 1) Spacer(Modifier.weight(1f))
-                                    }
-                                }
-                            }
-                            Spacer(Modifier.height(24.dp))
-                        }
-                    }
-
-                    val usedIds = (startIds + mixTracks.map { it.id } + quickPicks.map { it.id }).toHashSet()
-                    val featuredTrack = homeSections.firstNotNullOfOrNull { sec ->
-                        sec.tracks.firstOrNull { it.id !in usedIds }
-                    } ?: homeTracks.firstOrNull { it.id !in usedIds }
-                        ?: homeSections.firstNotNullOfOrNull { it.tracks.firstOrNull() }
-                        ?: homeTracks.firstOrNull()
-                    if (featuredTrack != null) {
-                        item(key = "featured_title") {
-                            Text(
-                                text = stringResource(R.string.home_picks_for_you),
-                                style = Typography.titleLarge,
-                                color = colors.textPrimary,
-                                modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 10.dp)
+                    val usedIds = quickPickTracks.mapTo(HashSet()) { it.id }
+                    val discoverTrack = homeTracks.firstOrNull { it.id !in usedIds } ?: homeTracks.firstOrNull()
+                    if (discoverTrack != null) {
+                        usedIds.add(discoverTrack.id)
+                        item(key = "daily_discover_header") {
+                            HomeSectionHeader(
+                                title = stringResource(R.string.home_daily_discover),
+                                actionText = stringResource(R.string.home_play_all),
+                                onActionClick = { viewModel.playTrack(discoverTrack, homeTracks) }
                             )
                         }
-                        item(key = "featured_card", contentType = "featured") {
+                        item(key = "daily_discover_card") {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 20.dp)
-                                    .height(142.dp)
+                                    .padding(horizontal = 16.dp)
+                                    .height(310.dp)
                                     .clip(RoundedCornerShape(16.dp))
-                                    .combinedClickable(
-                                        onClick = { viewModel.playTrack(featuredTrack, homeSections.firstOrNull { it.tracks.contains(featuredTrack) }?.tracks ?: homeTracks) },
-                                        onLongClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                            trackForOptions = featuredTrack
-                                        }
-                                    )
+                                    .background(colors.card)
+                                    .clickable { viewModel.playTrack(discoverTrack, homeTracks) }
                             ) {
                                 AsyncImage(
-                                    model = featuredTrack.thumbnailUrlForDisplay(640),
-                                    contentDescription = featuredTrack.title,
+                                    model = discoverTrack.highResThumbnailUrl,
+                                    contentDescription = discoverTrack.title,
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.fillMaxSize()
                                 )
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .background(Brush.horizontalGradient(listOf(PureBlack.copy(alpha = 0.82f), PureBlack.copy(alpha = 0.08f))))
+                                        .background(
+                                            Brush.verticalGradient(
+                                                0.0f to Color.Black.copy(alpha = 0.72f),
+                                                0.35f to Color.Transparent,
+                                                0.68f to Color.Transparent,
+                                                1.0f to Color.Black.copy(alpha = 0.82f)
+                                            )
+                                        )
                                 )
                                 Column(
                                     modifier = Modifier
-                                        .align(Alignment.BottomStart)
-                                        .padding(15.dp)
-                                        .fillMaxWidth(0.72f)
+                                        .align(Alignment.TopStart)
+                                        .padding(16.dp)
                                 ) {
-                                    Text(stringResource(R.string.home_mix_personal), style = Typography.labelSmall.copy(fontSize = 9.sp, letterSpacing = 1.2.sp), color = PureWhite.copy(alpha = 0.72f))
-                                    Text(featuredTrack.title, style = Typography.titleLarge, color = PureWhite, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(featuredTrack.artist, style = Typography.bodySmall, color = PureWhite.copy(alpha = 0.8f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.BottomEnd)
-                                        .padding(15.dp)
-                                        .size(38.dp)
-                                        .clip(CircleShape)
-                                        .background(PureWhite),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        painter = painterResource(R.drawable.ic_kuro_play),
-                                        contentDescription = "Putar ${featuredTrack.title}",
-                                        tint = PureBlack,
-                                        modifier = Modifier.size(18.dp)
+                                    Text(
+                                        text = discoverTrack.title,
+                                        style = Typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                        color = Color.White,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = discoverTrack.artist,
+                                        style = Typography.bodyMedium,
+                                        color = Color.White.copy(alpha = 0.82f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
+                                Text(
+                                    text = formatMixBadgeLabel(discoverTrack.artist),
+                                    style = Typography.bodySmall,
+                                    color = Color.White.copy(alpha = 0.88f),
+                                    modifier = Modifier
+                                        .align(Alignment.BottomStart)
+                                        .padding(16.dp)
+                                )
                             }
-                            Spacer(Modifier.height(24.dp))
                         }
                     }
 
-                    homeSections.forEachIndexed { sIndex, section ->
-                        item(key = "header_${sIndex}_${section.title}", contentType = "section_header") {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 20.dp, vertical = 6.dp)
-                            ) {
-                                Text(
-                                    text = section.title,
-                                    style = Typography.titleLarge,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 20.sp,
-                                    color = colors.textPrimary
+                    val remainingSections = homeSections.drop(1)
+                    remainingSections.forEachIndexed { idx, section ->
+                        if (section.tracks.isNotEmpty()) {
+                            item(key = "sec_header_${idx}_${section.title}") {
+                                HomeSectionHeader(
+                                    title = section.title,
+                                    actionText = stringResource(R.string.home_play_all),
+                                    onActionClick = {
+                                        section.tracks.firstOrNull()?.let { viewModel.playTrack(it, section.tracks) }
+                                    }
                                 )
-                                if (section.subtitle.isNotBlank()) {
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = section.subtitle,
-                                        style = Typography.bodySmall,
-                                        color = colors.textMuted
-                                    )
+                            }
+                            if (idx % 2 == 1 && section.tracks.size >= 4) {
+                                val secCols = section.tracks.take(12).chunked(4)
+                                item(key = "sec_cols_${idx}_${section.title}") {
+                                    LazyRow(
+                                        contentPadding = PaddingValues(horizontal = 16.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        items(secCols.size) { cIdx ->
+                                            val cTracks = secCols[cIdx]
+                                            Column(modifier = Modifier.width(308.dp)) {
+                                                cTracks.forEach { track ->
+                                                    HomeCompactTrackRow(
+                                                        track = track,
+                                                        onClick = { viewModel.playTrack(track, section.tracks) },
+                                                        onLongClick = {
+                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                            trackForOptions = track
+                                                        },
+                                                        onMoreClick = { trackForOptions = track }
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                item(key = "sec_carousel_${idx}_${section.title}") {
+                                    LazyRow(
+                                        contentPadding = PaddingValues(horizontal = 16.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        items(section.tracks, key = { "sec_${idx}_${it.id}" }) { track ->
+                                            Column(
+                                                modifier = Modifier
+                                                    .width(144.dp)
+                                                    .combinedClickable(
+                                                        onClick = { viewModel.playTrack(track, section.tracks) },
+                                                        onLongClick = {
+                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                            trackForOptions = track
+                                                        }
+                                                    )
+                                            ) {
+                                                AsyncImage(
+                                                    model = track.thumbnailUrlForDisplay(320),
+                                                    contentDescription = track.title,
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier
+                                                        .size(144.dp)
+                                                        .clip(RoundedCornerShape(10.dp))
+                                                        .background(colors.card)
+                                                )
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                Text(
+                                                    text = track.title,
+                                                    style = Typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                                    color = colors.textPrimary,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                Text(
+                                                    text = track.artist,
+                                                    style = Typography.bodySmall,
+                                                    color = colors.textMuted,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
                             }
-                        }
-
-                        item(key = "shelf_${sIndex}_${section.title}", contentType = "shelf_row") {
-                            LazyRow(
-                                contentPadding = PaddingValues(horizontal = 20.dp),
-                                horizontalArrangement = Arrangement.spacedBy(13.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                itemsIndexed(section.tracks, key = { tIndex, track -> "shelf_${sIndex}_${track.id}_$tIndex" }, contentType = { _, _ -> "ytm_card" }) { _, track ->
-                                    YtmMusicCard(
-                                        track = track,
-                                        isPlaying = currentTrack?.id == track.id,
-                                        onClick = { viewModel.playTrack(track, listOf(track)) },
-                                        onLongClick = { trackForOptions = track }
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(24.dp))
                         }
                     }
 
                     item {
-                        Spacer(modifier = Modifier.height(140.dp))
+                        Spacer(modifier = Modifier.height(130.dp))
                     }
                 }
             } else {
-                LazyColumn(
+                Box(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(top = 6.dp)
+                    contentAlignment = Alignment.Center
                 ) {
-                    items(trendingTracks, key = { it.id }, contentType = { "track" }) { track ->
-                        val isFav = track.id in favoriteIds
-                        TrackItem(
-                            track = track.copy(isFavorite = isFav),
-                            isPlaying = currentTrack?.id == track.id,
-                            isLoading = isLoadingTrack && currentTrack?.id == track.id,
-                            onClick = { viewModel.playTrack(track, listOf(track)) },
-                            onFavoriteClick = { viewModel.toggleFavorite(track) },
-                            onMoreClick = { trackForOptions = track },
-                            onSwipeAddToQueue = { viewModel.addToQueue(track) }
-                        )
-                    }
-                    item {
-                        Spacer(modifier = Modifier.height(140.dp))
-                    }
+                    Text(
+                        text = stringResource(R.string.home_empty),
+                        style = Typography.bodyMedium,
+                        color = colors.textMuted
+                    )
                 }
             }
         }
@@ -922,5 +815,103 @@ fun YtmMusicCard(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
+    }
+}
+
+@Composable
+private fun HomeSectionHeader(
+    title: String,
+    actionText: String,
+    onActionClick: () -> Unit
+) {
+    val colors = KuroAppTheme.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = title,
+            style = Typography.headlineSmall.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold),
+            color = colors.textPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(16.dp))
+                .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+                .clickable(onClick = onActionClick)
+                .padding(horizontal = 12.dp, vertical = 5.dp)
+        ) {
+            Text(
+                text = actionText,
+                style = Typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = colors.textPrimary,
+                maxLines = 1,
+                softWrap = false
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun HomeCompactTrackRow(
+    track: Track,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+    onMoreClick: () -> Unit
+) {
+    val colors = KuroAppTheme.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AsyncImage(
+            model = track.thumbnailUrlForDisplay(160),
+            contentDescription = track.title,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(50.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(colors.card)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = track.title,
+                style = Typography.titleSmall.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                color = colors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = track.artist,
+                style = Typography.bodySmall.copy(fontSize = 13.sp),
+                color = colors.textMuted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        IconButton(
+            onClick = onMoreClick,
+            modifier = Modifier.size(32.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.MoreVert,
+                contentDescription = "Options",
+                tint = colors.textMuted,
+                modifier = Modifier.size(18.dp)
+            )
+        }
     }
 }

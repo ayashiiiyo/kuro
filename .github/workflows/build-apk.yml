@@ -109,16 +109,16 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.9.2 — Watch Later, YTM Library Sync & Playback Fallbacks
+          ## Kuro v3.9.3 — Home & Library Redesign, YTM Continuations & Visitor Data
 
-          - **Watch Later**:
-            - Watch Later is now a dedicated persisted list with its own Library tab, legacy playlist migration, and a track-options toggle.
-          - **YouTube Music Library Sync**:
-            - Liked songs are fetched with paginated InnerTube browse + continuations and a NewPipe fallback; user playlists sync into local playlists via `remoteId`.
-          - **Playback Reliability**:
-            - Retry a track with a fallback stream URL before skipping, allow up to 5 recovery attempts, and keep notification play/next/previous actions consistent.
-          - **Queue & UI**:
-            - Queue state is driven solely by `PlayerQueueManager`, removing duplicate local queue bookkeeping; Library now has Favorites, Playlists, Watch Later, and Offline tabs.
+          - **Home Redesign**:
+            - Quick picks now use a paged grid with section headers, Play all actions, compact track rows, and daily-discover/mixed shelves.
+          - **Library Redesign**:
+            - New All, Favorites, Playlists, Watch Later, and Offline tabs with pinned cards, playlist cards, A-Z sorting, and a new-create FAB.
+          - **YouTube Music Reliability**:
+            - Added visitor-data bootstrap (`X-Goog-Visitor-Id`), paginated Home continuations, and stronger card-shelf videoId extraction in Rust.
+          - **UI Polish**:
+            - Simplified the bottom navigation to a flat bar and tightened mini-player spacing.
           - Published signed release, per-ABI, and debug APKs.
           EOF
           gh release delete "$RELEASE_TAG" --yes --cleanup-tag 2>/dev/null || true
@@ -127,7 +127,7 @@ jobs:
             "${{ steps.apk.outputs.arm64_path }}" \
             "${{ steps.apk.outputs.arm32_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (Watch Later, YTM Library Sync & Playback Fallbacks)" \
+            --title "Kuro $RELEASE_TAG (Home & Library Redesign, YTM Continuations & Visitor Data)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 
