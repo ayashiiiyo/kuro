@@ -150,6 +150,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val _isLoadingTrending = MutableStateFlow(false)
     val isLoadingTrending = _isLoadingTrending.asStateFlow()
 
+    private val _isRefreshingHome = MutableStateFlow(false)
+    val isRefreshingHome = _isRefreshingHome.asStateFlow()
+
     private val _isSearching = MutableStateFlow(false)
     val isSearching = _isSearching.asStateFlow()
 
@@ -427,17 +430,21 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
-        var lastCookie: String? = null
+        fun accountIdentityKey(acc: com.ayashii.kuro.data.auth.UserAccount?): String? {
+            if (acc == null) return null
+            return "${acc.email}|${acc.authUser}|${acc.pageId}"
+        }
+        var lastAccountKey = accountIdentityKey(com.ayashii.kuro.data.auth.AuthManager.getInstance().authState.value)
         viewModelScope.launch {
             authState.collect { account ->
-                val curCookie = account?.cookie
-                if (account != null && curCookie != lastCookie) {
-                    lastCookie = curCookie
+                val curKey = accountIdentityKey(account)
+                if (account != null && curKey != lastAccountKey) {
+                    lastAccountKey = curKey
                     repository.invalidateHomeCache()
                     loadTrending()
                     syncLikedSongs()
-                } else if (account == null && lastCookie != null) {
-                    lastCookie = null
+                } else if (account == null && lastAccountKey != null) {
+                    lastAccountKey = null
                     repository.invalidateHomeCache()
                     loadTrending()
                 }
@@ -749,6 +756,25 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             anchorPosition = pos
             anchorTimestamp = SystemClock.elapsedRealtime()
             _playbackPosition.value = pos
+        }
+    }
+
+    fun refreshHome() {
+        if (_isRefreshingHome.value) return
+        viewModelScope.launch {
+            _isRefreshingHome.value = true
+            try {
+                val ytmShelves = repository.getHomeShelves(forceRefresh = true)
+                if (ytmShelves.isNotEmpty()) {
+                    _homeSections.value = ytmShelves
+                    _trendingTracks.value = ytmShelves.flatMap { it.tracks }.distinctBy { it.id }
+                } else {
+                    val fallback = repository.getTrendingTracks()
+                    if (fallback.isNotEmpty()) _trendingTracks.value = fallback
+                }
+            } finally {
+                _isRefreshingHome.value = false
+            }
         }
     }
 

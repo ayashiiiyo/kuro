@@ -41,11 +41,15 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -59,6 +63,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
@@ -97,7 +102,7 @@ private fun formatMixBadgeLabel(artist: String): String {
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     viewModel: MusicViewModel,
@@ -109,6 +114,8 @@ fun HomeScreen(
     val isLoadingGenre by viewModel.isLoadingGenre.collectAsState()
     val isSearching by viewModel.isSearching.collectAsState()
     val isLoadingTrending by viewModel.isLoadingTrending.collectAsState()
+    val isRefreshingHome by viewModel.isRefreshingHome.collectAsState()
+    val pullRefreshState = rememberPullToRefreshState()
     val isLoadingTrack by viewModel.isLoadingTrack.collectAsState()
     val isPlayerExpanded by viewModel.isPlayerExpanded.collectAsState()
     val currentTrack by viewModel.currentTrack.collectAsState()
@@ -248,6 +255,26 @@ fun HomeScreen(
             }
         }
 
+        LaunchedEffect(pullRefreshState.isRefreshing) {
+            if (pullRefreshState.isRefreshing) {
+                if (selectedGenre == "Semua") {
+                    viewModel.refreshHome()
+                } else {
+                    viewModel.loadGenreTracks(selectedGenre)
+                }
+            }
+        }
+        LaunchedEffect(isRefreshingHome, isLoadingGenre) {
+            if (!isRefreshingHome && !isLoadingGenre && pullRefreshState.isRefreshing) {
+                pullRefreshState.endRefresh()
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .nestedScroll(pullRefreshState.nestedScrollConnection)
+        ) {
         AnimatedContent(
             targetState = selectedGenre,
             transitionSpec = {
@@ -528,6 +555,13 @@ fun HomeScreen(
                     )
                 }
             }
+        }
+        PullToRefreshContainer(
+            state = pullRefreshState,
+            modifier = Modifier.align(Alignment.TopCenter),
+            containerColor = colors.card,
+            contentColor = colors.textPrimary
+        )
         }
     }
 

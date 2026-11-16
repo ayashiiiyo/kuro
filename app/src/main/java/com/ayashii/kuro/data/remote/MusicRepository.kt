@@ -726,7 +726,17 @@ class MusicRepository {
                 }
             }
         }
-        val ytmShelves = fetchYouTubeMusicShelves()
+        val rawShelves = fetchYouTubeMusicShelves()
+        val ytmShelves = if (forceRefresh && rawShelves.isNotEmpty()) {
+            rawShelves.map { sec ->
+                if (sec.tracks.size > 3) {
+                    val rotated = sec.tracks.take(1) + sec.tracks.drop(1).shuffled()
+                    sec.copy(tracks = rotated)
+                } else sec
+            }
+        } else {
+            rawShelves
+        }
         if (ytmShelves.isNotEmpty()) {
             synchronized(homeCacheLock) { homeCache = Pair(ytmShelves, now) }
             return@withContext ytmShelves

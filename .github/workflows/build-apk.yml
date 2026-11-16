@@ -109,16 +109,16 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.9.3 — Home & Library Redesign, YTM Continuations & Visitor Data
+          ## Kuro v3.9.4 — Pull-to-Refresh, Playback Wake Locks & Account Refresh Fixes
 
-          - **Home Redesign**:
-            - Quick picks now use a paged grid with section headers, Play all actions, compact track rows, and daily-discover/mixed shelves.
-          - **Library Redesign**:
-            - New All, Favorites, Playlists, Watch Later, and Offline tabs with pinned cards, playlist cards, A-Z sorting, and a new-create FAB.
-          - **YouTube Music Reliability**:
-            - Added visitor-data bootstrap (`X-Goog-Visitor-Id`), paginated Home continuations, and stronger card-shelf videoId extraction in Rust.
-          - **UI Polish**:
-            - Simplified the bottom navigation to a flat bar and tightened mini-player spacing.
+          - **Home Pull-to-Refresh**:
+            - Added Material3 pull-to-refresh with a dedicated refresh state and rotated shelf ordering on force refresh.
+          - **Playback Reliability**:
+            - Stream resolution and radio advance now hold partial wake locks so background playback continues reliably.
+          - **Account Refresh**:
+            - Account changes are detected by email/authUser/pageId rather than cookie alone, refreshing Home and liked songs correctly.
+          - **Caching**:
+            - Raised the stream URL cache TTL from 15s to 60s.
           - Published signed release, per-ABI, and debug APKs.
           EOF
           gh release delete "$RELEASE_TAG" --yes --cleanup-tag 2>/dev/null || true
@@ -127,7 +127,7 @@ jobs:
             "${{ steps.apk.outputs.arm64_path }}" \
             "${{ steps.apk.outputs.arm32_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (Home & Library Redesign, YTM Continuations & Visitor Data)" \
+            --title "Kuro $RELEASE_TAG (Pull-to-Refresh, Playback Wake Locks & Account Refresh Fixes)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 

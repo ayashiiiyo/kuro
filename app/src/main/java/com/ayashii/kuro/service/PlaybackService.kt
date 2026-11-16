@@ -362,8 +362,8 @@ class PlaybackService : MediaSessionService() {
 
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                15_000,
                 30_000,
+                60_000,
                 500,
                 1_500
             )
@@ -803,6 +803,11 @@ class PlaybackService : MediaSessionService() {
         val current = PlayerQueueManager.currentTrack.value ?: return
         servicePlayJob?.cancel()
         servicePlayJob = serviceScope.launch {
+            val pm = getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager
+            val resolveLock = pm?.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "kuro:playback_advance")?.apply {
+                setReferenceCounted(false)
+                runCatching { acquire(25_000L) }
+            }
             try {
                 val radioTracks = withContext(Dispatchers.IO) {
                     repository.getRadioTracks(current.id)
@@ -827,6 +832,8 @@ class PlaybackService : MediaSessionService() {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error advancing to next radio track: ${e.message}")
+            } finally {
+                runCatching { if (resolveLock?.isHeld == true) resolveLock.release() }
             }
         }
     }
@@ -853,6 +860,11 @@ class PlaybackService : MediaSessionService() {
         lastFallbackTriedTrackId = null
         PlayerQueueManager.updateCurrentTrack(track)
         servicePlayJob = serviceScope.launch {
+            val pm = getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager
+            val playLock = pm?.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "kuro:playback_resolve")?.apply {
+                setReferenceCounted(false)
+                runCatching { acquire(25_000L) }
+            }
             try {
                 val quality = SettingsManager.getInstance().audioQuality.value
                 val offlineUri = OfflineMusicManager.getInstance(this@PlaybackService).getLocalAudioUri(track.id)
@@ -949,6 +961,8 @@ class PlaybackService : MediaSessionService() {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error playing track: ${e.message}", e)
+            } finally {
+                runCatching { if (playLock?.isHeld == true) playLock.release() }
             }
         }
     }
