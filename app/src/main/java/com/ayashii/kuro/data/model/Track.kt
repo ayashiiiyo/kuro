@@ -18,7 +18,9 @@ data class Track(
     val durationSeconds: Long = 0,
     val streamUrl: String? = null,
     val mimeType: String? = null,
-    val isFavorite: Boolean = false
+    val isFavorite: Boolean = false,
+    val browseId: String? = null,
+    val playlistId: String? = null
 ) {
     val highResThumbnailUrl: String
         get() {
@@ -68,9 +70,20 @@ data class Track(
         }
 }
 
+enum class HomeSectionType {
+    COMPACT_COLUMNS,
+    SPOTLIGHT_HERO,
+    SPEED_DIAL,
+    SIMILAR_TO,
+    WIDE_CARDS,
+    SQUARE_CAROUSEL
+}
+
 @Immutable
 data class HomeSection(
     val title: String,
     val subtitle: String = "",
-    val tracks: List<Track>
+    val tracks: List<Track>,
+    val layoutType: HomeSectionType = HomeSectionType.SQUARE_CAROUSEL,
+    val headerAvatarUrl: String? = null
 )

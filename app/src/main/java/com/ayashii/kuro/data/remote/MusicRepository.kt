@@ -3,6 +3,7 @@ package com.ayashii.kuro.data.remote
 import android.util.Log
 import android.util.LruCache
 import com.ayashii.kuro.data.model.HomeSection
+import com.ayashii.kuro.data.model.HomeSectionType
 import com.ayashii.kuro.data.model.Track
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -748,7 +749,8 @@ class MusicRepository {
                 HomeSection(
                     title = getLocString(com.ayashii.kuro.R.string.home_quick_picks_title, "Quick Picks"),
                     subtitle = getLocString(com.ayashii.kuro.R.string.home_quick_picks_sub, "Listen to your favorite music"),
-                    tracks = defaultTracks.take(10)
+                    tracks = defaultTracks.take(16),
+                    layoutType = HomeSectionType.COMPACT_COLUMNS
                 ),
                 HomeSection(
                     title = getLocString(com.ayashii.kuro.R.string.home_trending_shelf_title, "Trending Songs"),
@@ -763,6 +765,31 @@ class MusicRepository {
 
     suspend fun getTrendingTracks(): List<Track> = withContext(Dispatchers.IO) {
         searchTracks("Top Global Hits 2026")
+    }
+
+    suspend fun getPlaylistOrBrowseTracks(browseId: String?, playlistId: String?): List<Track> = withContext(Dispatchers.IO) {
+        try {
+            val targetBrowse = when {
+                !browseId.isNullOrBlank() -> browseId
+                !playlistId.isNullOrBlank() -> if (playlistId.startsWith("VL")) playlistId else "VL$playlistId"
+                else -> null
+            }
+            if (!targetBrowse.isNullOrBlank()) {
+                val json = postYtmBrowse(targetBrowse)
+                if (json != null) {
+                    val parsed = parseYtmSections(json, "Playlist")
+                    val tracks = parsed.flatMap { it.tracks }.filter { !it.id.startsWith("VL") && !it.id.startsWith("MPRE") }
+                    if (tracks.isNotEmpty()) return@withContext tracks.distinctBy { it.id }
+                }
+            }
+            if (!playlistId.isNullOrBlank()) {
+                val radio = getRadioTracks(playlistId)
+                if (radio.isNotEmpty()) return@withContext radio
+            }
+        } catch (e: Exception) {
+            Log.e("MusicRepository", "getPlaylistOrBrowseTracks error: ${e.message}")
+        }
+        emptyList()
     }
 
     suspend fun getRadioTracks(videoId: String, tunerSetting: String? = null): List<Track> = withContext(Dispatchers.IO) {
@@ -996,7 +1023,7 @@ class MusicRepository {
                         ?.optString("continuation")
                         ?.takeIf { it.isNotBlank() }
                     var contPages = 0
-                    while (homeCont != null && contPages < 2) {
+                    while (homeCont != null && contPages < 20) {
                         val nextHomeJson = fetchBrowse("FEmusic_home", homeCont) ?: break
                         val contSecList = nextHomeJson.optJSONObject("continuationContents")
                             ?.optJSONObject("sectionListContinuation")
@@ -1014,7 +1041,7 @@ class MusicRepository {
                 }
                 if (exploreJson != null) {
                     val exploreShelves = parseYtmSections(exploreJson, getLocString(com.ayashii.kuro.R.string.home_trending_shelf_title, "Trending Songs"))
-                    result.addAll(if (isLoggedIn) exploreShelves else exploreShelves.take(2))
+                    result.addAll(exploreShelves)
                 }
             }
         } catch (e: Exception) {
@@ -1049,8 +1076,10 @@ class MusicRepository {
         try {
             for (s in 0 until sections.length()) {
                 val secNode = sections.optJSONObject(s) ?: continue
+                val gridObj = secNode.optJSONObject("gridRenderer")
                 val shelfObj = secNode.optJSONObject("musicCarouselShelfRenderer")
                     ?: secNode.optJSONObject("musicShelfRenderer")
+                    ?: gridObj
                     ?: continue
 
                 val headerRenderer = shelfObj.optJSONObject("header")
@@ -1077,10 +1106,22 @@ class MusicRepository {
                     strapline = sb.toString().trim()
                 }
 
-                val items = shelfObj.optJSONArray("contents") ?: continue
+                var headerAvatarUrl: String? = null
+                val headerThumbs = headerRenderer?.optJSONObject("thumbnail")
+                    ?.optJSONObject("musicThumbnailRenderer")
+                    ?.optJSONObject("thumbnail")
+                    ?.optJSONArray("thumbnails")
+                if (headerThumbs != null && headerThumbs.length() > 0) {
+                    val rawAvatar = headerThumbs.optJSONObject(headerThumbs.length() - 1)?.optString("url", "").orEmpty()
+                    if (rawAvatar.isNotBlank()) headerAvatarUrl = upgradeThumbnailUrl(rawAvatar)
+                }
+
+                val items = shelfObj.optJSONArray("contents") ?: shelfObj.optJSONArray("items") ?: continue
                 val tracks = mutableListOf<Track>()
+                var hasResponsiveRows = false
                 for (i in 0 until items.length()) {
                     val it = items.optJSONObject(i) ?: continue
+                    if (it.has("musicResponsiveListItemRenderer")) hasResponsiveRows = true
                     val track = parseSingleTrackItem(it)
                     if (track != null && tracks.none { existing ->
                             com.ayashii.kuro.data.native.KuroNativeCore.isDuplicateOrVariantTrack(track, existing)
@@ -1091,7 +1132,25 @@ class MusicRepository {
                 }
 
                 if (tracks.isNotEmpty()) {
-                    list.add(HomeSection(title = shelfTitle, subtitle = strapline, tracks = tracks))
+                    val lowerTitle = shelfTitle.lowercase()
+                    val lowerSub = strapline.lowercase()
+                    val layoutType = when {
+                        gridObj != null || "speed dial" in lowerTitle -> HomeSectionType.SPEED_DIAL
+                        "similar to" in lowerSub || !headerAvatarUrl.isNullOrBlank() -> HomeSectionType.SIMILAR_TO
+                        hasResponsiveRows || "quick picks" in lowerTitle || "covers" in lowerTitle || "trending songs" in lowerTitle || "long listens" in lowerTitle -> HomeSectionType.COMPACT_COLUMNS
+                        "discover" in lowerTitle || "mixed for you" in lowerTitle || "community" in lowerTitle -> HomeSectionType.SPOTLIGHT_HERO
+                        "forgotten" in lowerTitle || "live" in lowerTitle || "performances" in lowerTitle -> HomeSectionType.WIDE_CARDS
+                        else -> HomeSectionType.SQUARE_CAROUSEL
+                    }
+                    list.add(
+                        HomeSection(
+                            title = shelfTitle,
+                            subtitle = strapline,
+                            tracks = tracks,
+                            layoutType = layoutType,
+                            headerAvatarUrl = headerAvatarUrl
+                        )
+                    )
                 }
             }
         } catch (e: Exception) {
@@ -1173,17 +1232,38 @@ class MusicRepository {
                         }
                     }
                 }
-                if (videoId.isBlank()) return null
+                val browseId = r.optJSONObject("navigationEndpoint")
+                    ?.optJSONObject("browseEndpoint")
+                    ?.optString("browseId", "")
+                    .orEmpty()
+                var playlistId = r.optJSONObject("navigationEndpoint")
+                    ?.optJSONObject("watchPlaylistEndpoint")
+                    ?.optString("playlistId", "")
+                    .orEmpty()
+                if (playlistId.isBlank()) {
+                    playlistId = r.optJSONObject("thumbnailOverlay")
+                        ?.optJSONObject("musicItemThumbnailOverlayRenderer")
+                        ?.optJSONObject("content")
+                        ?.optJSONObject("musicPlayButtonRenderer")
+                        ?.optJSONObject("playNavigationEndpoint")
+                        ?.optJSONObject("watchPlaylistEndpoint")
+                        ?.optString("playlistId", "")
+                        .orEmpty()
+                }
+                if (videoId.isBlank() && browseId.isBlank() && playlistId.isBlank()) return null
 
                 val subtitleRuns = r.optJSONObject("subtitle")?.optJSONArray("runs")
                 var artist = "Unknown Artist"
                 if (subtitleRuns != null) {
+                    val parts = mutableListOf<String>()
                     for (k in 0 until subtitleRuns.length()) {
                         val txt = subtitleRuns.optJSONObject(k)?.optString("text", "")?.trim().orEmpty()
-                        if (!isMetadataNoiseToken(txt)) {
-                            artist = txt.replace(" - Topic", "").trim()
-                            break
+                        if (txt.isNotBlank() && txt != "•" && txt != "·") {
+                            parts.add(txt.replace(" - Topic", "").trim())
                         }
+                    }
+                    if (parts.isNotEmpty()) {
+                        artist = parts.take(2).joinToString(" • ")
                     }
                 }
 
@@ -1195,13 +1275,22 @@ class MusicRepository {
                     thumbUrl = thumbs.optJSONObject(thumbs.length() - 1)?.optString("url", "") ?: ""
                 }
 
+                val effectiveId = videoId.ifBlank { playlistId.ifBlank { browseId } }
+                val effectiveUrl = if (videoId.isNotBlank()) {
+                    "https://www.youtube.com/watch?v=$videoId"
+                } else {
+                    "https://music.youtube.com/playlist?list=${playlistId.ifBlank { browseId }}"
+                }
+
                 return Track(
-                    id = videoId,
-                    url = "https://www.youtube.com/watch?v=$videoId",
+                    id = effectiveId,
+                    url = effectiveUrl,
                     title = cleanTrackTitle(title),
                     artist = artist,
                     thumbnailUrl = upgradeThumbnailUrl(thumbUrl),
-                    durationSeconds = 0L
+                    durationSeconds = 0L,
+                    browseId = browseId.takeIf { it.isNotBlank() },
+                    playlistId = playlistId.takeIf { it.isNotBlank() }
                 )
             }
         } catch (_: Exception) {}

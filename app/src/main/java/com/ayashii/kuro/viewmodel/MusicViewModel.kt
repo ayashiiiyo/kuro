@@ -763,6 +763,37 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private var homeRefreshCycle = 0
+
+    private fun personalizeHomeShelves(shelves: List<HomeSection>, rotateTop: Boolean): List<HomeSection> {
+        if (shelves.isEmpty()) return shelves
+        val affinityArtists = (_favorites.value + recentlyPlayed.value)
+            .map { it.artist.substringBefore("•").substringBefore(",").trim().lowercase() }
+            .filter { it.length >= 2 && it != "unknown artist" }
+            .groupingBy { it }
+            .eachCount()
+
+        val deduped = shelves.distinctBy { it.title.trim().lowercase() }
+        val personalized = if (affinityArtists.isEmpty()) {
+            deduped
+        } else {
+            val head = deduped.take(2)
+            val tail = deduped.drop(2).sortedByDescending { sec ->
+                sec.tracks.sumOf { t ->
+                    val a = t.artist.substringBefore("•").substringBefore(",").trim().lowercase()
+                    affinityArtists[a] ?: 0
+                }
+            }
+            head + tail
+        }
+
+        if (!rotateTop || personalized.size <= 2) return personalized
+        homeRefreshCycle = (homeRefreshCycle + 1) % minOf(personalized.size, 4)
+        if (homeRefreshCycle == 0) return personalized
+        val promoted = personalized[homeRefreshCycle]
+        return listOf(promoted) + personalized.filterIndexed { index, _ -> index != homeRefreshCycle }
+    }
+
     fun refreshHome() {
         if (_isRefreshingHome.value) return
         viewModelScope.launch {
@@ -770,8 +801,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val ytmShelves = repository.getHomeShelves(forceRefresh = true)
                 if (ytmShelves.isNotEmpty()) {
-                    _homeSections.value = ytmShelves
-                    _trendingTracks.value = ytmShelves.flatMap { it.tracks }.distinctBy { it.id }
+                    val personalized = ytmShelves.distinctBy { it.title.trim().lowercase() }
+                    _homeSections.value = personalized
+                    _trendingTracks.value = personalized.flatMap { it.tracks }.distinctBy { it.id }
                 } else {
                     val fallback = repository.getTrendingTracks()
                     if (fallback.isNotEmpty()) _trendingTracks.value = fallback
@@ -786,9 +818,10 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isLoadingTrending.value = true
             val ytmShelves = repository.getHomeShelves()
-            _homeSections.value = ytmShelves
-            val tracks = if (ytmShelves.isNotEmpty()) {
-                ytmShelves.flatMap { it.tracks }.distinctBy { it.id }
+            val personalized = ytmShelves.distinctBy { it.title.trim().lowercase() }
+            _homeSections.value = personalized
+            val tracks = if (personalized.isNotEmpty()) {
+                personalized.flatMap { it.tracks }.distinctBy { it.id }
             } else {
                 repository.getTrendingTracks()
             }
@@ -797,7 +830,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
             launch(Dispatchers.IO) {
                 delay(2000)
-                tracks.take(2).forEach {
+                tracks.firstOrNull { it.browseId == null && it.playlistId == null }?.let {
                     repository.getAudioStreamUrl(it.url, settingsManager.audioQuality.value)
                 }
             }
@@ -886,6 +919,24 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun playTrackFromSearch(track: Track) {
         playTrack(track, listOf(track))
+    }
+
+    fun playHomeItem(item: Track, fallbackQueue: List<Track> = emptyList()) {
+        if (item.browseId.isNullOrBlank() && item.playlistId.isNullOrBlank()) {
+            val playableQueue = fallbackQueue.filter { it.browseId.isNullOrBlank() && it.playlistId.isNullOrBlank() }
+            playTrack(item, playableQueue.ifEmpty { listOf(item) })
+            return
+        }
+        viewModelScope.launch {
+            _isLoadingTrack.value = true
+            val tracks = repository.getPlaylistOrBrowseTracks(item.browseId, item.playlistId)
+                .ifEmpty { repository.searchTracks("${item.title} ${item.artist.substringBefore("•")}") }
+            if (tracks.isNotEmpty()) {
+                playTrack(tracks.first(), tracks)
+            } else {
+                _isLoadingTrack.value = false
+            }
+        }
     }
 
     fun playTrack(track: Track, newQueue: List<Track> = emptyList()) {
