@@ -22,6 +22,25 @@ data class Track(
     val browseId: String? = null,
     val playlistId: String? = null
 ) {
+    val isCollection: Boolean
+        get() {
+            val b = browseId.orEmpty()
+            val p = playlistId.orEmpty()
+            if (b.startsWith("VL") || b.startsWith("PL") || b.startsWith("MPRE") || b.startsWith("OLAK") || b.startsWith("FEmusic_")) {
+                return true
+            }
+            if (p.startsWith("RDCLAK") || p.startsWith("RDTMAK") || p.startsWith("RDAMPL") || p.startsWith("PL") || p.startsWith("OLAK") || p.startsWith("VL")) {
+                return true
+            }
+            return durationSeconds <= 0L && (b.isNotBlank() || (p.isNotBlank() && !p.startsWith("RDAMVM")))
+        }
+
+    val isArtistProfile: Boolean
+        get() {
+            val b = browseId.orEmpty()
+            return b.startsWith("UC") || b.startsWith("MPLAUC")
+        }
+
     val highResThumbnailUrl: String
         get() {
             if (thumbnailUrl.isBlank()) return thumbnailUrl
@@ -85,5 +104,35 @@ data class HomeSection(
     val subtitle: String = "",
     val tracks: List<Track>,
     val layoutType: HomeSectionType = HomeSectionType.SQUARE_CAROUSEL,
-    val headerAvatarUrl: String? = null
+    val headerAvatarUrl: String? = null,
+    val browseId: String? = null
+)
+
+@Immutable
+data class PlaylistBrowseDetails(
+    val title: String,
+    val subtitle: String,
+    val description: String = "",
+    val thumbnailUrl: String = "",
+    val tracks: List<Track> = emptyList(),
+    val browseId: String? = null,
+    val playlistId: String? = null
+)
+
+@Immutable
+data class YtmComment(
+    val id: String,
+    val authorName: String,
+    val authorAvatarUrl: String,
+    val publishedTimeText: String,
+    val text: String,
+    val likeCountText: String = "",
+    val isHearted: Boolean = false
+)
+
+@Immutable
+data class CommentsResult(
+    val comments: List<YtmComment> = emptyList(),
+    val commentCountText: String = "",
+    val createCommentParams: String? = null
 )

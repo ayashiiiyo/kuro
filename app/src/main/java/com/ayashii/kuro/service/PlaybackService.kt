@@ -333,13 +333,34 @@ class PlaybackService : MediaSessionService() {
 
         val streamHttpClient = OkHttpClient.Builder()
             .connectionPool(ConnectionPool(8, 5, TimeUnit.MINUTES))
-            .connectTimeout(15, TimeUnit.SECONDS)
+            .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
+            .addInterceptor { chain ->
+                val orig = chain.request()
+                val urlStr = orig.url.toString()
+                val matchedUa = when {
+                    urlStr.contains("c=IOS", ignoreCase = true) ->
+                        "com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 18_1 like Mac OS X;)"
+                    urlStr.contains("c=ANDROID_VR", ignoreCase = true) ->
+                        "com.google.android.apps.youtube.vr.oculus/1.60.19 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip"
+                    urlStr.contains("c=ANDROID_MUSIC", ignoreCase = true) ->
+                        "com.google.android.apps.youtube.music/7.27.52 (Linux; U; Android 14) gzip"
+                    urlStr.contains("c=ANDROID", ignoreCase = true) ->
+                        "com.google.android.youtube/19.44.38 (Linux; U; Android 14) gzip"
+                    else ->
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+                }
+                val b = orig.newBuilder()
+                    .header("User-Agent", matchedUa)
+                    .header("Origin", "https://www.youtube.com")
+                    .header("Referer", "https://www.youtube.com/")
+                chain.proceed(b.build())
+            }
             .build()
 
         val httpDataSourceFactory = OkHttpDataSource.Factory(streamHttpClient)
-            .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+            .setUserAgent("com.google.android.youtube/19.44.38 (Linux; U; Android 14) gzip")
 
         val extractorsFactory = androidx.media3.extractor.DefaultExtractorsFactory()
             .setConstantBitrateSeekingEnabled(true)
@@ -362,10 +383,10 @@ class PlaybackService : MediaSessionService() {
 
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                30_000,
-                60_000,
-                500,
-                1_500
+                20_000,
+                50_000,
+                250,
+                750
             )
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
@@ -955,6 +976,7 @@ class PlaybackService : MediaSessionService() {
 
                 launch(Dispatchers.IO) {
                     try {
+                        delay(2800L)
                         val queueSnapshot = PlayerQueueManager.queueState.value
                         val curIdx = PlayerQueueManager.currentIndex.value
                         val remaining = queueSnapshot.size - curIdx
@@ -964,6 +986,7 @@ class PlaybackService : MediaSessionService() {
                                 appendUniqueRadioTracks(radioTracks)
                             }
                         }
+                        delay(1500L)
                         val updatedQueue = PlayerQueueManager.queueState.value
                         val nextIdx = PlayerQueueManager.currentIndex.value + 1
                         if (nextIdx in updatedQueue.indices) {

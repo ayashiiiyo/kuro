@@ -399,7 +399,8 @@ fun MainAppScreen(viewModel: MusicViewModel, onPageChanged: (Int) -> Unit = {}) 
             }
         }
 
-        BackHandler(enabled = !isExpanded && pagerState.currentPage != 0) {
+        val activeBrowseDetails by viewModel.activeBrowseDetails.collectAsState()
+        BackHandler(enabled = !isExpanded && activeBrowseDetails == null && pagerState.currentPage != 0) {
             navigateToPage(0)
         }
 

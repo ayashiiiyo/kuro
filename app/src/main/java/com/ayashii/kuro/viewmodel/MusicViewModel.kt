@@ -18,8 +18,11 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.ayashii.kuro.data.model.CommentsResult
 import com.ayashii.kuro.data.model.HomeSection
+import com.ayashii.kuro.data.model.PlaylistBrowseDetails
 import com.ayashii.kuro.data.model.Track
+import com.ayashii.kuro.data.model.YtmComment
 import com.ayashii.kuro.data.cache.HistoryStore
 import com.ayashii.kuro.data.cache.UiSnapshot
 import com.ayashii.kuro.data.cache.UiStateCache
@@ -89,8 +92,29 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private val _genreTracks = MutableStateFlow<List<Track>>(emptyList())
     val genreTracks: StateFlow<List<Track>> = _genreTracks.asStateFlow()
 
+    private val _genreSections = MutableStateFlow<List<HomeSection>>(emptyList())
+    val genreSections: StateFlow<List<HomeSection>> = _genreSections.asStateFlow()
+
     private val _isLoadingGenre = MutableStateFlow(false)
     val isLoadingGenre: StateFlow<Boolean> = _isLoadingGenre.asStateFlow()
+
+    private val _activeBrowseDetails = MutableStateFlow<PlaylistBrowseDetails?>(null)
+    val activeBrowseDetails: StateFlow<PlaylistBrowseDetails?> = _activeBrowseDetails.asStateFlow()
+
+    private val _isLoadingBrowseDetails = MutableStateFlow(false)
+    val isLoadingBrowseDetails: StateFlow<Boolean> = _isLoadingBrowseDetails.asStateFlow()
+
+    private val _trackComments = MutableStateFlow(CommentsResult())
+    val trackComments: StateFlow<CommentsResult> = _trackComments.asStateFlow()
+
+    private val _isLoadingComments = MutableStateFlow(false)
+    val isLoadingComments: StateFlow<Boolean> = _isLoadingComments.asStateFlow()
+
+    private val _isPostingComment = MutableStateFlow(false)
+    val isPostingComment: StateFlow<Boolean> = _isPostingComment.asStateFlow()
+
+    private val _relatedTracks = MutableStateFlow<List<Track>>(emptyList())
+    val relatedTracks: StateFlow<List<Track>> = _relatedTracks.asStateFlow()
 
     private val _suggestions = MutableStateFlow<List<String>>(emptyList())
     val suggestions = _suggestions.asStateFlow()
@@ -391,22 +415,19 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        val remaining = queueManager.queueState.value.size - queueManager.currentIndex.value
-        if (queueManager.queueState.value.size <= 2 || remaining <= 3) {
-            viewModelScope.launch(Dispatchers.IO) {
-                try {
-                    val radioTracks = repository.getRadioTracks(track.id)
-                    if (radioTracks.isNotEmpty()) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                delay(1800L)
+                val radioTracks = repository.getRadioTracks(track.id)
+                if (radioTracks.isNotEmpty()) {
+                    _relatedTracks.value = radioTracks
+                    val remaining = queueManager.queueState.value.size - queueManager.currentIndex.value
+                    if (queueManager.queueState.value.size <= 2 || remaining <= 3) {
                         appendRadioTracks(radioTracks)
-                        val currentList = queueManager.queueState.value
-                        val nextIdx = queueManager.currentIndex.value + 1
-                        if (nextIdx in currentList.indices) {
-                            repository.getAudioStreamUrl(currentList[nextIdx].url, settingsManager.audioQuality.value)
-                        }
                     }
-                } catch (e: Exception) {
-                    Log.d("KuroVM", "Automix radio fetch: ${e.message}")
                 }
+            } catch (e: Exception) {
+                Log.d("KuroVM", "Automix radio fetch: ${e.message}")
             }
         }
     }
@@ -884,17 +905,62 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun searchWithFilter(query: String, filterType: String) {
+        suggestJob?.cancel()
+        searchJob?.cancel()
+        _suggestions.value = emptyList()
+        if (query.isBlank()) {
+            _searchResults.value = emptyList()
+            _isSearching.value = false
+            return
+        }
+        searchJob = viewModelScope.launch {
+            _isSearching.value = true
+            val results = if (filterType == "All") {
+                repository.searchTracks(query)
+            } else {
+                repository.searchByCategoryFilter(query, filterType)
+            }
+            _searchResults.value = results
+            _isSearching.value = false
+        }
+    }
+
     fun loadGenreTracks(genre: String) {
         genreJob?.cancel()
         if (genre.isBlank() || genre == "Semua") {
             _genreTracks.value = emptyList()
+            _genreSections.value = emptyList()
             _isLoadingGenre.value = false
             return
         }
         genreJob = viewModelScope.launch {
             _isLoadingGenre.value = true
             try {
-                val results = repository.searchTracks(genre)
+                if (genre.startsWith("FEmusic_")) {
+                    val exploreShelves = repository.getExploreShelves(genre)
+                    _genreSections.value = exploreShelves.distinctBy { it.title.trim().lowercase() }
+                    val flat = exploreShelves.flatMap { it.tracks }.filter { !it.isCollection && !it.isArtistProfile }
+                    _genreTracks.value = flat
+                    return@launch
+                }
+
+                val discoveredChips = repository.getDiscoveredMoodChips()
+                val matchedToken = discoveredChips.entries.firstOrNull { (k, _) ->
+                    k.equals(genre, ignoreCase = true) || k.contains(genre, ignoreCase = true) || genre.contains(k, ignoreCase = true)
+                }?.value
+
+                if (!matchedToken.isNullOrBlank()) {
+                    val moodShelves = repository.getHomeShelves(forceRefresh = true, filterParams = matchedToken)
+                    if (moodShelves.isNotEmpty()) {
+                        _genreSections.value = moodShelves.distinctBy { it.title.trim().lowercase() }
+                        _genreTracks.value = moodShelves.flatMap { it.tracks }.filter { !it.isCollection && !it.isArtistProfile }
+                        return@launch
+                    }
+                }
+
+                _genreSections.value = emptyList()
+                val results = repository.searchTracks("$genre music")
                 val seed = results.firstOrNull()
                 val ytmRadio = if (seed != null) {
                     repository.getRadioTracks(seed.id)
@@ -911,14 +977,101 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 Log.e("KuroMusicViewModel", "Load genre tracks error: ${e.message}")
                 _genreTracks.value = emptyList()
+                _genreSections.value = emptyList()
             } finally {
                 _isLoadingGenre.value = false
             }
         }
     }
 
+    fun openBrowseItemDetails(item: Track) {
+        viewModelScope.launch {
+            _isLoadingBrowseDetails.value = true
+            _activeBrowseDetails.value = PlaylistBrowseDetails(
+                title = item.title,
+                subtitle = item.artist,
+                thumbnailUrl = item.thumbnailUrl,
+                tracks = emptyList(),
+                browseId = item.browseId,
+                playlistId = item.playlistId
+            )
+            try {
+                val details = repository.getPlaylistBrowseDetails(
+                    browseId = item.browseId,
+                    playlistId = item.playlistId,
+                    fallbackTitle = item.title,
+                    fallbackSubtitle = item.artist,
+                    fallbackThumb = item.thumbnailUrl
+                )
+                _activeBrowseDetails.value = details
+            } finally {
+                _isLoadingBrowseDetails.value = false
+            }
+        }
+    }
+
+    fun closeBrowseItemDetails() {
+        _activeBrowseDetails.value = null
+        _isLoadingBrowseDetails.value = false
+    }
+
+    fun saveBrowseDetailsAsPlaylist(details: PlaylistBrowseDetails) {
+        if (details.tracks.isEmpty()) return
+        val newPl = playlistManager.createPlaylist(details.title)
+        details.tracks.forEach { trk ->
+            playlistManager.addTrackToPlaylist(newPl.id, trk)
+        }
+    }
+
+    fun loadCommentsForCurrentTrack(videoId: String) {
+        if (videoId.isBlank()) return
+        viewModelScope.launch {
+            _isLoadingComments.value = true
+            try {
+                _trackComments.value = repository.getTrackComments(videoId)
+            } finally {
+                _isLoadingComments.value = false
+            }
+        }
+    }
+
+    fun postCommentOnCurrentTrack(commentText: String, onComplete: (Boolean) -> Unit = {}) {
+        val cur = _currentTrack.value ?: return
+        val text = commentText.trim()
+        if (text.isBlank() || _isPostingComment.value) return
+        viewModelScope.launch {
+            _isPostingComment.value = true
+            try {
+                val currentParams = _trackComments.value.createCommentParams
+                val ok = repository.postTrackComment(cur.id, currentParams, text)
+                if (ok) {
+                    val acc = authState.value
+                    val newComment = YtmComment(
+                        id = "local_${System.currentTimeMillis()}",
+                        authorName = acc?.name?.ifBlank { "You" } ?: "You",
+                        authorAvatarUrl = acc?.avatarUrl.orEmpty(),
+                        publishedTimeText = "Just now",
+                        text = text,
+                        likeCountText = "0"
+                    )
+                    val curResult = _trackComments.value
+                    _trackComments.value = curResult.copy(
+                        comments = listOf(newComment) + curResult.comments
+                    )
+                }
+                onComplete(ok)
+            } finally {
+                _isPostingComment.value = false
+            }
+        }
+    }
+
     fun playTrackFromSearch(track: Track) {
-        playTrack(track, listOf(track))
+        if (track.isCollection || track.isArtistProfile) {
+            openBrowseItemDetails(track)
+        } else {
+            playTrack(track, listOf(track))
+        }
     }
 
     fun playHomeItem(item: Track, fallbackQueue: List<Track> = emptyList()) {
@@ -930,11 +1083,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isLoadingTrack.value = true
             val tracks = repository.getPlaylistOrBrowseTracks(item.browseId, item.playlistId)
-                .ifEmpty { repository.searchTracks("${item.title} ${item.artist.substringBefore("•")}") }
             if (tracks.isNotEmpty()) {
                 playTrack(tracks.first(), tracks)
             } else {
                 _isLoadingTrack.value = false
+                openBrowseItemDetails(item)
             }
         }
     }

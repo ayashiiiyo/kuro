@@ -2,9 +2,12 @@ package com.ayashii.kuro.data.remote
 
 import android.util.Log
 import android.util.LruCache
+import com.ayashii.kuro.data.model.CommentsResult
 import com.ayashii.kuro.data.model.HomeSection
 import com.ayashii.kuro.data.model.HomeSectionType
+import com.ayashii.kuro.data.model.PlaylistBrowseDetails
 import com.ayashii.kuro.data.model.Track
+import com.ayashii.kuro.data.model.YtmComment
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -35,6 +38,9 @@ class MusicRepository {
 
         private const val YTM_PARAMS_SONGS = "EgWKAQIIAWoKEAkQBRAKEAMQBA=="
         private const val YTM_PARAMS_VIDEOS = "EgWKAQJQAWoKEAkQBRAKEAMQBA=="
+        private const val YTM_PARAMS_ALBUMS = "EgWKAQIYAWoKEAkQBRAKEAMQBA=="
+        private const val YTM_PARAMS_ARTISTS = "EgWKAQIgAWoKEAkQBRAKEAMQBA=="
+        private const val YTM_PARAMS_PLAYLISTS = "EgWKAQIoAWoKEAkQBRAKEAMQBA=="
 
         private val THUMB_WH_CHECK_REGEX = Regex("=w\\d+-h\\d+")
         private val THUMB_WH_REGEX = Regex("=w\\d+-h\\d+[^&?]*")
@@ -716,9 +722,14 @@ class MusicRepository {
         emptyList()
     }
 
-    suspend fun getHomeShelves(forceRefresh: Boolean = false): List<HomeSection> = withContext(Dispatchers.IO) {
+    @Volatile
+    private var homeChipTokens: Map<String, String> = emptyMap()
+
+    fun getDiscoveredMoodChips(): Map<String, String> = homeChipTokens
+
+    suspend fun getHomeShelves(forceRefresh: Boolean = false, filterParams: String? = null): List<HomeSection> = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
-        if (!forceRefresh) {
+        if (!forceRefresh && filterParams.isNullOrBlank()) {
             synchronized(homeCacheLock) {
                 homeCache?.let { (cached, time) ->
                     if (now - time < HOME_CACHE_TTL) {
@@ -727,19 +738,11 @@ class MusicRepository {
                 }
             }
         }
-        val rawShelves = fetchYouTubeMusicShelves()
-        val ytmShelves = if (forceRefresh && rawShelves.isNotEmpty()) {
-            rawShelves.map { sec ->
-                if (sec.tracks.size > 3) {
-                    val rotated = sec.tracks.take(1) + sec.tracks.drop(1).shuffled()
-                    sec.copy(tracks = rotated)
-                } else sec
-            }
-        } else {
-            rawShelves
-        }
+        val ytmShelves = fetchYouTubeMusicShelves(filterParams = filterParams)
         if (ytmShelves.isNotEmpty()) {
-            synchronized(homeCacheLock) { homeCache = Pair(ytmShelves, now) }
+            if (filterParams.isNullOrBlank()) {
+                synchronized(homeCacheLock) { homeCache = Pair(ytmShelves, now) }
+            }
             return@withContext ytmShelves
         }
 
@@ -768,26 +771,227 @@ class MusicRepository {
     }
 
     suspend fun getPlaylistOrBrowseTracks(browseId: String?, playlistId: String?): List<Track> = withContext(Dispatchers.IO) {
+        val details = getPlaylistBrowseDetails(browseId = browseId, playlistId = playlistId, fallbackTitle = "", fallbackSubtitle = "", fallbackThumb = "")
+        details.tracks
+    }
+
+    suspend fun getPlaylistBrowseDetails(
+        browseId: String?,
+        playlistId: String?,
+        fallbackTitle: String = "",
+        fallbackSubtitle: String = "",
+        fallbackThumb: String = ""
+    ): PlaylistBrowseDetails = withContext(Dispatchers.IO) {
+        var resolvedTitle = fallbackTitle
+        var resolvedSubtitle = fallbackSubtitle
+        var resolvedDesc = ""
+        var resolvedThumb = fallbackThumb
+        val tracks = mutableListOf<Track>()
+        val seenIds = HashSet<String>()
+
         try {
-            val targetBrowse = when {
-                !browseId.isNullOrBlank() -> browseId
-                !playlistId.isNullOrBlank() -> if (playlistId.startsWith("VL")) playlistId else "VL$playlistId"
-                else -> null
-            }
-            if (!targetBrowse.isNullOrBlank()) {
-                val json = postYtmBrowse(targetBrowse)
-                if (json != null) {
-                    val parsed = parseYtmSections(json, "Playlist")
-                    val tracks = parsed.flatMap { it.tracks }.filter { !it.id.startsWith("VL") && !it.id.startsWith("MPRE") }
-                    if (tracks.isNotEmpty()) return@withContext tracks.distinctBy { it.id }
+            val rawBrowse = browseId?.trim().orEmpty()
+            val rawPlaylist = playlistId?.trim().orEmpty()
+            val isDirectMixQueue = rawPlaylist.startsWith("RDTMAK") ||
+                rawPlaylist.startsWith("RDCLAK") ||
+                rawPlaylist.startsWith("RDAMPL") ||
+                rawPlaylist.startsWith("RDEM") ||
+                rawPlaylist.startsWith("RDQM")
+
+            if (isDirectMixQueue && rawBrowse.isBlank()) {
+                val mixTracks = getWatchPlaylistTracks(rawPlaylist)
+                for (t in mixTracks) {
+                    if (t.id.isNotBlank() && seenIds.add(t.id)) {
+                        tracks.add(t)
+                    }
                 }
             }
-            if (!playlistId.isNullOrBlank()) {
-                val radio = getRadioTracks(playlistId)
-                if (radio.isNotEmpty()) return@withContext radio
+
+            if (tracks.isEmpty()) {
+                val targetBrowse = when {
+                    rawBrowse.isNotBlank() -> {
+                        if (rawBrowse.startsWith("OLAK")) "VL$rawBrowse" else rawBrowse
+                    }
+                    rawPlaylist.isNotBlank() -> {
+                        if (rawPlaylist.startsWith("VL") || rawPlaylist.startsWith("MPRE") || rawPlaylist.startsWith("UC") || rawPlaylist.startsWith("FEmusic_")) {
+                            rawPlaylist
+                        } else {
+                            "VL$rawPlaylist"
+                        }
+                    }
+                    else -> ""
+                }
+
+                if (targetBrowse.isNotBlank()) {
+                    val json = postYtmBrowse(targetBrowse, allowAnonymous = true)
+                    if (json != null) {
+                        val headerNode = json.optJSONObject("header")
+                            ?.let { h ->
+                                h.optJSONObject("musicDetailHeaderRenderer")
+                                    ?: h.optJSONObject("musicEditablePlaylistDetailHeaderRenderer")
+                                        ?.optJSONObject("header")
+                                        ?.optJSONObject("musicDetailHeaderRenderer")
+                                    ?: h.optJSONObject("musicImmersiveHeaderRenderer")
+                                    ?: h.optJSONObject("musicVisualHeaderRenderer")
+                            }
+                            ?: json.optJSONObject("contents")
+                                ?.optJSONObject("twoColumnBrowseResultsRenderer")
+                                ?.optJSONArray("tabs")
+                                ?.optJSONObject(0)
+                                ?.optJSONObject("tabRenderer")
+                                ?.optJSONObject("content")
+                                ?.optJSONObject("sectionListRenderer")
+                                ?.optJSONArray("contents")
+                                ?.optJSONObject(0)
+                                ?.let { firstSec ->
+                                    firstSec.optJSONObject("musicResponsiveHeaderRenderer")
+                                        ?: firstSec.optJSONObject("musicEditablePlaylistDetailHeaderRenderer")
+                                            ?.optJSONObject("header")
+                                            ?.optJSONObject("musicResponsiveHeaderRenderer")
+                                }
+
+                        if (headerNode != null) {
+                            val hTitle = extractRunsText(headerNode.optJSONObject("title"))
+                            if (hTitle.isNotBlank()) resolvedTitle = hTitle
+                            val hSub = extractRunsText(headerNode.optJSONObject("subtitle"))
+                                .ifBlank { extractRunsText(headerNode.optJSONObject("straplineTextOne")) }
+                            if (hSub.isNotBlank()) resolvedSubtitle = hSub
+                            val hSecondSub = extractRunsText(headerNode.optJSONObject("secondSubtitle"))
+                            if (hSecondSub.isNotBlank()) {
+                                resolvedSubtitle = if (resolvedSubtitle.isNotBlank()) "$resolvedSubtitle • $hSecondSub" else hSecondSub
+                            }
+                            val hDesc = extractRunsText(headerNode.optJSONObject("description"))
+                                .ifBlank {
+                                    extractRunsText(
+                                        headerNode.optJSONObject("description")
+                                            ?.optJSONObject("musicDescriptionShelfRenderer")
+                                            ?.optJSONObject("description")
+                                    )
+                                }
+                            if (hDesc.isNotBlank()) resolvedDesc = hDesc
+
+                            val hThumbs = headerNode.optJSONObject("thumbnail")
+                                ?.let { tObj ->
+                                    tObj.optJSONObject("musicThumbnailRenderer")
+                                        ?.optJSONObject("thumbnail")
+                                        ?.optJSONArray("thumbnails")
+                                        ?: tObj.optJSONObject("croppedSquareThumbnailRenderer")
+                                            ?.optJSONObject("thumbnail")
+                                            ?.optJSONArray("thumbnails")
+                                }
+                            if (hThumbs != null && hThumbs.length() > 0) {
+                                val u = hThumbs.optJSONObject(hThumbs.length() - 1)?.optString("url", "").orEmpty()
+                                if (u.isNotBlank()) resolvedThumb = upgradeThumbnailUrl(u)
+                            }
+                        }
+
+                        val paginated = parseBrowseTracksFromRoot(json, targetBrowse, maxPages = 6)
+                        for (t in paginated) {
+                            if (t.id.isNotBlank() && seenIds.add(t.id)) {
+                                val enriched = if (t.thumbnailUrl.isBlank() && resolvedThumb.isNotBlank()) {
+                                    t.copy(thumbnailUrl = resolvedThumb)
+                                } else t
+                                tracks.add(enriched)
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (tracks.isEmpty() && rawPlaylist.isNotBlank()) {
+                val nextTracks = getWatchPlaylistTracks(rawPlaylist.removePrefix("VL"))
+                for (t in nextTracks) {
+                    if (t.id.isNotBlank() && seenIds.add(t.id)) {
+                        tracks.add(t)
+                    }
+                }
+            }
+
+            if (tracks.isEmpty() && rawBrowse.startsWith("VL")) {
+                val stripped = rawBrowse.removePrefix("VL")
+                val nextTracks = getWatchPlaylistTracks(stripped)
+                for (t in nextTracks) {
+                    if (t.id.isNotBlank() && seenIds.add(t.id)) {
+                        tracks.add(t)
+                    }
+                }
             }
         } catch (e: Exception) {
-            Log.e("MusicRepository", "getPlaylistOrBrowseTracks error: ${e.message}")
+            Log.e("MusicRepository", "getPlaylistBrowseDetails error: ${e.message}")
+        }
+
+        if (resolvedThumb.isBlank()) {
+            resolvedThumb = tracks.firstOrNull()?.thumbnailUrl.orEmpty()
+        }
+
+        PlaylistBrowseDetails(
+            title = resolvedTitle.ifBlank { "Mix" },
+            subtitle = resolvedSubtitle,
+            description = resolvedDesc,
+            thumbnailUrl = resolvedThumb,
+            tracks = tracks,
+            browseId = browseId,
+            playlistId = playlistId
+        )
+    }
+
+    suspend fun getWatchPlaylistTracks(playlistId: String, videoId: String? = null): List<Track> = withContext(Dispatchers.IO) {
+        if (playlistId.isBlank() && videoId.isNullOrBlank()) return@withContext emptyList()
+        val cleanPid = playlistId.trim()
+        try {
+            val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
+            val origin = "https://music.youtube.com"
+            val visitorData = ensureVisitorData()
+            val (hlCode, glCode) = resolveHlGl()
+
+            val payload = org.json.JSONObject().apply {
+                put("context", org.json.JSONObject().apply {
+                    put("client", org.json.JSONObject().apply {
+                        put("clientName", YTM_CLIENT_NAME)
+                        put("clientVersion", YTM_CLIENT_VERSION)
+                        put("hl", hlCode)
+                        put("gl", glCode)
+                        if (!visitorData.isNullOrBlank()) {
+                            put("visitorData", visitorData)
+                        }
+                    })
+                })
+                if (!videoId.isNullOrBlank()) {
+                    put("videoId", videoId)
+                }
+                if (cleanPid.isNotBlank()) {
+                    put("playlistId", cleanPid)
+                }
+                put("isAudioOnly", true)
+                put("enablePersistentPlaylistPanel", true)
+            }
+
+            val reqBuilder = okhttp3.Request.Builder()
+                .url("$origin/youtubei/v1/next")
+                .header("Content-Type", "application/json")
+                .header("User-Agent", YTM_USER_AGENT)
+                .header("Origin", origin)
+                .header("Referer", "$origin/")
+                .header("X-Origin", origin)
+                .header("X-YouTube-Client-Name", "67")
+                .header("X-YouTube-Client-Version", YTM_CLIENT_VERSION)
+            if (!visitorData.isNullOrBlank()) {
+                reqBuilder.header("X-Goog-Visitor-Id", visitorData)
+            }
+
+            auth.applyAuthToRequest(reqBuilder, payload, origin)
+            reqBuilder.post(payload.toString().toRequestBody("application/json".toMediaType()))
+
+            val jsonStr = HttpClientProvider.client.newCall(reqBuilder.build()).execute().use { resp ->
+                if (!resp.isSuccessful) return@withContext emptyList()
+                resp.body?.string().orEmpty()
+            }
+            if (jsonStr.isBlank()) return@withContext emptyList()
+
+            val parsed = parseWatchNextQueueItems(org.json.JSONObject(jsonStr), excludeVideoId = null)
+            if (parsed.isNotEmpty()) return@withContext parsed
+        } catch (e: Exception) {
+            Log.e("MusicRepository", "getWatchPlaylistTracks error: ${e.message}")
         }
         emptyList()
     }
@@ -947,7 +1151,106 @@ class MusicRepository {
         }
     }
 
-    private suspend fun fetchYouTubeMusicShelves(): List<HomeSection> = withContext(Dispatchers.IO) {
+    private fun parseWatchNextQueueItems(json: org.json.JSONObject, excludeVideoId: String?): List<Track> {
+        val tabs = json.optJSONObject("contents")
+            ?.optJSONObject("singleColumnMusicWatchNextResultsRenderer")
+            ?.optJSONObject("tabbedRenderer")
+            ?.optJSONObject("watchNextTabbedResultsRenderer")
+            ?.optJSONArray("tabs") ?: return emptyList()
+
+        var queueTab: org.json.JSONObject? = null
+        for (ti in 0 until tabs.length()) {
+            val q = tabs.optJSONObject(ti)?.optJSONObject("tabRenderer")
+                ?.optJSONObject("content")?.optJSONObject("musicQueueRenderer")
+            if (q != null) {
+                queueTab = q
+                break
+            }
+        }
+        if (queueTab == null) {
+            queueTab = tabs.optJSONObject(0)?.optJSONObject("tabRenderer")
+                ?.optJSONObject("content")?.optJSONObject("musicQueueRenderer")
+        }
+
+        val items = queueTab?.optJSONObject("content")
+            ?.optJSONObject("playlistPanelRenderer")?.optJSONArray("contents") ?: org.json.JSONArray()
+
+        val out = mutableListOf<Track>()
+        val seen = HashSet<String>()
+        for (i in 0 until items.length()) {
+            val rawItem = items.optJSONObject(i) ?: continue
+            val unwrapped = rawItem.optJSONObject("playlistPanelVideoWrapperRenderer")
+                ?.optJSONObject("primaryRenderer") ?: rawItem
+            val r = unwrapped.optJSONObject("playlistPanelVideoRenderer") ?: continue
+            val vid = r.optString("videoId", "")
+            if (vid.isBlank() || (excludeVideoId != null && vid == excludeVideoId)) continue
+            if (!seen.add(vid)) continue
+
+            val t = extractRunsText(r.optJSONObject("title"))
+            val a = r.optJSONObject("longBylineText")?.optJSONArray("runs")?.optJSONObject(0)?.optString("text", "Unknown Artist") ?: "Unknown Artist"
+            val durStr = extractRunsText(r.optJSONObject("lengthText"))
+            val durSec = parseDurationToSeconds(durStr)
+
+            val thumbs = r.optJSONObject("thumbnail")?.optJSONArray("thumbnails")
+            val thumbUrl = if (thumbs != null && thumbs.length() > 0) {
+                thumbs.optJSONObject(thumbs.length() - 1)?.optString("url", "") ?: ""
+            } else ""
+
+            out.add(
+                Track(
+                    id = vid,
+                    url = "https://www.youtube.com/watch?v=$vid",
+                    title = cleanTrackTitle(t.ifBlank { "Unknown Title" }),
+                    artist = a.replace(" - Topic", "").trim(),
+                    thumbnailUrl = upgradeThumbnailUrl(thumbUrl),
+                    durationSeconds = durSec
+                )
+            )
+        }
+        return out
+    }
+
+    private fun extractHomeMoodChips(root: org.json.JSONObject) {
+        try {
+            val chips = root.optJSONObject("contents")
+                ?.optJSONObject("singleColumnBrowseResultsRenderer")
+                ?.optJSONArray("tabs")
+                ?.optJSONObject(0)
+                ?.optJSONObject("tabRenderer")
+                ?.optJSONObject("content")
+                ?.optJSONObject("sectionListRenderer")
+                ?.optJSONObject("header")
+                ?.optJSONObject("chipCloudRenderer")
+                ?.optJSONArray("chips") ?: return
+            val map = LinkedHashMap<String, String>()
+            for (i in 0 until chips.length()) {
+                val chip = chips.optJSONObject(i)?.optJSONObject("chipCloudChipRenderer") ?: continue
+                val text = extractRunsText(chip.optJSONObject("text"))
+                val params = chip.optJSONObject("navigationEndpoint")
+                    ?.optJSONObject("browseEndpoint")
+                    ?.optString("params", "")
+                    .orEmpty()
+                if (text.isNotBlank() && params.isNotBlank()) {
+                    map[text] = params
+                }
+            }
+            if (map.isNotEmpty()) {
+                homeChipTokens = map
+            }
+        } catch (_: Exception) {}
+    }
+
+    suspend fun getExploreShelves(browseId: String): List<HomeSection> = withContext(Dispatchers.IO) {
+        try {
+            val json = postYtmBrowse(browseId, allowAnonymous = true) ?: return@withContext emptyList()
+            parseYtmSections(json, "Explore")
+        } catch (e: Exception) {
+            Log.e("MusicRepository", "getExploreShelves($browseId) error: ${e.message}")
+            emptyList()
+        }
+    }
+
+    private suspend fun fetchYouTubeMusicShelves(filterParams: String? = null): List<HomeSection> = withContext(Dispatchers.IO) {
         val result = mutableListOf<HomeSection>()
         try {
             val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
@@ -955,7 +1258,7 @@ class MusicRepository {
             val client = HttpClientProvider.client
             val (hlCode, glCode) = resolveHlGl()
             val visitorData = ensureVisitorData()
-            fun fetchBrowse(browseId: String, continuation: String? = null): org.json.JSONObject? {
+            fun fetchBrowse(browseId: String, continuation: String? = null, params: String? = null): org.json.JSONObject? {
                 val payload = org.json.JSONObject().apply {
                     put("context", org.json.JSONObject().apply {
                         put("client", org.json.JSONObject().apply {
@@ -972,6 +1275,9 @@ class MusicRepository {
                         put("continuation", continuation)
                     } else {
                         put("browseId", browseId)
+                        if (!params.isNullOrBlank()) {
+                            put("params", params)
+                        }
                     }
                 }
 
@@ -1000,15 +1306,17 @@ class MusicRepository {
                 return null
             }
 
-            val isLoggedIn = auth.isLoggedIn()
             coroutineScope {
-                val homeDeferred = if (isLoggedIn) async { fetchBrowse("FEmusic_home") } else null
-                val exploreDeferred = async { fetchBrowse("FEmusic_explore") }
-                val homeJson = homeDeferred?.await()
-                val exploreJson = exploreDeferred.await()
+                val homeDeferred = async { fetchBrowse("FEmusic_home", params = filterParams) }
+                val exploreDeferred = if (filterParams.isNullOrBlank()) async { fetchBrowse("FEmusic_explore") } else null
+                val homeJson = homeDeferred.await()
+                val exploreJson = exploreDeferred?.await()
 
                 val defaultHomeTitle = getLocString(com.ayashii.kuro.R.string.home_quick_picks_title, "Quick Picks")
                 if (homeJson != null) {
+                    if (filterParams.isNullOrBlank()) {
+                        extractHomeMoodChips(homeJson)
+                    }
                     result.addAll(parseYtmSections(homeJson, defaultHomeTitle))
                     var homeCont = homeJson.optJSONObject("contents")
                         ?.optJSONObject("singleColumnBrowseResultsRenderer")
@@ -1022,8 +1330,9 @@ class MusicRepository {
                         ?.optJSONObject("nextContinuationData")
                         ?.optString("continuation")
                         ?.takeIf { it.isNotBlank() }
+                    val maxContPages = if (filterParams.isNullOrBlank()) 8 else 3
                     var contPages = 0
-                    while (homeCont != null && contPages < 20) {
+                    while (homeCont != null && contPages < maxContPages) {
                         val nextHomeJson = fetchBrowse("FEmusic_home", homeCont) ?: break
                         val contSecList = nextHomeJson.optJSONObject("continuationContents")
                             ?.optJSONObject("sectionListContinuation")
@@ -1079,6 +1388,7 @@ class MusicRepository {
                 val gridObj = secNode.optJSONObject("gridRenderer")
                 val shelfObj = secNode.optJSONObject("musicCarouselShelfRenderer")
                     ?: secNode.optJSONObject("musicShelfRenderer")
+                    ?: secNode.optJSONObject("musicPlaylistShelfRenderer")
                     ?: gridObj
                     ?: continue
 
@@ -1138,8 +1448,7 @@ class MusicRepository {
                         gridObj != null || "speed dial" in lowerTitle -> HomeSectionType.SPEED_DIAL
                         "similar to" in lowerSub || !headerAvatarUrl.isNullOrBlank() -> HomeSectionType.SIMILAR_TO
                         hasResponsiveRows || "quick picks" in lowerTitle || "covers" in lowerTitle || "trending songs" in lowerTitle || "long listens" in lowerTitle -> HomeSectionType.COMPACT_COLUMNS
-                        "discover" in lowerTitle || "mixed for you" in lowerTitle || "community" in lowerTitle -> HomeSectionType.SPOTLIGHT_HERO
-                        "forgotten" in lowerTitle || "live" in lowerTitle || "performances" in lowerTitle -> HomeSectionType.WIDE_CARDS
+                        "forgotten" in lowerTitle || "live" in lowerTitle || "performances" in lowerTitle || "videos" in lowerTitle -> HomeSectionType.WIDE_CARDS
                         else -> HomeSectionType.SQUARE_CAROUSEL
                     }
                     list.add(
@@ -1603,13 +1912,14 @@ class MusicRepository {
         }
     }
 
-    private fun postYtmBrowse(browseId: String, continuation: String? = null): org.json.JSONObject? {
+    private fun postYtmBrowse(browseId: String, continuation: String? = null, allowAnonymous: Boolean = false): org.json.JSONObject? {
         val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
         val cookie = auth.getCookie()
-        if (cookie.isNullOrBlank()) return null
+        if (!allowAnonymous && cookie.isNullOrBlank()) return null
 
         val origin = "https://music.youtube.com"
         val (hlCode, glCode) = resolveHlGl()
+        val visitorData = ensureVisitorData()
         val payload = org.json.JSONObject().apply {
             put("context", org.json.JSONObject().apply {
                 put("client", org.json.JSONObject().apply {
@@ -1617,6 +1927,9 @@ class MusicRepository {
                     put("clientVersion", YTM_CLIENT_VERSION)
                     put("hl", hlCode)
                     put("gl", glCode)
+                    if (!visitorData.isNullOrBlank()) {
+                        put("visitorData", visitorData)
+                    }
                 })
             })
             if (continuation != null) {
@@ -1636,6 +1949,9 @@ class MusicRepository {
             .header("X-Origin", origin)
             .header("X-YouTube-Client-Name", "67")
             .header("X-YouTube-Client-Version", YTM_CLIENT_VERSION)
+        if (!visitorData.isNullOrBlank()) {
+            reqBuilder.header("X-Goog-Visitor-Id", visitorData)
+        }
 
         auth.applyAuthToRequest(reqBuilder, payload, origin)
         val reqBody = payload.toString().toRequestBody("application/json".toMediaType())
@@ -1646,6 +1962,96 @@ class MusicRepository {
             val body = resp.body?.string() ?: return null
             return org.json.JSONObject(body)
         }
+    }
+
+    private fun parseBrowseTracksFromRoot(
+        firstJson: org.json.JSONObject,
+        browseId: String,
+        markFavorite: Boolean = false,
+        maxPages: Int = 25
+    ): List<Track> {
+        val trackList = mutableListOf<Track>()
+        val seenIds = HashSet<String>()
+
+        val contentsObj = firstJson.optJSONObject("contents")
+        val contents = contentsObj
+            ?.optJSONObject("singleColumnBrowseResultsRenderer")
+            ?.optJSONArray("tabs")
+            ?.optJSONObject(0)
+            ?.optJSONObject("tabRenderer")
+            ?.optJSONObject("content")
+            ?.optJSONObject("sectionListRenderer")
+            ?.optJSONArray("contents")
+            ?: contentsObj
+                ?.optJSONObject("twoColumnBrowseResultsRenderer")
+                ?.optJSONObject("secondaryContents")
+                ?.optJSONObject("sectionListRenderer")
+                ?.optJSONArray("contents")
+
+        var shelf: org.json.JSONObject? = null
+        if (contents != null) {
+            for (i in 0 until contents.length()) {
+                val obj = contents.optJSONObject(i) ?: continue
+                shelf = obj.optJSONObject("musicShelfRenderer")
+                    ?: obj.optJSONObject("musicPlaylistShelfRenderer")
+                    ?: obj.optJSONObject("musicCarouselShelfRenderer")
+                if (shelf != null) break
+            }
+        }
+
+        val initialItems = shelf?.optJSONArray("contents")
+        if (initialItems != null) {
+            for (i in 0 until initialItems.length()) {
+                val itemObj = initialItems.optJSONObject(i) ?: continue
+                val parsed = parseSingleTrackItem(itemObj)
+                if (parsed != null && parsed.id.isNotBlank() && seenIds.add(parsed.id)) {
+                    trackList.add(if (markFavorite) parsed.copy(isFavorite = true) else parsed)
+                }
+            }
+        }
+
+        var continuation = extractContinuationToken(shelf)
+        var pageCount = 1
+        while (continuation != null && pageCount < maxPages) {
+            val nextJson = postYtmBrowse(browseId, continuation, allowAnonymous = true) ?: break
+            val contShelf = nextJson.optJSONObject("continuationContents")
+                ?.optJSONObject("musicPlaylistShelfContinuation")
+                ?: nextJson.optJSONObject("continuationContents")
+                    ?.optJSONObject("musicShelfContinuation")
+            val contItems = contShelf?.optJSONArray("contents")
+                ?: nextJson.optJSONArray("onResponseReceivedActions")
+                    ?.optJSONObject(0)
+                    ?.optJSONObject("appendContinuationItemsAction")
+                    ?.optJSONArray("continuationItems")
+
+            if (contItems != null) {
+                for (i in 0 until contItems.length()) {
+                    val itemObj = contItems.optJSONObject(i) ?: continue
+                    val parsed = parseSingleTrackItem(itemObj)
+                    if (parsed != null && parsed.id.isNotBlank() && seenIds.add(parsed.id)) {
+                        trackList.add(if (markFavorite) parsed.copy(isFavorite = true) else parsed)
+                    }
+                }
+            }
+
+            var nextToken = extractContinuationToken(contShelf)
+            if (nextToken == null && contItems != null) {
+                for (i in contItems.length() - 1 downTo 0) {
+                    nextToken = contItems.optJSONObject(i)
+                        ?.optJSONObject("continuationItemRenderer")
+                        ?.optJSONObject("continuationEndpoint")
+                        ?.optJSONObject("continuationCommand")
+                        ?.optString("token")
+                        ?.takeIf { it.isNotBlank() }
+                    if (nextToken != null) break
+                }
+            }
+            if (nextToken == continuation) break
+            continuation = nextToken
+            pageCount++
+        }
+
+        return trackList
     }
 
     private fun extractContinuationToken(shelf: org.json.JSONObject?): String? {
@@ -1877,6 +2283,319 @@ class MusicRepository {
         } catch (e: Exception) {
             Log.e("MusicRepository", "Failed to fetch user playlists: ${e.message}", e)
             emptyList()
+        }
+    }
+
+    suspend fun searchByCategoryFilter(query: String, filterType: String): List<Track> = withContext(Dispatchers.IO) {
+        if (query.isBlank()) return@withContext emptyList()
+        when (filterType) {
+            "Songs" -> searchYouTubeMusicByParams(query, YTM_PARAMS_SONGS)
+            "Videos" -> searchYouTubeMusicByParams(query, YTM_PARAMS_VIDEOS)
+            "Albums" -> searchYouTubeMusicByParams(query, YTM_PARAMS_ALBUMS)
+            "Artists" -> searchYouTubeMusicByParams(query, YTM_PARAMS_ARTISTS)
+            "Playlists" -> searchYouTubeMusicByParams(query, YTM_PARAMS_PLAYLISTS)
+            else -> searchTracks(query)
+        }
+    }
+
+    suspend fun getTrackComments(videoId: String): CommentsResult = withContext(Dispatchers.IO) {
+        if (videoId.isBlank()) return@withContext CommentsResult()
+        val commentsList = mutableListOf<YtmComment>()
+        var commentCountText = ""
+        var createCommentParams: String? = null
+
+        try {
+            val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
+            val origin = "https://www.youtube.com"
+            val (hlCode, glCode) = resolveHlGl()
+            val clientVersion = "2.20260415.01.00"
+
+            fun postWebNext(continuation: String? = null): org.json.JSONObject? {
+                val payload = org.json.JSONObject().apply {
+                    put("context", org.json.JSONObject().apply {
+                        put("client", org.json.JSONObject().apply {
+                            put("clientName", "WEB")
+                            put("clientVersion", clientVersion)
+                            put("hl", hlCode)
+                            put("gl", glCode)
+                        })
+                    })
+                    if (continuation != null) {
+                        put("continuation", continuation)
+                    } else {
+                        put("videoId", videoId)
+                    }
+                }
+                val reqBuilder = okhttp3.Request.Builder()
+                    .url("$origin/youtubei/v1/next")
+                    .header("Content-Type", "application/json")
+                    .header("User-Agent", YTM_USER_AGENT)
+                    .header("Origin", origin)
+                    .header("Referer", "$origin/watch?v=$videoId")
+                    .header("X-Origin", origin)
+                    .header("X-YouTube-Client-Name", "1")
+                    .header("X-YouTube-Client-Version", clientVersion)
+
+                auth.applyAuthToRequest(reqBuilder, payload, origin)
+                reqBuilder.post(payload.toString().toRequestBody("application/json".toMediaType()))
+                HttpClientProvider.client.newCall(reqBuilder.build()).execute().use { resp ->
+                    if (!resp.isSuccessful) return null
+                    val body = resp.body?.string() ?: return null
+                    return org.json.JSONObject(body)
+                }
+            }
+
+            val initialJson = postWebNext(null)
+            if (initialJson != null) {
+                val panels = initialJson.optJSONArray("engagementPanels")
+                if (panels != null) {
+                    for (p in 0 until panels.length()) {
+                        val panel = panels.optJSONObject(p)?.optJSONObject("engagementPanelSectionListRenderer") ?: continue
+                        val id = panel.optString("panelIdentifier", "")
+                        if (id.contains("comment", ignoreCase = true)) {
+                            val headerRenderer = panel.optJSONObject("header")
+                                ?.optJSONObject("engagementPanelTitleHeaderRenderer")
+                            val titleTxt = extractRunsText(headerRenderer?.optJSONObject("title"))
+                            val countTxt = extractRunsText(headerRenderer?.optJSONObject("contextualInfo"))
+                            if (countTxt.isNotBlank()) {
+                                commentCountText = countTxt
+                            } else if (titleTxt.isNotBlank()) {
+                                commentCountText = titleTxt
+                            }
+                        }
+                    }
+                }
+
+                val results = initialJson.optJSONObject("contents")
+                    ?.optJSONObject("twoColumnWatchNextResults")
+                    ?.optJSONObject("results")
+                    ?.optJSONObject("results")
+                    ?.optJSONArray("contents")
+
+                var commentsToken: String? = null
+                if (results != null) {
+                    for (i in 0 until results.length()) {
+                        val itemSec = results.optJSONObject(i)?.optJSONObject("itemSectionRenderer") ?: continue
+                        val secId = itemSec.optString("sectionIdentifier", "")
+                        if (secId == "comment-item-section" || itemSec.toString().contains("comment")) {
+                            val secContents = itemSec.optJSONArray("contents") ?: continue
+                            for (k in 0 until secContents.length()) {
+                                val token = secContents.optJSONObject(k)
+                                    ?.optJSONObject("continuationItemRenderer")
+                                    ?.optJSONObject("continuationEndpoint")
+                                    ?.optJSONObject("continuationCommand")
+                                    ?.optString("token", "")
+                                    .orEmpty()
+                                if (token.isNotBlank()) {
+                                    commentsToken = token
+                                    break
+                                }
+                            }
+                        }
+                        if (!commentsToken.isNullOrBlank()) break
+                    }
+                }
+
+                if (!commentsToken.isNullOrBlank()) {
+                    val commentsJson = postWebNext(commentsToken)
+                    if (commentsJson != null) {
+                        val entityMap = HashMap<String, org.json.JSONObject>()
+                        val mutations = commentsJson.optJSONObject("frameworkUpdates")
+                            ?.optJSONObject("entityBatchUpdate")
+                            ?.optJSONArray("mutations")
+                        if (mutations != null) {
+                            for (m in 0 until mutations.length()) {
+                                val payloadObj = mutations.optJSONObject(m)
+                                    ?.optJSONObject("payload")
+                                    ?.optJSONObject("commentEntityPayload") ?: continue
+                                val cid = payloadObj.optJSONObject("properties")?.optString("commentId", "").orEmpty()
+                                if (cid.isNotBlank()) {
+                                    entityMap[cid] = payloadObj
+                                }
+                            }
+                        }
+
+                        val actions = commentsJson.optJSONArray("onResponseReceivedEndpoints")
+                        if (actions != null) {
+                            for (a in 0 until actions.length()) {
+                                val act = actions.optJSONObject(a) ?: continue
+                                val headerItems = act.optJSONObject("reloadContinuationItemsCommand")
+                                    ?.optJSONArray("continuationItems")
+                                    ?: act.optJSONObject("appendContinuationItemsAction")
+                                        ?.optJSONArray("continuationItems")
+                                    ?: continue
+
+                                for (h in 0 until headerItems.length()) {
+                                    val item = headerItems.optJSONObject(h) ?: continue
+                                    val headerR = item.optJSONObject("commentsHeaderRenderer")
+                                    if (headerR != null) {
+                                        val cText = extractRunsText(headerR.optJSONObject("countText"))
+                                        if (cText.isNotBlank()) commentCountText = cText
+                                        val createBox = headerR.optJSONObject("createRenderer")
+                                            ?.optJSONObject("commentSimpleboxRenderer")
+                                        val params = createBox?.optJSONObject("submitButton")
+                                            ?.optJSONObject("buttonRenderer")
+                                            ?.optJSONObject("serviceEndpoint")
+                                            ?.optJSONObject("createCommentEndpoint")
+                                            ?.optString("createCommentParams", "")
+                                            .orEmpty()
+                                        if (params.isNotBlank()) {
+                                            createCommentParams = params
+                                        }
+                                    }
+
+                                    val thread = item.optJSONObject("commentThreadRenderer") ?: continue
+                                    val legacyComment = thread.optJSONObject("comment")?.optJSONObject("commentRenderer")
+                                    if (legacyComment != null) {
+                                        val cid = legacyComment.optString("commentId", "c_$h")
+                                        val author = extractRunsText(legacyComment.optJSONObject("authorText")).ifBlank { "User" }
+                                        val textContent = extractRunsText(legacyComment.optJSONObject("contentText"))
+                                        val pubTime = extractRunsText(legacyComment.optJSONObject("publishedTimeText"))
+                                        val likes = extractRunsText(legacyComment.optJSONObject("voteCount"))
+                                        val thumbs = legacyComment.optJSONObject("authorThumbnail")?.optJSONArray("thumbnails")
+                                        val avatar = if (thumbs != null && thumbs.length() > 0) {
+                                            thumbs.optJSONObject(thumbs.length() - 1)?.optString("url", "").orEmpty()
+                                        } else ""
+                                        if (textContent.isNotBlank()) {
+                                            commentsList.add(
+                                                YtmComment(
+                                                    id = cid,
+                                                    authorName = author,
+                                                    authorAvatarUrl = avatar,
+                                                    publishedTimeText = pubTime,
+                                                    text = textContent,
+                                                    likeCountText = likes,
+                                                    isHearted = legacyComment.has("actionButtons") && legacyComment.toString().contains("creatorHeart")
+                                                )
+                                            )
+                                        }
+                                    } else {
+                                        val vm = thread.optJSONObject("commentViewModel")?.optJSONObject("commentViewModel")
+                                        val cid = vm?.optString("commentId", "").orEmpty()
+                                        val entity = entityMap[cid]
+                                        if (entity != null) {
+                                            val props = entity.optJSONObject("properties")
+                                            val authorObj = entity.optJSONObject("author")
+                                            val toolbar = entity.optJSONObject("toolbar")
+                                            val textContent = props?.optJSONObject("content")?.optString("content", "").orEmpty()
+                                            val pubTime = props?.optString("publishedTime", "").orEmpty()
+                                            val authorName = authorObj?.optString("displayName", "User").orEmpty()
+                                            val avatar = authorObj?.optString("avatarThumbnailUrl", "").orEmpty()
+                                            val likes = toolbar?.optString("likeCountNotliked", "")
+                                                ?.ifBlank { toolbar.optString("likeCountLiked", "") }.orEmpty()
+                                            val hearted = !toolbar?.optString("heartActiveTooltip", "").isNullOrBlank()
+                                            if (textContent.isNotBlank()) {
+                                                commentsList.add(
+                                                    YtmComment(
+                                                        id = cid,
+                                                        authorName = authorName,
+                                                        authorAvatarUrl = avatar,
+                                                        publishedTimeText = pubTime,
+                                                        text = textContent,
+                                                        likeCountText = likes,
+                                                        isHearted = hearted
+                                                    )
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.d("MusicRepository", "InnerTube comments fetch fallback: ${e.message}")
+        }
+
+        if (commentsList.isEmpty()) {
+            try {
+                val commentsInfo = org.schabi.newpipe.extractor.comments.CommentsInfo.getInfo(
+                    service,
+                    "https://www.youtube.com/watch?v=$videoId"
+                )
+                if (commentCountText.isBlank() && commentsInfo.commentsCount > 0) {
+                    commentCountText = "${commentsInfo.commentsCount}"
+                }
+                for (item in commentsInfo.relatedItems) {
+                    val text = item.commentText?.content?.trim().orEmpty()
+                    if (text.isBlank()) continue
+                    val avatar = item.uploaderAvatars.lastOrNull()?.url.orEmpty()
+                    val likes = if (item.likeCount > 0) item.likeCount.toString() else item.textualLikeCount.orEmpty()
+                    commentsList.add(
+                        YtmComment(
+                            id = item.commentId ?: "${item.uploaderName}_${commentsList.size}",
+                            authorName = item.uploaderName ?: "YouTube User",
+                            authorAvatarUrl = avatar,
+                            publishedTimeText = item.textualUploadDate ?: "",
+                            text = text,
+                            likeCountText = likes,
+                            isHearted = item.isHeartedByUploader
+                        )
+                    )
+                }
+            } catch (e: Exception) {
+                Log.d("MusicRepository", "NewPipe comments fallback failed: ${e.message}")
+            }
+        }
+
+        CommentsResult(
+            comments = commentsList,
+            commentCountText = commentCountText,
+            createCommentParams = createCommentParams
+        )
+    }
+
+    suspend fun postTrackComment(videoId: String, createCommentParams: String?, commentText: String): Boolean = withContext(Dispatchers.IO) {
+        if (videoId.isBlank() || commentText.isBlank()) return@withContext false
+        val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
+        if (!auth.isLoggedIn() || auth.getCookie().isNullOrBlank()) return@withContext false
+
+        try {
+            val paramsToUse = if (!createCommentParams.isNullOrBlank()) {
+                createCommentParams
+            } else {
+                getTrackComments(videoId).createCommentParams
+            }
+            if (paramsToUse.isNullOrBlank()) return@withContext false
+
+            val origin = "https://www.youtube.com"
+            val (hlCode, glCode) = resolveHlGl()
+            val clientVersion = "2.20260415.01.00"
+
+            val payload = org.json.JSONObject().apply {
+                put("context", org.json.JSONObject().apply {
+                    put("client", org.json.JSONObject().apply {
+                        put("clientName", "WEB")
+                        put("clientVersion", clientVersion)
+                        put("hl", hlCode)
+                        put("gl", glCode)
+                    })
+                })
+                put("createCommentParams", paramsToUse)
+                put("commentText", commentText.trim())
+            }
+
+            val reqBuilder = okhttp3.Request.Builder()
+                .url("$origin/youtubei/v1/comment/create_comment")
+                .header("Content-Type", "application/json")
+                .header("User-Agent", YTM_USER_AGENT)
+                .header("Origin", origin)
+                .header("Referer", "$origin/watch?v=$videoId")
+                .header("X-Origin", origin)
+                .header("X-YouTube-Client-Name", "1")
+                .header("X-YouTube-Client-Version", clientVersion)
+
+            auth.applyAuthToRequest(reqBuilder, payload, origin)
+            reqBuilder.post(payload.toString().toRequestBody("application/json".toMediaType()))
+
+            HttpClientProvider.client.newCall(reqBuilder.build()).execute().use { resp ->
+                resp.isSuccessful
+            }
+        } catch (e: Exception) {
+            Log.e("MusicRepository", "postTrackComment failed: ${e.message}")
+            false
         }
     }
 }

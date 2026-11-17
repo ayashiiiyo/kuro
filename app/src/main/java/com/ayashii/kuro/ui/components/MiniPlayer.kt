@@ -12,7 +12,6 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
@@ -42,7 +41,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -55,6 +53,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.ayashii.kuro.R
 import com.ayashii.kuro.data.model.Track
@@ -102,8 +101,7 @@ fun MiniPlayer(
         label = "mini_swipe_offset_y"
     )
 
-    val solidContainerColor = if (colors.isDark) Color(0xFF0A0A0A) else Color(0xFFFFFFFF)
-    val shape = RoundedCornerShape(14.dp)
+    val solidContainerColor = if (colors.isDark) Color(0xFF141414) else Color(0xFFF6F6F6)
 
     Column(
         modifier = modifier
@@ -111,10 +109,7 @@ fun MiniPlayer(
             .graphicsLayer {
                 translationY = (animatedOffsetY * 0.35f).coerceIn(-28f, 20f)
             }
-            .shadow(elevation = 12.dp, shape = shape, clip = false)
-            .clip(shape)
             .background(solidContainerColor)
-            .border(1.dp, colors.border, shape)
             .clickable { onClick() }
             .pointerInput(track.id, isPlaying) {
                 detectDragGestures(
@@ -190,10 +185,17 @@ fun MiniPlayer(
                 )
             }
     ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(0.8.dp)
+                .background(colors.border.copy(alpha = 0.55f))
+        )
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 9.dp)
+                .padding(horizontal = 14.dp, vertical = 8.dp)
                 .graphicsLayer {
                     translationX = animatedOffsetX * 0.35f
                 },
@@ -217,7 +219,7 @@ fun MiniPlayer(
                         contentDescription = animatedTrack.title,
                         modifier = Modifier
                             .size(44.dp)
-                            .clip(RoundedCornerShape(10.dp))
+                            .clip(RoundedCornerShape(6.dp))
                             .background(colors.card),
                         contentScale = ContentScale.Crop
                     )
@@ -241,7 +243,7 @@ fun MiniPlayer(
                     Column {
                         Text(
                             text = animatedTrack.title,
-                            style = Typography.titleMedium,
+                            style = Typography.titleSmall.copy(fontSize = 14.sp),
                             fontWeight = FontWeight.Bold,
                             color = colors.textPrimary,
                             maxLines = 1,
@@ -250,7 +252,7 @@ fun MiniPlayer(
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
                             text = animatedTrack.artist,
-                            style = Typography.bodySmall,
+                            style = Typography.bodySmall.copy(fontSize = 12.sp),
                             fontWeight = FontWeight.Normal,
                             color = colors.textMuted,
                             maxLines = 1,
@@ -269,7 +271,7 @@ fun MiniPlayer(
                     modifier = Modifier.size(36.dp)
                 ) {
                     val favColor by animateColorAsState(
-                        targetValue = if (track.isFavorite) Color(0xFFFF3B30) else colors.textMuted,
+                        targetValue = if (track.isFavorite) colors.textPrimary else colors.textMuted,
                         animationSpec = tween(180),
                         label = "mini_fav_tint"
                     )
@@ -285,7 +287,7 @@ fun MiniPlayer(
                             imageVector = if (isFav) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                             contentDescription = "Favorite",
                             tint = favColor,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(19.dp)
                         )
                     }
                 }
@@ -299,7 +301,7 @@ fun MiniPlayer(
                     CircularProgressIndicator(
                         color = colors.textPrimary,
                         strokeWidth = 2.dp,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             } else {
@@ -329,12 +331,12 @@ fun MiniPlayer(
             }
         }
 
-        val trackLineColor = colors.border
-        val activeLineColor = colors.accent
+        val trackLineColor = colors.border.copy(alpha = 0.55f)
+        val activeLineColor = colors.textPrimary
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(2.5.dp)
+                .height(2.dp)
                 .drawBehind {
                     val p = (progressProvider?.invoke() ?: progress).coerceIn(0f, 1f)
                     drawRect(color = trackLineColor, size = size)

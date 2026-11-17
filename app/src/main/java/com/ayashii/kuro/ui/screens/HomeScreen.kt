@@ -9,11 +9,10 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -45,7 +44,6 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Mood
 import androidx.compose.material.icons.outlined.NewReleases
-import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.TrendingUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -83,6 +81,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
@@ -95,6 +94,7 @@ import com.ayashii.kuro.data.model.HomeSectionType
 import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.ui.components.AddToPlaylistDialog
 import com.ayashii.kuro.ui.components.LoginWebViewDialog
+import com.ayashii.kuro.ui.components.PlaylistDetailSheet
 import com.ayashii.kuro.ui.components.ProfileMenuSheet
 import com.ayashii.kuro.ui.components.QueueBottomSheet
 import com.ayashii.kuro.ui.components.SettingsDialog
@@ -142,15 +142,16 @@ private fun formatMixBadgeLabel(artist: String): String {
 }
 
 private fun resolveEffectiveLayout(section: HomeSection, index: Int): HomeSectionType {
-    if (section.layoutType != HomeSectionType.SQUARE_CAROUSEL) return section.layoutType
+    if (section.layoutType != HomeSectionType.SQUARE_CAROUSEL && section.layoutType != HomeSectionType.SPOTLIGHT_HERO) {
+        return section.layoutType
+    }
     val t = section.title.lowercase()
     return when {
         "speed dial" in t -> HomeSectionType.SPEED_DIAL
         !section.headerAvatarUrl.isNullOrBlank() || "similar to" in section.subtitle.lowercase() -> HomeSectionType.SIMILAR_TO
-        "quick picks" in t || "covers" in t || "trending songs" in t || "long listens" in t -> HomeSectionType.COMPACT_COLUMNS
-        "discover" in t || "mixed for you" in t || "community" in t -> HomeSectionType.SPOTLIGHT_HERO
-        "forgotten" in t || "live" in t || "performances" in t -> HomeSectionType.WIDE_CARDS
-        index == 0 && section.tracks.size >= 4 -> HomeSectionType.COMPACT_COLUMNS
+        "quick picks" in t || "covers" in t || "trending songs" in t || "long listens" in t || "listen again" in t -> HomeSectionType.COMPACT_COLUMNS
+        "forgotten" in t || "live" in t || "performances" in t || "videos" in t -> HomeSectionType.WIDE_CARDS
+        index == 0 && section.tracks.size >= 4 && section.tracks.none { it.isCollection } -> HomeSectionType.COMPACT_COLUMNS
         else -> HomeSectionType.SQUARE_CAROUSEL
     }
 }
@@ -164,9 +165,12 @@ fun HomeScreen(
     val homeSections by viewModel.homeSections.collectAsState()
     val trendingTracks by viewModel.trendingTracks.collectAsState()
     val genreTracks by viewModel.genreTracks.collectAsState()
+    val genreSections by viewModel.genreSections.collectAsState()
     val isLoadingGenre by viewModel.isLoadingGenre.collectAsState()
     val isLoadingTrending by viewModel.isLoadingTrending.collectAsState()
     val isRefreshingHome by viewModel.isRefreshingHome.collectAsState()
+    val activeBrowseDetails by viewModel.activeBrowseDetails.collectAsState()
+    val isLoadingBrowseDetails by viewModel.isLoadingBrowseDetails.collectAsState()
     val pullRefreshState = rememberPullToRefreshState()
     val isLoadingTrack by viewModel.isLoadingTrack.collectAsState()
     val isPlayerExpanded by viewModel.isPlayerExpanded.collectAsState()
@@ -188,13 +192,13 @@ fun HomeScreen(
     var selectedGenre by rememberSaveable { mutableStateOf("Semua") }
     val genreChips = listOf(
         "Semua" to stringResource(R.string.home_genre_all),
-        "Feel good" to stringResource(R.string.home_genre_feel_good),
-        "Relax" to stringResource(R.string.home_genre_relax),
-        "Sad" to stringResource(R.string.home_genre_sad),
         "Energize" to stringResource(R.string.home_genre_energize),
-        "Romance" to stringResource(R.string.home_genre_romance),
+        "Relax" to stringResource(R.string.home_genre_relax),
+        "Workout" to stringResource(R.string.home_genre_workout),
         "Focus" to stringResource(R.string.home_genre_focus),
-        "Workout" to stringResource(R.string.home_genre_workout)
+        "Feel good" to stringResource(R.string.home_genre_feel_good),
+        "Sad" to stringResource(R.string.home_genre_sad),
+        "Romance" to stringResource(R.string.home_genre_romance)
     )
     val genreRowState = rememberLazyListState()
     val mainListState = rememberLazyListState()
@@ -208,7 +212,6 @@ fun HomeScreen(
 
     val colors = KuroAppTheme.colors
 
-    // Dynamic ambient top gradient driven by active track, active genre, or top featured artwork
     val ambientImageUrl = remember(currentTrack?.id, homeSections, trendingTracks, selectedGenre) {
         currentTrack?.thumbnailUrlForDisplay(192)
             ?: homeSections.firstOrNull()?.tracks?.firstOrNull()?.thumbnailUrlForDisplay(192)
@@ -230,381 +233,245 @@ fun HomeScreen(
             else -> dominantAmbient
         }
         val blended = if (selectedGenre == "Semua") dominantAmbient else lerp(dominantAmbient, moodBoost, 0.55f)
-        blended.copy(alpha = if (colors.isDark) 0.40f else 0.16f)
+        blended.copy(alpha = if (colors.isDark) 0.36f else 0.14f)
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    0.0f to topAmbientTint,
-                    0.22f to colors.background,
-                    1.0f to colors.background
+    val onSmartItemTap: (Track, List<Track>) -> Unit = { item, sectionTracks ->
+        if (item.isCollection || item.isArtistProfile) {
+            viewModel.openBrowseItemDetails(item)
+        } else {
+            viewModel.playHomeItem(item, sectionTracks)
+        }
+    }
+
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        0.0f to topAmbientTint,
+                        0.24f to colors.background,
+                        1.0f to colors.background
+                    )
                 )
-            )
-            .padding(top = 12.dp)
-    ) {
-        AnimatedVisibility(
-            visible = selectedGenre != "Semua",
-            enter = expandVertically(tween(200)) + fadeIn(tween(180)),
-            exit = shrinkVertically(tween(180)) + fadeOut(tween(140))
+                .padding(top = 8.dp)
         ) {
             HomeTopBar(
                 currentAccount = currentAccount,
                 onRecentsClick = { showRecentsDialog = true },
                 onProfileClick = { showProfileMenu = true }
             )
-        }
 
-        LazyRow(
-            state = genreRowState,
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .nestedScroll(shelfNestedScroll)
-        ) {
-            items(genreChips, key = { it.first }) { (genreKey, genreLabel) ->
-                val isSelected = selectedGenre == genreKey
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (isSelected) colors.accent else colors.card.copy(alpha = 0.78f))
-                        .border(
-                            1.dp,
-                            if (isSelected) colors.accent else colors.border.copy(alpha = 0.55f),
-                            RoundedCornerShape(8.dp)
-                        )
-                        .clickable {
-                            if (genreKey == "Semua" || isSelected) {
-                                if (selectedGenre != "Semua") {
-                                    selectedGenre = "Semua"
-                                    if (homeSections.isEmpty() && trendingTracks.isEmpty()) {
-                                        viewModel.loadTrending()
+            LazyRow(
+                state = genreRowState,
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .nestedScroll(shelfNestedScroll)
+            ) {
+                items(genreChips, key = { it.first }) { (genreKey, genreLabel) ->
+                    val isSelected = selectedGenre == genreKey
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isSelected) colors.accent else colors.card.copy(alpha = 0.85f))
+                            .border(
+                                1.dp,
+                                if (isSelected) colors.accent else colors.border.copy(alpha = 0.6f),
+                                RoundedCornerShape(8.dp)
+                            )
+                            .clickable {
+                                if (genreKey == "Semua" || isSelected) {
+                                    if (selectedGenre != "Semua") {
+                                        selectedGenre = "Semua"
+                                        if (homeSections.isEmpty() && trendingTracks.isEmpty()) {
+                                            viewModel.loadTrending()
+                                        }
                                     }
+                                } else {
+                                    selectedGenre = genreKey
+                                    viewModel.loadGenreTracks(genreKey)
                                 }
-                            } else {
-                                selectedGenre = genreKey
-                                viewModel.loadGenreTracks(genreKey)
+                            }
+                            .padding(horizontal = 14.dp, vertical = 7.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = genreLabel,
+                            style = Typography.labelMedium.copy(
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                            ),
+                            color = if (isSelected) colors.background else colors.textPrimary,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+            }
+
+            LaunchedEffect(pullRefreshState.isRefreshing) {
+                if (pullRefreshState.isRefreshing) {
+                    if (selectedGenre == "Semua") {
+                        viewModel.refreshHome()
+                    } else {
+                        viewModel.loadGenreTracks(selectedGenre)
+                    }
+                }
+            }
+            LaunchedEffect(isRefreshingHome, isLoadingGenre) {
+                if (!isRefreshingHome && !isLoadingGenre && pullRefreshState.isRefreshing) {
+                    pullRefreshState.endRefresh()
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clipToBounds()
+                    .nestedScroll(pullRefreshState.nestedScrollConnection)
+            ) {
+                AnimatedContent(
+                    targetState = selectedGenre,
+                    transitionSpec = {
+                        (fadeIn(tween(240, easing = KuroMotion.EmphasizedDecelerate)) +
+                            slideInVertically(animationSpec = tween(240, easing = KuroMotion.EmphasizedDecelerate)) { it / 20 })
+                            .togetherWith(fadeOut(tween(160, easing = KuroMotion.EmphasizedAccelerate)))
+                    },
+                    label = "home_genre_transition",
+                    modifier = Modifier.fillMaxSize()
+                ) { activeGenre ->
+                    if (activeGenre != "Semua") {
+                        val activeGenreLabel = when (activeGenre) {
+                            "FEmusic_new_releases" -> "New releases"
+                            "FEmusic_charts" -> "Charts"
+                            "FEmusic_moods_and_genres" -> "Moods & genres"
+                            else -> genreChips.firstOrNull { it.first == activeGenre }?.second ?: activeGenre
+                        }
+                        if (isLoadingGenre && genreSections.isEmpty() && genreTracks.isEmpty()) {
+                            HomeMonochromeSkeleton()
+                        } else if (genreSections.isNotEmpty()) {
+                            HomeShelvesColumn(
+                                sections = genreSections,
+                                listState = genreListState,
+                                currentTrackId = currentTrack?.id,
+                                shelfNestedScroll = shelfNestedScroll,
+                                onItemTap = onSmartItemTap,
+                                onPlayImmediately = { item, tracks -> viewModel.playHomeItem(item, tracks) },
+                                onMoreClick = { trackForOptions = it },
+                                onSelectExplore = { browseKey ->
+                                    selectedGenre = browseKey
+                                    viewModel.loadGenreTracks(browseKey)
+                                }
+                            )
+                        } else if (genreTracks.isEmpty()) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.home_no_songs_genre, activeGenreLabel),
+                                    style = Typography.bodyMedium,
+                                    color = colors.textMuted
+                                )
+                            }
+                        } else {
+                            LazyColumn(
+                                state = genreListState,
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(top = 6.dp)
+                            ) {
+                                items(genreTracks, key = { it.id }, contentType = { "track" }) { track ->
+                                    val isFav = track.id in favoriteIds
+                                    TrackItem(
+                                        track = track.copy(isFavorite = isFav),
+                                        isPlaying = currentTrack?.id == track.id,
+                                        isLoading = isLoadingTrack && currentTrack?.id == track.id,
+                                        onClick = { onSmartItemTap(track, genreTracks) },
+                                        onFavoriteClick = { viewModel.toggleFavorite(track) },
+                                        onMoreClick = { trackForOptions = track },
+                                        onSwipeAddToQueue = { viewModel.addToQueue(track) }
+                                    )
+                                }
+                                item { Spacer(modifier = Modifier.height(130.dp)) }
                             }
                         }
-                        .padding(horizontal = 14.dp, vertical = 7.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = genreLabel,
-                        style = Typography.labelMedium.copy(
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                        ),
-                        color = if (isSelected) colors.background else colors.textPrimary,
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                }
-            }
-        }
-
-        LaunchedEffect(pullRefreshState.isRefreshing) {
-            if (pullRefreshState.isRefreshing) {
-                if (selectedGenre == "Semua") {
-                    viewModel.refreshHome()
-                } else {
-                    viewModel.loadGenreTracks(selectedGenre)
-                }
-            }
-        }
-        LaunchedEffect(isRefreshingHome, isLoadingGenre) {
-            if (!isRefreshingHome && !isLoadingGenre && pullRefreshState.isRefreshing) {
-                pullRefreshState.endRefresh()
-            }
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clipToBounds()
-                .nestedScroll(pullRefreshState.nestedScrollConnection)
-        ) {
-            AnimatedContent(
-                targetState = selectedGenre,
-                transitionSpec = {
-                    (fadeIn(tween(240, easing = KuroMotion.EmphasizedDecelerate)) +
-                        slideInVertically(animationSpec = tween(240, easing = KuroMotion.EmphasizedDecelerate)) { it / 20 })
-                        .togetherWith(fadeOut(tween(160, easing = KuroMotion.EmphasizedAccelerate)))
-                },
-                label = "home_genre_transition",
-                modifier = Modifier.fillMaxSize()
-            ) { activeGenre ->
-                if (activeGenre != "Semua") {
-                    val activeGenreLabel = genreChips.firstOrNull { it.first == activeGenre }?.second ?: activeGenre
-                    if (isLoadingGenre && genreTracks.isEmpty()) {
+                    } else if (isLoadingTrending && homeSections.isEmpty() && trendingTracks.isEmpty()) {
                         HomeMonochromeSkeleton()
-                    } else if (genreTracks.isEmpty()) {
+                    } else if (homeSections.isNotEmpty() || trendingTracks.isNotEmpty()) {
+                        val effectiveSections = remember(homeSections, trendingTracks) {
+                            if (homeSections.isNotEmpty()) {
+                                homeSections
+                            } else {
+                                listOf(
+                                    HomeSection(
+                                        title = "Quick picks",
+                                        subtitle = "START RADIO FROM A SONG",
+                                        tracks = trendingTracks,
+                                        layoutType = HomeSectionType.COMPACT_COLUMNS
+                                    )
+                                )
+                            }
+                        }
+
+                        HomeShelvesColumn(
+                            sections = effectiveSections,
+                            listState = mainListState,
+                            currentTrackId = currentTrack?.id,
+                            shelfNestedScroll = shelfNestedScroll,
+                            onItemTap = onSmartItemTap,
+                            onPlayImmediately = { item, tracks -> viewModel.playHomeItem(item, tracks) },
+                            onMoreClick = { trackForOptions = it },
+                            onSelectExplore = { browseKey ->
+                                selectedGenre = browseKey
+                                viewModel.loadGenreTracks(browseKey)
+                            }
+                        )
+                    } else {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = stringResource(R.string.home_no_songs_genre, activeGenreLabel),
+                                text = stringResource(R.string.home_empty),
                                 style = Typography.bodyMedium,
                                 color = colors.textMuted
                             )
                         }
-                    } else {
-                        LazyColumn(
-                            state = genreListState,
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(top = 6.dp)
-                        ) {
-                            items(genreTracks, key = { it.id }, contentType = { "track" }) { track ->
-                                val isFav = track.id in favoriteIds
-                                TrackItem(
-                                    track = track.copy(isFavorite = isFav),
-                                    isPlaying = currentTrack?.id == track.id,
-                                    isLoading = isLoadingTrack && currentTrack?.id == track.id,
-                                    onClick = { viewModel.playHomeItem(track, genreTracks) },
-                                    onFavoriteClick = { viewModel.toggleFavorite(track) },
-                                    onMoreClick = { trackForOptions = track },
-                                    onSwipeAddToQueue = { viewModel.addToQueue(track) }
-                                )
-                            }
-                            item { Spacer(modifier = Modifier.height(130.dp)) }
-                        }
-                    }
-                } else if (isLoadingTrending && homeSections.isEmpty() && trendingTracks.isEmpty()) {
-                    HomeMonochromeSkeleton()
-                } else if (homeSections.isNotEmpty() || trendingTracks.isNotEmpty()) {
-                    val effectiveSections = remember(homeSections, trendingTracks) {
-                        if (homeSections.isNotEmpty()) {
-                            homeSections
-                        } else {
-                            listOf(
-                                HomeSection(
-                                    title = "Quick picks",
-                                    tracks = trendingTracks,
-                                    layoutType = HomeSectionType.COMPACT_COLUMNS
-                                )
-                            )
-                        }
-                    }
-
-                    LazyColumn(
-                        state = mainListState,
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(top = 4.dp)
-                    ) {
-                        item(key = "home_top_header") {
-                            HomeTopBar(
-                                currentAccount = currentAccount,
-                                onRecentsClick = { showRecentsDialog = true },
-                                onProfileClick = { showProfileMenu = true }
-                            )
-                        }
-
-                        effectiveSections.forEachIndexed { idx, section ->
-                            if (section.tracks.isEmpty()) return@forEachIndexed
-                            val layoutType = resolveEffectiveLayout(section, idx)
-
-                            item(key = "sec_header_${idx}_${section.title}") {
-                                if (layoutType == HomeSectionType.SIMILAR_TO) {
-                                    SimilarToSectionHeader(
-                                        title = section.title,
-                                        subtitle = section.subtitle.ifBlank { "SIMILAR TO" },
-                                        avatarUrl = section.headerAvatarUrl ?: section.tracks.firstOrNull()?.thumbnailUrlForDisplay(160)
-                                    )
-                                } else {
-                                    HomeSectionHeader(
-                                        title = section.title,
-                                        actionText = stringResource(R.string.home_play_all),
-                                        onActionClick = {
-                                            section.tracks.firstOrNull()?.let {
-                                                viewModel.playHomeItem(it, section.tracks)
-                                            }
-                                        }
-                                    )
-                                }
-                            }
-
-                            when (layoutType) {
-                                HomeSectionType.COMPACT_COLUMNS -> {
-                                    val cols = section.tracks.chunked(4)
-                                    item(key = "sec_compact_${idx}_${section.title}") {
-                                        val rowState = rememberLazyListState()
-                                        val snapFling = rememberSnapFlingBehavior(lazyListState = rowState)
-                                        LazyRow(
-                                            state = rowState,
-                                            flingBehavior = snapFling,
-                                            contentPadding = PaddingValues(horizontal = 16.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(14.dp),
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .nestedScroll(shelfNestedScroll)
-                                        ) {
-                                            items(cols.size, key = { c -> "col_${idx}_$c" }) { colIdx ->
-                                                val colTracks = cols[colIdx]
-                                                Column(modifier = Modifier.width(312.dp)) {
-                                                    colTracks.forEach { track ->
-                                                        HomeCompactTrackRow(
-                                                            track = track,
-                                                            isPlaying = currentTrack?.id == track.id,
-                                                            onClick = { viewModel.playHomeItem(track, section.tracks) },
-                                                            onLongClick = {
-                                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                                trackForOptions = track
-                                                            },
-                                                            onMoreClick = { trackForOptions = track }
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                HomeSectionType.SPOTLIGHT_HERO -> {
-                                    item(key = "sec_spotlight_${idx}_${section.title}") {
-                                        val rowState = rememberLazyListState()
-                                        val snapFling = rememberSnapFlingBehavior(lazyListState = rowState)
-                                        val spotlightCards = section.tracks.chunked(3)
-                                        LazyRow(
-                                            state = rowState,
-                                            flingBehavior = snapFling,
-                                            contentPadding = PaddingValues(horizontal = 16.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .nestedScroll(shelfNestedScroll)
-                                        ) {
-                                            items(spotlightCards.size, key = { c -> "spot_${idx}_$c" }) { cardIdx ->
-                                                val group = spotlightCards[cardIdx]
-                                                val lead = group.first()
-                                                HomeSpotlightMixCard(
-                                                    leadTrack = lead,
-                                                    previewTracks = group,
-                                                    currentTrackId = currentTrack?.id,
-                                                    onPlayCard = { viewModel.playHomeItem(lead, section.tracks) },
-                                                    onTrackClick = { t -> viewModel.playHomeItem(t, section.tracks) },
-                                                    onMoreClick = { t -> trackForOptions = t }
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-
-                                HomeSectionType.SPEED_DIAL -> {
-                                    item(key = "sec_speed_${idx}_${section.title}") {
-                                        val pages = section.tracks.chunked(6)
-                                        val rowState = rememberLazyListState()
-                                        val snapFling = rememberSnapFlingBehavior(lazyListState = rowState)
-                                        LazyRow(
-                                            state = rowState,
-                                            flingBehavior = snapFling,
-                                            contentPadding = PaddingValues(horizontal = 16.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .nestedScroll(shelfNestedScroll)
-                                        ) {
-                                            items(pages.size, key = { p -> "sd_${idx}_$p" }) { pIdx ->
-                                                SpeedDialGridPage(
-                                                    tracks = pages[pIdx],
-                                                    currentTrackId = currentTrack?.id,
-                                                    onTrackClick = { t -> viewModel.playHomeItem(t, section.tracks) },
-                                                    onLongClick = { t ->
-                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                        trackForOptions = t
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-
-                                HomeSectionType.WIDE_CARDS -> {
-                                    item(key = "sec_wide_${idx}_${section.title}") {
-                                        LazyRow(
-                                            contentPadding = PaddingValues(horizontal = 16.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .nestedScroll(shelfNestedScroll)
-                                        ) {
-                                            items(section.tracks, key = { "wide_${idx}_${it.id}" }) { track ->
-                                                WideVideoMusicCard(
-                                                    track = track,
-                                                    isPlaying = currentTrack?.id == track.id,
-                                                    onClick = { viewModel.playHomeItem(track, section.tracks) },
-                                                    onLongClick = {
-                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                        trackForOptions = track
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-
-                                HomeSectionType.SIMILAR_TO,
-                                HomeSectionType.SQUARE_CAROUSEL -> {
-                                    item(key = "sec_carousel_${idx}_${section.title}") {
-                                        LazyRow(
-                                            contentPadding = PaddingValues(horizontal = 16.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .nestedScroll(shelfNestedScroll)
-                                        ) {
-                                            items(section.tracks, key = { "sq_${idx}_${it.id}" }) { track ->
-                                                YtmMusicCard(
-                                                    track = track,
-                                                    isPlaying = currentTrack?.id == track.id,
-                                                    onClick = { viewModel.playHomeItem(track, section.tracks) },
-                                                    onLongClick = {
-                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                        trackForOptions = track
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        item(key = "home_explore_tiles") {
-                            HomeExploreQuickRow(
-                                onSelectGenre = { genre ->
-                                    selectedGenre = genre
-                                    viewModel.loadGenreTracks(genre)
-                                }
-                            )
-                        }
-
-                        item {
-                            Spacer(modifier = Modifier.height(130.dp))
-                        }
-                    }
-                } else {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = stringResource(R.string.home_empty),
-                            style = Typography.bodyMedium,
-                            color = colors.textMuted
-                        )
                     }
                 }
-            }
 
-            if (pullRefreshState.progress > 0f || pullRefreshState.isRefreshing) {
-                PullToRefreshContainer(
-                    state = pullRefreshState,
-                    modifier = Modifier.align(Alignment.TopCenter),
-                    containerColor = colors.card,
-                    contentColor = colors.textPrimary
+                if (pullRefreshState.progress > 0f || pullRefreshState.isRefreshing) {
+                    PullToRefreshContainer(
+                        state = pullRefreshState,
+                        modifier = Modifier.align(Alignment.TopCenter),
+                        containerColor = colors.card,
+                        contentColor = colors.textPrimary
+                    )
+                }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = activeBrowseDetails != null,
+            enter = slideInVertically(
+                animationSpec = tween(260, easing = KuroMotion.EmphasizedDecelerate),
+                initialOffsetY = { it }
+            ) + fadeIn(tween(200)),
+            exit = slideOutVertically(
+                animationSpec = tween(220, easing = KuroMotion.EmphasizedAccelerate),
+                targetOffsetY = { it }
+            ) + fadeOut(tween(160))
+        ) {
+            activeBrowseDetails?.let { details ->
+                PlaylistDetailSheet(
+                    details = details,
+                    isLoading = isLoadingBrowseDetails,
+                    currentTrackId = currentTrack?.id,
+                    viewModel = viewModel,
+                    onDismiss = { viewModel.closeBrowseItemDetails() },
+                    onTrackMoreClick = { trackForOptions = it }
                 )
             }
         }
@@ -761,6 +628,181 @@ fun HomeScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun HomeShelvesColumn(
+    sections: List<HomeSection>,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    currentTrackId: String?,
+    shelfNestedScroll: NestedScrollConnection,
+    onItemTap: (Track, List<Track>) -> Unit,
+    onPlayImmediately: (Track, List<Track>) -> Unit,
+    onMoreClick: (Track) -> Unit,
+    onSelectExplore: (String) -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(top = 4.dp)
+    ) {
+        sections.forEachIndexed { idx, section ->
+            if (section.tracks.isEmpty()) return@forEachIndexed
+            val layoutType = resolveEffectiveLayout(section, idx)
+            val strapline = section.subtitle.ifBlank {
+                if (layoutType == HomeSectionType.COMPACT_COLUMNS && idx == 0) "START RADIO FROM A SONG" else ""
+            }
+
+            item(key = "sec_header_${idx}_${section.title}") {
+                if (layoutType == HomeSectionType.SIMILAR_TO) {
+                    SimilarToSectionHeader(
+                        title = section.title,
+                        subtitle = section.subtitle.ifBlank { "SIMILAR TO" },
+                        avatarUrl = section.headerAvatarUrl ?: section.tracks.firstOrNull()?.thumbnailUrlForDisplay(160)
+                    )
+                } else {
+                    val hasPlayableSongs = section.tracks.any { !it.isCollection && !it.isArtistProfile }
+                    HomeSectionHeader(
+                        title = section.title,
+                        strapline = strapline,
+                        actionText = if (hasPlayableSongs) stringResource(R.string.home_play_all) else null,
+                        onActionClick = {
+                            section.tracks.firstOrNull()?.let { first ->
+                                onPlayImmediately(first, section.tracks)
+                            }
+                        }
+                    )
+                }
+            }
+
+            when (layoutType) {
+                HomeSectionType.COMPACT_COLUMNS -> {
+                    val cols = section.tracks.chunked(4)
+                    item(key = "sec_compact_${idx}_${section.title}") {
+                        val rowState = rememberLazyListState()
+                        val snapFling = rememberSnapFlingBehavior(lazyListState = rowState)
+                        LazyRow(
+                            state = rowState,
+                            flingBehavior = snapFling,
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .nestedScroll(shelfNestedScroll)
+                        ) {
+                            items(cols.size, key = { c -> "col_${idx}_$c" }) { colIdx ->
+                                val colTracks = cols[colIdx]
+                                Column(modifier = Modifier.width(316.dp)) {
+                                    colTracks.forEach { track ->
+                                        HomeCompactTrackRow(
+                                            track = track,
+                                            isPlaying = currentTrackId == track.id,
+                                            onClick = { onItemTap(track, section.tracks) },
+                                            onLongClick = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                onMoreClick(track)
+                                            },
+                                            onMoreClick = { onMoreClick(track) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                HomeSectionType.SPEED_DIAL -> {
+                    item(key = "sec_speed_${idx}_${section.title}") {
+                        val pages = section.tracks.chunked(9)
+                        val rowState = rememberLazyListState()
+                        val snapFling = rememberSnapFlingBehavior(lazyListState = rowState)
+                        LazyRow(
+                            state = rowState,
+                            flingBehavior = snapFling,
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .nestedScroll(shelfNestedScroll)
+                        ) {
+                            items(pages.size, key = { p -> "sd_${idx}_$p" }) { pIdx ->
+                                SpeedDialGridPage(
+                                    tracks = pages[pIdx],
+                                    currentTrackId = currentTrackId,
+                                    onTrackClick = { t -> onItemTap(t, section.tracks) },
+                                    onLongClick = { t ->
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        onMoreClick(t)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                HomeSectionType.WIDE_CARDS -> {
+                    item(key = "sec_wide_${idx}_${section.title}") {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .nestedScroll(shelfNestedScroll)
+                        ) {
+                            items(section.tracks, key = { "wide_${idx}_${it.id}" }) { track ->
+                                WideVideoMusicCard(
+                                    track = track,
+                                    isPlaying = currentTrackId == track.id,
+                                    onClick = { onItemTap(track, section.tracks) },
+                                    onLongClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        onMoreClick(track)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                else -> {
+                    item(key = "sec_carousel_${idx}_${section.title}") {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .nestedScroll(shelfNestedScroll)
+                        ) {
+                            items(section.tracks, key = { "sq_${idx}_${it.id}" }) { track ->
+                                YtmMusicCard(
+                                    track = track,
+                                    isPlaying = currentTrackId == track.id,
+                                    onClick = { onItemTap(track, section.tracks) },
+                                    onPlayBadgeClick = { onPlayImmediately(track, section.tracks) },
+                                    onLongClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        onMoreClick(track)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        item(key = "home_explore_tiles") {
+            HomeExploreQuickRow(
+                onSelectGenre = onSelectExplore
+            )
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(130.dp))
+        }
+    }
+}
+
 @Composable
 private fun HomeMonochromeSkeleton() {
     val colors = KuroAppTheme.colors
@@ -838,97 +880,17 @@ private fun HomeMonochromeSkeleton() {
             }
         }
         Spacer(modifier = Modifier.height(6.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(180.dp)
-                .drawBehind {
-                    drawRoundRect(
-                        color = baseColor.copy(alpha = pulseAlpha * 0.85f),
-                        cornerRadius = CornerRadius(16.dp.toPx())
-                    )
-                }
-        )
-    }
-}
-
-@Composable
-private fun HomeSpotlightMixCard(
-    leadTrack: Track,
-    previewTracks: List<Track>,
-    currentTrackId: String?,
-    onPlayCard: () -> Unit,
-    onTrackClick: (Track) -> Unit,
-    onMoreClick: (Track) -> Unit
-) {
-    val colors = KuroAppTheme.colors
-    Column(
-        modifier = Modifier
-            .width(318.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .background(colors.card.copy(alpha = 0.88f))
-            .border(1.dp, colors.border.copy(alpha = 0.55f), RoundedCornerShape(18.dp))
-            .clickable(onClick = onPlayCard)
-            .padding(14.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AsyncImage(
-                model = leadTrack.thumbnailUrlForDisplay(256),
-                contentDescription = leadTrack.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(58.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .border(1.dp, colors.border.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = leadTrack.title,
-                    style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = colors.textPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = leadTrack.artist.ifBlank { formatMixBadgeLabel(leadTrack.artist) },
-                    style = Typography.bodySmall,
-                    color = colors.textMuted,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(colors.accent)
-                    .clickable(onClick = onPlayCard),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.PlayArrow,
-                    contentDescription = "Play",
-                    tint = colors.background,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-        }
-
-        if (previewTracks.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(10.dp))
-            previewTracks.take(3).forEach { track ->
-                HomeCompactTrackRow(
-                    track = track,
-                    isPlaying = currentTrackId == track.id,
-                    onClick = { onTrackClick(track) },
-                    onLongClick = { onMoreClick(track) },
-                    onMoreClick = { onMoreClick(track) }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            repeat(2) {
+                Box(
+                    modifier = Modifier
+                        .size(156.dp)
+                        .drawBehind {
+                            drawRoundRect(
+                                color = baseColor.copy(alpha = pulseAlpha * 0.85f),
+                                cornerRadius = CornerRadius(12.dp.toPx())
+                            )
+                        }
                 )
             }
         }
@@ -1043,7 +1005,7 @@ private fun SimilarToSectionHeader(
             )
             Text(
                 text = title,
-                style = Typography.headlineSmall.copy(fontSize = 19.sp, fontWeight = FontWeight.Bold),
+                style = Typography.headlineSmall.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold),
                 color = colors.textPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -1063,16 +1025,16 @@ private fun WideVideoMusicCard(
     val colors = KuroAppTheme.colors
     Column(
         modifier = Modifier
-            .width(220.dp)
+            .width(232.dp)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(124.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .height(130.dp)
+                .clip(RoundedCornerShape(10.dp))
                 .background(colors.card)
-                .border(1.dp, colors.border.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                .border(1.dp, colors.border.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
         ) {
             AsyncImage(
                 model = track.thumbnailUrlForDisplay(512),
@@ -1096,7 +1058,7 @@ private fun WideVideoMusicCard(
                 }
             }
         }
-        Spacer(modifier = Modifier.height(7.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = track.title,
             style = Typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
@@ -1135,18 +1097,18 @@ private fun HomeExploreQuickRow(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             val tiles = listOf(
-                Triple(Icons.Outlined.NewReleases, "New releases", "Feel good"),
-                Triple(Icons.Outlined.TrendingUp, "Charts", "Energize"),
-                Triple(Icons.Outlined.Mood, "Moods & genres", "Relax")
+                Triple(Icons.Outlined.NewReleases, "New releases", "FEmusic_new_releases"),
+                Triple(Icons.Outlined.TrendingUp, "Charts", "FEmusic_charts"),
+                Triple(Icons.Outlined.Mood, "Moods & genres", "FEmusic_moods_and_genres")
             )
-            tiles.forEach { (icon, label, targetGenre) ->
+            tiles.forEach { (icon, label, targetBrowseId) ->
                 Column(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(12.dp))
                         .background(colors.card)
                         .border(1.dp, colors.border.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-                        .clickable { onSelectGenre(targetGenre) }
+                        .clickable { onSelectGenre(targetBrowseId) }
                         .padding(horizontal = 12.dp, vertical = 14.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -1207,8 +1169,8 @@ private fun HomeTopBar(
                 modifier = Modifier.size(38.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.Notifications,
-                    contentDescription = "Activity",
+                    imageVector = Icons.Outlined.History,
+                    contentDescription = "History",
                     tint = colors.textPrimary,
                     modifier = Modifier.size(22.dp)
                 )
@@ -1240,7 +1202,7 @@ fun AccountTopButton(
 
     Box(
         modifier = Modifier
-            .size(36.dp)
+            .size(34.dp)
             .clip(CircleShape)
             .background(if (!showPhoto) colors.accent else colors.card)
             .border(1.dp, colors.border, CircleShape)
@@ -1260,7 +1222,7 @@ fun AccountTopButton(
         } else {
             Text(
                 text = initial,
-                style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontSize = 15.sp),
+                style = Typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontSize = 14.sp),
                 color = colors.background
             )
         }
@@ -1273,25 +1235,29 @@ fun YtmMusicCard(
     track: Track,
     isPlaying: Boolean,
     onClick: () -> Unit,
+    onPlayBadgeClick: (() -> Unit)? = null,
     onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val colors = KuroAppTheme.colors
+    val isArtist = track.isArtistProfile
+    val shape = if (isArtist) CircleShape else RoundedCornerShape(10.dp)
 
     Column(
         modifier = modifier
-            .width(144.dp)
+            .width(156.dp)
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
-            )
+            ),
+        horizontalAlignment = if (isArtist) Alignment.CenterHorizontally else Alignment.Start
     ) {
         Box(
             modifier = Modifier
-                .size(144.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .size(156.dp)
+                .clip(shape)
                 .background(colors.card)
-                .border(1.dp, colors.border.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
+                .border(1.dp, colors.border.copy(alpha = 0.35f), shape)
         ) {
             AsyncImage(
                 model = track.thumbnailUrlForDisplay(512),
@@ -1314,23 +1280,23 @@ fun YtmMusicCard(
                         modifier = Modifier.size(32.dp)
                     )
                 }
-            }
-
-            if (track.durationSeconds > 0) {
+            } else if (track.isCollection && onPlayBadgeClick != null) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(6.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(PureBlack.copy(alpha = 0.75f))
-                        .padding(horizontal = 5.dp, vertical = 2.dp)
+                        .padding(8.dp)
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(PureBlack.copy(alpha = 0.78f))
+                        .border(0.8.dp, PureWhite.copy(alpha = 0.25f), CircleShape)
+                        .clickable { onPlayBadgeClick() },
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = track.formattedDuration,
-                        style = Typography.labelSmall,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = PureWhite
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = "Play Mix",
+                        tint = PureWhite,
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
@@ -1340,22 +1306,24 @@ fun YtmMusicCard(
 
         Text(
             text = track.title,
-            style = Typography.bodyMedium,
+            style = Typography.bodyMedium.copy(fontSize = 14.sp),
             fontWeight = FontWeight.Bold,
             color = colors.textPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = if (isArtist) TextAlign.Center else TextAlign.Start
         )
 
         Spacer(modifier = Modifier.height(2.dp))
 
         Text(
-            text = track.artist,
-            style = Typography.bodySmall,
+            text = track.artist.ifBlank { formatMixBadgeLabel(track.title) },
+            style = Typography.bodySmall.copy(fontSize = 12.sp, lineHeight = 16.sp),
             fontWeight = FontWeight.Normal,
-            color = colors.textSecondary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            color = colors.textMuted,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = if (isArtist) TextAlign.Center else TextAlign.Start
         )
     }
 }
@@ -1363,7 +1331,8 @@ fun YtmMusicCard(
 @Composable
 private fun HomeSectionHeader(
     title: String,
-    actionText: String,
+    strapline: String = "",
+    actionText: String? = null,
     onActionClick: () -> Unit
 ) {
     val colors = KuroAppTheme.colors
@@ -1372,31 +1341,48 @@ private fun HomeSectionHeader(
             .fillMaxWidth()
             .padding(start = 16.dp, end = 16.dp, top = 22.dp, bottom = 10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.Bottom
     ) {
-        Text(
-            text = title,
-            style = Typography.headlineSmall.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold),
-            color = colors.textPrimary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(16.dp))
-                .border(1.dp, colors.border, RoundedCornerShape(16.dp))
-                .clickable(onClick = onActionClick)
-                .padding(horizontal = 12.dp, vertical = 5.dp)
-        ) {
+        Column(modifier = Modifier.weight(1f)) {
+            if (strapline.isNotBlank()) {
+                Text(
+                    text = strapline.uppercase(),
+                    style = Typography.labelSmall.copy(
+                        fontSize = 10.sp,
+                        letterSpacing = 0.8.sp,
+                        fontWeight = FontWeight.Medium
+                    ),
+                    color = colors.textMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+            }
             Text(
-                text = actionText,
-                style = Typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                text = title,
+                style = Typography.headlineSmall.copy(fontSize = 22.sp, fontWeight = FontWeight.ExtraBold),
                 color = colors.textPrimary,
                 maxLines = 1,
-                softWrap = false
+                overflow = TextOverflow.Ellipsis
             )
+        }
+        if (!actionText.isNullOrBlank()) {
+            Spacer(modifier = Modifier.width(8.dp))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+                    .clickable(onClick = onActionClick)
+                    .padding(horizontal = 12.dp, vertical = 5.dp)
+            ) {
+                Text(
+                    text = actionText,
+                    style = Typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = colors.textPrimary,
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
         }
     }
 }

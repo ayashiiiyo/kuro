@@ -47,22 +47,18 @@ class KuroDownloader private constructor(context: Context? = null) : Downloader(
             )
         }
 
+        /*
+         * Only attach user cookies to explicit playlist browse calls (list=LL),
+         * never to /youtubei/v1/player stream extraction where cookies without poToken trigger HTTP 403 / Sabr throttling.
+         */
         try {
-            val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
-            val cookie = auth.getCookie()
-            if (!cookie.isNullOrBlank() && url.contains("youtube.com") && !url.contains("googlevideo.com")) {
-                if (headers["Cookie"] == null && headers["cookie"] == null) {
-                    reqBuilder.header("Cookie", cookie)
-                }
-                if (url.contains("/youtubei/")) {
-                    val origin = if (url.contains("music.youtube.com")) "https://music.youtube.com" else "https://www.youtube.com"
-                    auth.getSapisidHash(origin)?.let { sapisidHash ->
-                        if (headers["Authorization"] == null && headers["authorization"] == null) {
-                            reqBuilder.header("Authorization", sapisidHash)
-                        }
-                        if (headers["x-origin"] == null && headers["X-Origin"] == null) {
-                            reqBuilder.header("x-origin", origin)
-                        }
+            val isPlayerOrStreamCall = url.contains("/youtubei/v1/player") || url.contains("googlevideo.com")
+            if (!isPlayerOrStreamCall && url.contains("list=LL")) {
+                val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
+                val cookie = auth.getCookie()
+                if (!cookie.isNullOrBlank()) {
+                    if (headers["Cookie"] == null && headers["cookie"] == null) {
+                        reqBuilder.header("Cookie", cookie)
                     }
                 }
             }
