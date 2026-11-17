@@ -109,16 +109,18 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.9.4 — Pull-to-Refresh, Playback Wake Locks & Account Refresh Fixes
+          ## Kuro v3.9.5 — UI, Lyrics & Playback Bugfixes
 
-          - **Home Pull-to-Refresh**:
-            - Added Material3 pull-to-refresh with a dedicated refresh state and rotated shelf ordering on force refresh.
-          - **Playback Reliability**:
-            - Stream resolution and radio advance now hold partial wake locks so background playback continues reliably.
-          - **Account Refresh**:
-            - Account changes are detected by email/authUser/pageId rather than cookie alone, refreshing Home and liked songs correctly.
-          - **Caching**:
-            - Raised the stream URL cache TTL from 15s to 60s.
+          - **Home**:
+            - Added localized genre chips and a dedicated HomeTopBar, and raised cached shelf limits to 12 sections / 20 tracks / 40 trending.
+          - **Navigation**:
+            - Restores the last page instantly on launch without animation.
+          - **Playback**:
+            - Next/previous work from persisted state, duration falls back to track metadata, and skip-next respects command availability.
+          - **Lyrics & Options**:
+            - Filter literal "null" lyric lines; localized download actions and quality dialog; options sheet now receives the correct favorite state from Search and Vibe.
+          - **Widgets**:
+            - Next/previous fallback actions always fire.
           - Published signed release, per-ABI, and debug APKs.
           EOF
           gh release delete "$RELEASE_TAG" --yes --cleanup-tag 2>/dev/null || true
@@ -127,7 +129,7 @@ jobs:
             "${{ steps.apk.outputs.arm64_path }}" \
             "${{ steps.apk.outputs.arm32_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (Pull-to-Refresh, Playback Wake Locks & Account Refresh Fixes)" \
+            --title "Kuro $RELEASE_TAG (UI, Lyrics & Playback Bugfixes)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 

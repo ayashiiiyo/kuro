@@ -357,8 +357,9 @@ fun VibeScreen(
     }
 
     if (trackForOptions != null) {
+        val targetTrack = trackForOptions!!
         TrackOptionsBottomSheet(
-            track = trackForOptions!!,
+            track = targetTrack.copy(isFavorite = targetTrack.id in favoriteIds),
             viewModel = viewModel,
             onDismiss = { trackForOptions = null },
             onOpenLyrics = {

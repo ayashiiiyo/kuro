@@ -112,7 +112,6 @@ fun HomeScreen(
     val trendingTracks by viewModel.trendingTracks.collectAsState()
     val genreTracks by viewModel.genreTracks.collectAsState()
     val isLoadingGenre by viewModel.isLoadingGenre.collectAsState()
-    val isSearching by viewModel.isSearching.collectAsState()
     val isLoadingTrending by viewModel.isLoadingTrending.collectAsState()
     val isRefreshingHome by viewModel.isRefreshingHome.collectAsState()
     val pullRefreshState = rememberPullToRefreshState()
@@ -134,14 +133,19 @@ fun HomeScreen(
 
     val haptic = LocalHapticFeedback.current
     var selectedGenre by rememberSaveable { mutableStateOf("Semua") }
-    val genres = listOf("Feel good", "Relax", "Sad", "Energize", "Romance", "Focus", "Workout")
+    val genreChips = listOf(
+        "Semua" to stringResource(R.string.home_genre_all),
+        "Feel good" to stringResource(R.string.home_genre_feel_good),
+        "Relax" to stringResource(R.string.home_genre_relax),
+        "Sad" to stringResource(R.string.home_genre_sad),
+        "Energize" to stringResource(R.string.home_genre_energize),
+        "Romance" to stringResource(R.string.home_genre_romance),
+        "Focus" to stringResource(R.string.home_genre_focus),
+        "Workout" to stringResource(R.string.home_genre_workout)
+    )
     val genreRowState = rememberLazyListState()
     val mainListState = rememberLazyListState()
-    val showTopHeader by remember {
-        derivedStateOf {
-            mainListState.firstVisibleItemIndex == 0 && mainListState.firstVisibleItemScrollOffset < 60
-        }
-    }
+    val genreListState = rememberLazyListState()
 
     BackHandler(enabled = !isPlayerExpanded && selectedGenre != "Semua") {
         selectedGenre = "Semua"
@@ -163,54 +167,15 @@ fun HomeScreen(
             .padding(top = 12.dp)
     ) {
         AnimatedVisibility(
-            visible = showTopHeader || selectedGenre != "Semua",
+            visible = selectedGenre != "Semua",
             enter = expandVertically(tween(200)) + fadeIn(tween(180)),
             exit = shrinkVertically(tween(180)) + fadeOut(tween(140))
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_notification),
-                        contentDescription = "Kuro",
-                        tint = colors.textPrimary,
-                        modifier = Modifier.size(26.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Kuro",
-                        style = Typography.headlineMedium.copy(
-                            fontSize = 22.sp,
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = colors.textPrimary
-                    )
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(
-                        onClick = { showRecentsDialog = true },
-                        modifier = Modifier.size(38.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Notifications,
-                            contentDescription = "Activity",
-                            tint = colors.textPrimary,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(6.dp))
-                    AccountTopButton(
-                        account = currentAccount,
-                        onClick = { showProfileMenu = true }
-                    )
-                }
-            }
+            HomeTopBar(
+                currentAccount = currentAccount,
+                onRecentsClick = { showRecentsDialog = true },
+                onProfileClick = { showProfileMenu = true }
+            )
         }
 
         LazyRow(
@@ -219,8 +184,8 @@ fun HomeScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            items(genres, key = { it }) { genre ->
-                val isSelected = selectedGenre == genre
+            items(genreChips, key = { it.first }) { (genreKey, genreLabel) ->
+                val isSelected = selectedGenre == genreKey
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
@@ -231,19 +196,28 @@ fun HomeScreen(
                             RoundedCornerShape(8.dp)
                         )
                         .clickable {
-                            if (isSelected) {
+                            if (genreKey == "Semua") {
+                                if (selectedGenre != "Semua") {
+                                    selectedGenre = "Semua"
+                                    if (homeSections.isEmpty() && trendingTracks.isEmpty()) {
+                                        viewModel.loadTrending()
+                                    }
+                                }
+                            } else if (isSelected) {
                                 selectedGenre = "Semua"
-                                viewModel.loadTrending()
+                                if (homeSections.isEmpty() && trendingTracks.isEmpty()) {
+                                    viewModel.loadTrending()
+                                }
                             } else {
-                                selectedGenre = genre
-                                viewModel.loadGenreTracks(genre)
+                                selectedGenre = genreKey
+                                viewModel.loadGenreTracks(genreKey)
                             }
                         }
                         .padding(horizontal = 14.dp, vertical = 7.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = genre,
+                        text = genreLabel,
                         style = Typography.labelMedium.copy(
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                         ),
@@ -286,7 +260,8 @@ fun HomeScreen(
             modifier = Modifier.fillMaxSize()
         ) { activeGenre ->
             if (activeGenre != "Semua") {
-                if (isLoadingGenre || isSearching) {
+                val activeGenreLabel = genreChips.firstOrNull { it.first == activeGenre }?.second ?: activeGenre
+                if (isLoadingGenre && genreTracks.isEmpty()) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
@@ -299,13 +274,14 @@ fun HomeScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = stringResource(R.string.home_no_songs_genre, activeGenre),
+                            text = stringResource(R.string.home_no_songs_genre, activeGenreLabel),
                             style = Typography.bodyMedium,
                             color = colors.textMuted
                         )
                     }
                 } else {
                     LazyColumn(
+                        state = genreListState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(top = 6.dp)
                     ) {
@@ -315,7 +291,7 @@ fun HomeScreen(
                                 track = track.copy(isFavorite = isFav),
                                 isPlaying = currentTrack?.id == track.id,
                                 isLoading = isLoadingTrack && currentTrack?.id == track.id,
-                                onClick = { viewModel.playTrack(track, listOf(track)) },
+                                onClick = { viewModel.playTrack(track, genreTracks) },
                                 onFavoriteClick = { viewModel.toggleFavorite(track) },
                                 onMoreClick = { trackForOptions = track },
                                 onSwipeAddToQueue = { viewModel.addToQueue(track) }
@@ -326,7 +302,7 @@ fun HomeScreen(
                         }
                     }
                 }
-            } else if (isLoadingTrending) {
+            } else if (isLoadingTrending && homeSections.isEmpty() && trendingTracks.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
@@ -339,6 +315,13 @@ fun HomeScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(top = 4.dp)
                 ) {
+                    item(key = "home_top_header") {
+                        HomeTopBar(
+                            currentAccount = currentAccount,
+                            onRecentsClick = { showRecentsDialog = true },
+                            onProfileClick = { showProfileMenu = true }
+                        )
+                    }
                     val homeTracks = trendingTracks.ifEmpty { homeSections.flatMap { it.tracks } }.distinctBy { it.id }
                     val quickPickTracks = (homeSections.firstOrNull()?.tracks ?: homeTracks).distinctBy { it.id }.take(16)
                     val quickPickCols = quickPickTracks.chunked(4)
@@ -365,6 +348,7 @@ fun HomeScreen(
                                         colTracks.forEach { track ->
                                             HomeCompactTrackRow(
                                                 track = track,
+                                                isPlaying = currentTrack?.id == track.id,
                                                 onClick = { viewModel.playTrack(track, quickPickTracks) },
                                                 onLongClick = {
                                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -398,7 +382,13 @@ fun HomeScreen(
                                     .height(310.dp)
                                     .clip(RoundedCornerShape(16.dp))
                                     .background(colors.card)
-                                    .clickable { viewModel.playTrack(discoverTrack, homeTracks) }
+                                    .combinedClickable(
+                                        onClick = { viewModel.playTrack(discoverTrack, homeTracks) },
+                                        onLongClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            trackForOptions = discoverTrack
+                                        }
+                                    )
                             ) {
                                 AsyncImage(
                                     model = discoverTrack.highResThumbnailUrl,
@@ -421,7 +411,7 @@ fun HomeScreen(
                                 Column(
                                     modifier = Modifier
                                         .align(Alignment.TopStart)
-                                        .padding(16.dp)
+                                        .padding(start = 16.dp, top = 16.dp, end = 52.dp)
                                 ) {
                                     Text(
                                         text = discoverTrack.title,
@@ -436,6 +426,20 @@ fun HomeScreen(
                                         color = Color.White.copy(alpha = 0.82f),
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { trackForOptions = discoverTrack },
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(8.dp)
+                                        .size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.MoreVert,
+                                        contentDescription = "Options",
+                                        tint = Color.White.copy(alpha = 0.9f),
+                                        modifier = Modifier.size(20.dp)
                                     )
                                 }
                                 Text(
@@ -476,6 +480,7 @@ fun HomeScreen(
                                                 cTracks.forEach { track ->
                                                     HomeCompactTrackRow(
                                                         track = track,
+                                                        isPlaying = currentTrack?.id == track.id,
                                                         onClick = { viewModel.playTrack(track, section.tracks) },
                                                         onLongClick = {
                                                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -496,42 +501,15 @@ fun HomeScreen(
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
                                         items(section.tracks, key = { "sec_${idx}_${it.id}" }) { track ->
-                                            Column(
-                                                modifier = Modifier
-                                                    .width(144.dp)
-                                                    .combinedClickable(
-                                                        onClick = { viewModel.playTrack(track, section.tracks) },
-                                                        onLongClick = {
-                                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                            trackForOptions = track
-                                                        }
-                                                    )
-                                            ) {
-                                                AsyncImage(
-                                                    model = track.thumbnailUrlForDisplay(320),
-                                                    contentDescription = track.title,
-                                                    contentScale = ContentScale.Crop,
-                                                    modifier = Modifier
-                                                        .size(144.dp)
-                                                        .clip(RoundedCornerShape(10.dp))
-                                                        .background(colors.card)
-                                                )
-                                                Spacer(modifier = Modifier.height(6.dp))
-                                                Text(
-                                                    text = track.title,
-                                                    style = Typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                                                    color = colors.textPrimary,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                                Text(
-                                                    text = track.artist,
-                                                    style = Typography.bodySmall,
-                                                    color = colors.textMuted,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                            }
+                                            YtmMusicCard(
+                                                track = track,
+                                                isPlaying = currentTrack?.id == track.id,
+                                                onClick = { viewModel.playTrack(track, section.tracks) },
+                                                onLongClick = {
+                                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    trackForOptions = track
+                                                }
+                                            )
                                         }
                                     }
                                 }
@@ -675,8 +653,9 @@ fun HomeScreen(
     }
 
     if (trackForOptions != null) {
+        val targetTrack = trackForOptions!!
         TrackOptionsBottomSheet(
-            track = trackForOptions!!,
+            track = targetTrack.copy(isFavorite = targetTrack.id in favoriteIds),
             viewModel = viewModel,
             onDismiss = { trackForOptions = null },
             onOpenLyrics = {
@@ -712,6 +691,59 @@ fun HomeScreen(
             viewModel = viewModel,
             onDismiss = { trackForPlaylist = null }
         )
+    }
+}
+
+@Composable
+private fun HomeTopBar(
+    currentAccount: UserAccount?,
+    onRecentsClick: () -> Unit,
+    onProfileClick: () -> Unit
+) {
+    val colors = KuroAppTheme.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                painter = painterResource(id = R.drawable.ic_notification),
+                contentDescription = "Kuro",
+                tint = colors.textPrimary,
+                modifier = Modifier.size(26.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Kuro",
+                style = Typography.headlineMedium.copy(
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold
+                ),
+                color = colors.textPrimary
+            )
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(
+                onClick = onRecentsClick,
+                modifier = Modifier.size(38.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Notifications,
+                    contentDescription = "Activity",
+                    tint = colors.textPrimary,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(6.dp))
+            AccountTopButton(
+                account = currentAccount,
+                onClick = onProfileClick
+            )
+        }
     }
 }
 
@@ -897,6 +929,7 @@ private fun HomeSectionHeader(
 @Composable
 private fun HomeCompactTrackRow(
     track: Track,
+    isPlaying: Boolean = false,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onMoreClick: () -> Unit
@@ -909,21 +942,41 @@ private fun HomeCompactTrackRow(
             .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        AsyncImage(
-            model = track.thumbnailUrlForDisplay(160),
-            contentDescription = track.title,
-            contentScale = ContentScale.Crop,
+        Box(
             modifier = Modifier
                 .size(50.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .background(colors.card)
-        )
+                .background(colors.card),
+            contentAlignment = Alignment.Center
+        ) {
+            AsyncImage(
+                model = track.thumbnailUrlForDisplay(160),
+                contentDescription = track.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            if (isPlaying) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(PureBlack.copy(alpha = 0.55f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_kuro_play),
+                        contentDescription = "Playing",
+                        tint = PureWhite,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+        }
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = track.title,
                 style = Typography.titleSmall.copy(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-                color = colors.textPrimary,
+                color = if (isPlaying) colors.accent else colors.textPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

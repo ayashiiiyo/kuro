@@ -18,9 +18,9 @@ data class UiSnapshot(
 object UiStateCache {
 
     private const val SNAPSHOT_FILE = "kuro_ui_snapshot.json"
-    private const val MAX_SECTIONS = 4
-    private const val MAX_TRACKS_PER_SECTION = 12
-    private const val MAX_TRENDING = 15
+    private const val MAX_SECTIONS = 12
+    private const val MAX_TRACKS_PER_SECTION = 20
+    private const val MAX_TRENDING = 40
 
     fun saveSnapshot(context: Context, snapshot: UiSnapshot) {
         runCatching {

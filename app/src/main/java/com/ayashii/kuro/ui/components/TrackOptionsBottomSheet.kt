@@ -203,9 +203,9 @@ fun TrackOptionsBottomSheet(
             TrackOptionItem(
                 icon = if (isOffline) Icons.Default.DownloadDone else Icons.Outlined.Download,
                 title = when {
-                    activeProgress != null -> "Downloading (${(activeProgress * 100).toInt()}%)"
-                    isOffline -> "Hapus dari Offline"
-                    else -> "Download Offline"
+                    activeProgress != null -> stringResource(R.string.player_downloading_percent, (activeProgress * 100).toInt())
+                    isOffline -> stringResource(R.string.player_remove_offline)
+                    else -> stringResource(R.string.player_download_offline)
                 },
                 iconTint = if (isOffline) colors.accent else colors.textPrimary,
                 onClick = {
@@ -280,7 +280,7 @@ fun TrackOptionsBottomSheet(
     if (showDownloadQualityDialog) {
         AlertDialog(
             onDismissRequest = { showDownloadQualityDialog = false },
-            title = { Text("Pilih Kualitas Download", style = Typography.titleLarge, color = colors.textPrimary) },
+            title = { Text(stringResource(R.string.player_choose_download_quality), style = Typography.titleLarge, color = colors.textPrimary) },
             text = {
                 Column {
                     AudioSubQuality.values().forEach { sub ->
@@ -306,7 +306,7 @@ fun TrackOptionsBottomSheet(
             },
             confirmButton = {
                 TextButton(onClick = { showDownloadQualityDialog = false }) {
-                    Text("Batal", color = colors.textMuted)
+                    Text(stringResource(R.string.lib_cancel), color = colors.textMuted)
                 }
             },
             containerColor = colors.surface

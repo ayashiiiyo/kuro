@@ -207,7 +207,9 @@ fun FullPlayerSheet(
     }
 
     val validLyricsLines = remember(currentLyrics) {
-        currentLyrics?.let { LrcParser.sanitizeLines(it.lines) } ?: emptyList()
+        currentLyrics?.let { LrcParser.sanitizeLines(it.lines) }
+            ?.filterNot { it.text.trim().equals("null", ignoreCase = true) }
+            ?: emptyList()
     }
     val hasLyricsAvailable = validLyricsLines.isNotEmpty()
     val sanitizedLyricsData = remember(currentLyrics, validLyricsLines) {

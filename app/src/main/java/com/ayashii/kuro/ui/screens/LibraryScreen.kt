@@ -232,8 +232,14 @@ fun LibraryScreen(
                                         .background(colors.card)
                                         .border(1.dp, colors.border, RoundedCornerShape(16.dp))
                                         .clickable {
-                                            if (selectedTab == 1) viewModel.syncLikedSongs()
-                                            else viewModel.syncUserPlaylists()
+                                            when (selectedTab) {
+                                                0 -> {
+                                                    viewModel.syncLikedSongs()
+                                                    viewModel.syncUserPlaylists()
+                                                }
+                                                1 -> viewModel.syncLikedSongs()
+                                                else -> viewModel.syncUserPlaylists()
+                                            }
                                         }
                                         .padding(horizontal = 12.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically

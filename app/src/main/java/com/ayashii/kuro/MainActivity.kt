@@ -185,6 +185,12 @@ fun MainAppScreen(viewModel: MusicViewModel, onPageChanged: (Int) -> Unit = {}) 
     val navItems = Screen.bottomNavItems
     val restoredPage by viewModel.restoredPage.collectAsState()
     val pagerState = rememberPagerState(initialPage = restoredPage.coerceIn(0, navItems.lastIndex), pageCount = { navItems.size })
+    LaunchedEffect(restoredPage) {
+        val target = restoredPage.coerceIn(0, navItems.lastIndex)
+        if (pagerState.currentPage != target && !pagerState.isScrollInProgress) {
+            pagerState.scrollToPage(target)
+        }
+    }
     LaunchedEffect(pagerState.currentPage) {
         onPageChanged(pagerState.currentPage)
     }

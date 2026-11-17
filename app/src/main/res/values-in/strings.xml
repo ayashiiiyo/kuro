@@ -36,6 +36,13 @@
 
     <!-- Home Screen -->
     <string name="home_genre_all">Semua</string>
+    <string name="home_genre_feel_good">Suasana Hati</string>
+    <string name="home_genre_relax">Santai</string>
+    <string name="home_genre_sad">Sedih</string>
+    <string name="home_genre_energize">Berenergi</string>
+    <string name="home_genre_romance">Romantis</string>
+    <string name="home_genre_focus">Fokus</string>
+    <string name="home_genre_workout">Olahraga</string>
     <string name="home_start_listening">Mulai mendengarkan</string>
     <string name="home_start_listening_sub">Putar sesi berdasarkan selera musikmu</string>
     <string name="home_to_get_you_started">Untuk memulai harimu</string>
@@ -163,6 +170,10 @@ Untukmu</string>
     <string name="player_go_to_queue">Lihat Antrean</string>
     <string name="player_share_song">Bagikan lagu</string>
     <string name="player_audio_settings">Pengaturan audio</string>
+    <string name="player_downloading_percent">Mengunduh (%1$d%%)</string>
+    <string name="player_remove_offline">Hapus dari Offline</string>
+    <string name="player_download_offline">Unduh Offline</string>
+    <string name="player_choose_download_quality">Pilih Kualitas Unduhan</string>
     <string name="player_lyrics">Lirik</string>
     <string name="player_lyrics_loading">Memuat lirik…</string>
     <string name="player_lyrics_unavailable">Lirik tersinkron belum tersedia</string>

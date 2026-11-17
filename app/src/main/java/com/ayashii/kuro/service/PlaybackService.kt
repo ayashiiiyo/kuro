@@ -484,9 +484,19 @@ class PlaybackService : MediaSessionService() {
             override fun isCommandAvailable(command: Int): Boolean {
                 return when (command) {
                     Player.COMMAND_SEEK_TO_NEXT,
-                    Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> PlayerQueueManager.hasNext() || mediaItemCount > 0
+                    Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> {
+                        PlayerQueueManager.hasNext() ||
+                            mediaItemCount > 0 ||
+                            PlayerQueueManager.currentTrack.value != null ||
+                            loadPersistedTrack(this@PlaybackService) != null
+                    }
                     Player.COMMAND_SEEK_TO_PREVIOUS,
-                    Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> PlayerQueueManager.hasPrevious() || mediaItemCount > 0
+                    Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> {
+                        PlayerQueueManager.hasPrevious() ||
+                            mediaItemCount > 0 ||
+                            PlayerQueueManager.currentTrack.value != null ||
+                            loadPersistedTrack(this@PlaybackService) != null
+                    }
                     else -> super.isCommandAvailable(command)
                 }
             }
@@ -800,7 +810,9 @@ class PlaybackService : MediaSessionService() {
             playTrack(nextTrack)
             return
         }
-        val current = PlayerQueueManager.currentTrack.value ?: return
+        val current = PlayerQueueManager.currentTrack.value ?: loadPersistedTrack(this)?.also {
+            PlayerQueueManager.playTrack(it, listOf(it))
+        } ?: return
         servicePlayJob?.cancel()
         servicePlayJob = serviceScope.launch {
             val pm = getSystemService(android.content.Context.POWER_SERVICE) as? android.os.PowerManager

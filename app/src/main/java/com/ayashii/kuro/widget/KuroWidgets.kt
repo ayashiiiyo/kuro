@@ -364,14 +364,14 @@ class KuroWidgetActionReceiver : android.content.BroadcastReceiver() {
                     ACTION_NEXT -> {
                         if (controller.isCommandAvailable(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)) {
                             controller.seekToNextMediaItem()
-                        } else if (controller.isCommandAvailable(Player.COMMAND_SEEK_TO_NEXT)) {
+                        } else {
                             controller.seekToNext()
                         }
                     }
                     ACTION_PREVIOUS -> {
                         if (controller.isCommandAvailable(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)) {
                             controller.seekToPreviousMediaItem()
-                        } else if (controller.isCommandAvailable(Player.COMMAND_SEEK_TO_PREVIOUS)) {
+                        } else {
                             controller.seekToPrevious()
                         }
                     }

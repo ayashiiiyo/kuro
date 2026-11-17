@@ -36,6 +36,13 @@
 
     <!-- Home Screen -->
     <string name="home_genre_all">All</string>
+    <string name="home_genre_feel_good">Feel good</string>
+    <string name="home_genre_relax">Relax</string>
+    <string name="home_genre_sad">Sad</string>
+    <string name="home_genre_energize">Energize</string>
+    <string name="home_genre_romance">Romance</string>
+    <string name="home_genre_focus">Focus</string>
+    <string name="home_genre_workout">Workout</string>
     <string name="home_start_listening">Start listening</string>
     <string name="home_start_listening_sub">Jump into a session based on your tastes</string>
     <string name="home_to_get_you_started">To get you started</string>
@@ -163,6 +170,10 @@ You</string>
     <string name="player_go_to_queue">Go to Queue</string>
     <string name="player_share_song">Share song</string>
     <string name="player_audio_settings">Audio settings</string>
+    <string name="player_downloading_percent">Downloading (%1$d%%)</string>
+    <string name="player_remove_offline">Remove from Offline</string>
+    <string name="player_download_offline">Download Offline</string>
+    <string name="player_choose_download_quality">Choose Download Quality</string>
     <string name="player_lyrics">Lyrics</string>
     <string name="player_lyrics_loading">Loading lyrics…</string>
     <string name="player_lyrics_unavailable">Synced lyrics unavailable</string>

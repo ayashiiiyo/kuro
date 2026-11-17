@@ -666,7 +666,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
         triggerLyricsAndRadioForTrack(resolved)
         _isPlaying.value = controller.isPlaying
-        if (controller.duration > 0) _duration.value = controller.duration
+        _duration.value = when {
+            controller.duration > 0 -> controller.duration
+            resolved.durationSeconds > 0 -> resolved.durationSeconds * 1000L
+            else -> 0L
+        }
         _playbackPosition.value = controller.currentPosition.coerceAtLeast(0)
         anchorPosition = _playbackPosition.value
         val now = SystemClock.elapsedRealtime()
@@ -967,7 +971,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun skipNext(userInitiated: Boolean = true, isErrorRecovery: Boolean = false) {
         val controller = mediaController
-        if (controller != null) {
+        if (controller != null && controller.isCommandAvailable(Player.COMMAND_SEEK_TO_NEXT)) {
+            _isLoadingTrack.value = true
             controller.seekToNext()
         } else {
             val fallbackNext = queueManager.getNextTrack(userInitiated = userInitiated, isErrorRecovery = isErrorRecovery)
@@ -1047,7 +1052,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     fun syncLikedSongs() {
         viewModelScope.launch {
-            _isLoadingTrending.value = true
             val liked = repository.getLikedTracks()
             if (liked.isNotEmpty()) {
                 val currentFavs = _favorites.value.toMutableList()
@@ -1078,20 +1082,14 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
             }
-            _isLoadingTrending.value = false
         }
     }
 
     fun syncUserPlaylists() {
         viewModelScope.launch {
-            _isLoadingTrending.value = true
-            try {
-                val remotePlaylists = repository.getUserPlaylists()
-                if (remotePlaylists.isNotEmpty()) {
-                    playlistManager.upsertSyncedPlaylists(remotePlaylists)
-                }
-            } finally {
-                _isLoadingTrending.value = false
+            val remotePlaylists = repository.getUserPlaylists()
+            if (remotePlaylists.isNotEmpty()) {
+                playlistManager.upsertSyncedPlaylists(remotePlaylists)
             }
         }
     }
@@ -1115,11 +1113,6 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         searchJob?.cancel()
         suggestJob?.cancel()
         genreJob?.cancel()
-
-        _homeSections.value = emptyList()
-        _trendingTracks.value = emptyList()
-        _genreTracks.value = emptyList()
-        _currentLyrics.value = null
     }
 
     fun onAppForegrounded() {
