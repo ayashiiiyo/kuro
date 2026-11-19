@@ -155,6 +155,26 @@ fun TrackOptionsBottomSheet(
 
             Spacer(modifier = Modifier.height(8.dp))
 
+            if (track.isCollection || track.isArtistProfile) {
+                TrackOptionItem(
+                    icon = Icons.Outlined.FormatListBulleted,
+                    title = "Open ${track.title}",
+                    onClick = {
+                        onDismiss()
+                        viewModel.openBrowseItemDetails(track)
+                    }
+                )
+
+                TrackOptionItem(
+                    icon = Icons.Outlined.QueueMusic,
+                    title = "Play Mix / Album",
+                    onClick = {
+                        onDismiss()
+                        viewModel.playHomeItem(track)
+                    }
+                )
+            }
+
             TrackOptionItem(
                 icon = Icons.Outlined.Share,
                 title = stringResource(R.string.player_share),

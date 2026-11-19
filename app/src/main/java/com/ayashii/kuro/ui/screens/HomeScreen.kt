@@ -39,12 +39,17 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Mood
 import androidx.compose.material.icons.outlined.NewReleases
 import androidx.compose.material.icons.outlined.TrendingUp
+import com.ayashii.kuro.data.model.PlaylistBrowseDetails
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -160,6 +165,7 @@ private fun resolveEffectiveLayout(section: HomeSection, index: Int): HomeSectio
 @Composable
 fun HomeScreen(
     viewModel: MusicViewModel,
+    onOpenSearchTab: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val homeSections by viewModel.homeSections.collectAsState()
@@ -260,8 +266,17 @@ fun HomeScreen(
             HomeTopBar(
                 currentAccount = currentAccount,
                 onRecentsClick = { showRecentsDialog = true },
+                onSearchClick = onOpenSearchTab,
                 onProfileClick = { showProfileMenu = true }
             )
+
+            val visibleMoodChips = remember(selectedGenre, genreChips) {
+                if (selectedGenre == "Semua") {
+                    genreChips.filter { it.first != "Semua" }
+                } else {
+                    genreChips
+                }
+            }
 
             LazyRow(
                 state = genreRowState,
@@ -271,19 +286,26 @@ fun HomeScreen(
                     .fillMaxWidth()
                     .nestedScroll(shelfNestedScroll)
             ) {
-                items(genreChips, key = { it.first }) { (genreKey, genreLabel) ->
-                    val isSelected = selectedGenre == genreKey
+                items(visibleMoodChips, key = { it.first }) { (genreKey, genreLabel) ->
+                    val isResetChip = genreKey == "Semua"
+                    val isSelected = !isResetChip && selectedGenre == genreKey
+                    val chipBg = when {
+                        isSelected -> colors.accent
+                        colors.isDark -> PureWhite.copy(alpha = 0.10f)
+                        else -> colors.card.copy(alpha = 0.9f)
+                    }
+                    val chipBorder = when {
+                        isSelected -> colors.accent
+                        colors.isDark -> PureWhite.copy(alpha = 0.14f)
+                        else -> colors.border.copy(alpha = 0.6f)
+                    }
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .background(if (isSelected) colors.accent else colors.card.copy(alpha = 0.85f))
-                            .border(
-                                1.dp,
-                                if (isSelected) colors.accent else colors.border.copy(alpha = 0.6f),
-                                RoundedCornerShape(8.dp)
-                            )
+                            .background(chipBg)
+                            .border(1.dp, chipBorder, RoundedCornerShape(8.dp))
                             .clickable {
-                                if (genreKey == "Semua" || isSelected) {
+                                if (isResetChip || isSelected) {
                                     if (selectedGenre != "Semua") {
                                         selectedGenre = "Semua"
                                         if (homeSections.isEmpty() && trendingTracks.isEmpty()) {
@@ -295,18 +317,27 @@ fun HomeScreen(
                                     viewModel.loadGenreTracks(genreKey)
                                 }
                             }
-                            .padding(horizontal = 14.dp, vertical = 7.dp),
+                            .padding(horizontal = if (isResetChip) 10.dp else 14.dp, vertical = 7.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = genreLabel,
-                            style = Typography.labelMedium.copy(
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                            ),
-                            color = if (isSelected) colors.background else colors.textPrimary,
-                            maxLines = 1,
-                            softWrap = false
-                        )
+                        if (isResetChip) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = genreLabel,
+                                tint = colors.textPrimary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        } else {
+                            Text(
+                                text = genreLabel,
+                                style = Typography.labelMedium.copy(
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                ),
+                                color = if (isSelected) colors.background else colors.textPrimary,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
                     }
                 }
             }
@@ -654,21 +685,51 @@ private fun HomeShelvesColumn(
             }
 
             item(key = "sec_header_${idx}_${section.title}") {
+                val playableSongs = section.tracks.filter { !it.isCollection && !it.isArtistProfile }
                 if (layoutType == HomeSectionType.SIMILAR_TO) {
                     SimilarToSectionHeader(
                         title = section.title,
                         subtitle = section.subtitle.ifBlank { "SIMILAR TO" },
-                        avatarUrl = section.headerAvatarUrl ?: section.tracks.firstOrNull()?.thumbnailUrlForDisplay(160)
+                        avatarUrl = section.headerAvatarUrl ?: section.tracks.firstOrNull()?.thumbnailUrlForDisplay(160),
+                        onClick = {
+                            section.tracks.firstOrNull()?.let { first ->
+                                onItemTap(first, section.tracks)
+                            }
+                        }
+                    )
+                } else if (layoutType == HomeSectionType.SPEED_DIAL) {
+                    SpeedDialSectionHeader(
+                        title = section.title,
+                        strapline = section.subtitle.ifBlank { "FOR YOU" },
+                        avatarUrl = section.headerAvatarUrl ?: section.tracks.firstOrNull()?.thumbnailUrlForDisplay(160),
+                        onClick = {
+                            if (playableSongs.isNotEmpty()) {
+                                onPlayImmediately(playableSongs.first(), playableSongs)
+                            } else {
+                                section.tracks.firstOrNull()?.let { first ->
+                                    onItemTap(first, section.tracks)
+                                }
+                            }
+                        }
                     )
                 } else {
-                    val hasPlayableSongs = section.tracks.any { !it.isCollection && !it.isArtistProfile }
+                    val isSongShelf = layoutType == HomeSectionType.COMPACT_COLUMNS || playableSongs.size == section.tracks.size
+                    val actionLabel = if (isSongShelf && playableSongs.isNotEmpty()) {
+                        stringResource(R.string.home_play_all)
+                    } else if (section.tracks.isNotEmpty()) {
+                        "More"
+                    } else null
                     HomeSectionHeader(
                         title = section.title,
                         strapline = strapline,
-                        actionText = if (hasPlayableSongs) stringResource(R.string.home_play_all) else null,
+                        actionText = actionLabel,
                         onActionClick = {
-                            section.tracks.firstOrNull()?.let { first ->
-                                onPlayImmediately(first, section.tracks)
+                            if (isSongShelf && playableSongs.isNotEmpty()) {
+                                onPlayImmediately(playableSongs.first(), playableSongs)
+                            } else {
+                                section.tracks.firstOrNull()?.let { first ->
+                                    onItemTap(first, section.tracks)
+                                }
                             }
                         }
                     )
@@ -692,7 +753,7 @@ private fun HomeShelvesColumn(
                         ) {
                             items(cols.size, key = { c -> "col_${idx}_$c" }) { colIdx ->
                                 val colTracks = cols[colIdx]
-                                Column(modifier = Modifier.width(316.dp)) {
+                                Column(modifier = Modifier.width(300.dp)) {
                                     colTracks.forEach { track ->
                                         HomeCompactTrackRow(
                                             track = track,
@@ -716,25 +777,59 @@ private fun HomeShelvesColumn(
                         val pages = section.tracks.chunked(9)
                         val rowState = rememberLazyListState()
                         val snapFling = rememberSnapFlingBehavior(lazyListState = rowState)
-                        LazyRow(
-                            state = rowState,
-                            flingBehavior = snapFling,
-                            contentPadding = PaddingValues(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .nestedScroll(shelfNestedScroll)
-                        ) {
-                            items(pages.size, key = { p -> "sd_${idx}_$p" }) { pIdx ->
-                                SpeedDialGridPage(
-                                    tracks = pages[pIdx],
-                                    currentTrackId = currentTrackId,
-                                    onTrackClick = { t -> onItemTap(t, section.tracks) },
-                                    onLongClick = { t ->
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        onMoreClick(t)
+                        val activePageIdx by remember {
+                            derivedStateOf { rowState.firstVisibleItemIndex.coerceIn(0, (pages.size - 1).coerceAtLeast(0)) }
+                        }
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            LazyRow(
+                                state = rowState,
+                                flingBehavior = snapFling,
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .nestedScroll(shelfNestedScroll)
+                            ) {
+                                items(pages.size, key = { p -> "sd_${idx}_$p" }) { pIdx ->
+                                    SpeedDialGridPage(
+                                        tracks = pages[pIdx],
+                                        currentTrackId = currentTrackId,
+                                        isFirstPage = pIdx == 0,
+                                        onTrackClick = { t -> onItemTap(t, section.tracks) },
+                                        onLongClick = { t ->
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            onMoreClick(t)
+                                        }
+                                    )
+                                }
+                            }
+                            if (pages.size > 1) {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    val colors = KuroAppTheme.colors
+                                    pages.indices.forEach { dotIdx ->
+                                        val isCurrentDot = dotIdx == activePageIdx
+                                        val dotWidth by animateDpAsState(
+                                            targetValue = if (isCurrentDot) 16.dp else 6.dp,
+                                            animationSpec = tween(200),
+                                            label = "sd_dot_w_$dotIdx"
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .padding(horizontal = 3.dp)
+                                                .width(dotWidth)
+                                                .height(6.dp)
+                                                .clip(CircleShape)
+                                                .background(
+                                                    if (isCurrentDot) colors.textPrimary else colors.textMuted.copy(alpha = 0.35f)
+                                                )
+                                        )
                                     }
-                                )
+                                }
                             }
                         }
                     }
@@ -897,36 +992,95 @@ private fun HomeMonochromeSkeleton() {
     }
 }
 
+@Composable
+private fun SpeedDialSectionHeader(
+    title: String,
+    strapline: String,
+    avatarUrl: String?,
+    onClick: () -> Unit
+) {
+    val colors = KuroAppTheme.colors
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(start = 16.dp, end = 16.dp, top = 18.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (!avatarUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = avatarUrl,
+                contentDescription = title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .border(1.dp, colors.border.copy(alpha = 0.5f), CircleShape)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            if (strapline.isNotBlank()) {
+                Text(
+                    text = strapline.uppercase(),
+                    style = Typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 0.8.sp),
+                    color = colors.textMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = title,
+                    style = Typography.headlineSmall.copy(fontSize = 22.sp, fontWeight = FontWeight.ExtraBold),
+                    color = colors.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowRight,
+                    contentDescription = "Open Speed Dial",
+                    tint = colors.textMuted,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SpeedDialGridPage(
     tracks: List<Track>,
     currentTrackId: String?,
+    isFirstPage: Boolean = false,
     onTrackClick: (Track) -> Unit,
     onLongClick: (Track) -> Unit
 ) {
     val colors = KuroAppTheme.colors
     val rows = tracks.chunked(3)
     Column(
-        modifier = Modifier.width(324.dp),
+        modifier = Modifier.width(328.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        rows.forEach { rowItems ->
+        rows.forEachIndexed { rIdx, rowItems ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                rowItems.forEach { track ->
+                rowItems.forEachIndexed { cIdx, track ->
                     val isPlaying = currentTrackId == track.id
+                    val isHighlighted = isPlaying || (isFirstPage && rIdx == 0 && cIdx == 0 && currentTrackId == null)
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .height(102.dp)
+                            .height(106.dp)
                             .clip(RoundedCornerShape(10.dp))
                             .background(colors.card)
                             .border(
-                                1.dp,
-                                if (isPlaying) colors.accent else colors.border.copy(alpha = 0.35f),
+                                if (isHighlighted) 1.6.dp else 1.dp,
+                                if (isHighlighted) colors.accent else colors.border.copy(alpha = 0.35f),
                                 RoundedCornerShape(10.dp)
                             )
                             .combinedClickable(
@@ -974,12 +1128,14 @@ private fun SpeedDialGridPage(
 private fun SimilarToSectionHeader(
     title: String,
     subtitle: String,
-    avatarUrl: String?
+    avatarUrl: String?,
+    onClick: () -> Unit = {}
 ) {
     val colors = KuroAppTheme.colors
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable { onClick() }
             .padding(start = 16.dp, end = 16.dp, top = 22.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1135,6 +1291,7 @@ private fun HomeExploreQuickRow(
 private fun HomeTopBar(
     currentAccount: UserAccount?,
     onRecentsClick: () -> Unit,
+    onSearchClick: () -> Unit = {},
     onProfileClick: () -> Unit
 ) {
     val colors = KuroAppTheme.colors
@@ -1166,11 +1323,23 @@ private fun HomeTopBar(
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(
                 onClick = onRecentsClick,
-                modifier = Modifier.size(38.dp)
+                modifier = Modifier.size(36.dp)
             ) {
                 Icon(
                     imageVector = Icons.Outlined.History,
                     contentDescription = "History",
+                    tint = colors.textPrimary,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(2.dp))
+            IconButton(
+                onClick = onSearchClick,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = "Search",
                     tint = colors.textPrimary,
                     modifier = Modifier.size(22.dp)
                 )
@@ -1281,6 +1450,32 @@ fun YtmMusicCard(
                     )
                 }
             } else if (track.isCollection && onPlayBadgeClick != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                0.55f to Color.Transparent,
+                                1.0f to PureBlack.copy(alpha = 0.55f)
+                            )
+                        )
+                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(8.dp)
+                        .size(20.dp)
+                        .clip(CircleShape)
+                        .background(PureBlack.copy(alpha = 0.65f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_notification),
+                        contentDescription = null,
+                        tint = PureWhite,
+                        modifier = Modifier.size(13.dp)
+                    )
+                }
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomEnd)

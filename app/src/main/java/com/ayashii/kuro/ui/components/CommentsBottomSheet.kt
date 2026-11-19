@@ -1,5 +1,6 @@
 package com.ayashii.kuro.ui.components
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,7 +29,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material3.CircularProgressIndicator
@@ -43,6 +46,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -51,6 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -72,6 +77,7 @@ fun CommentsBottomSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val colors = KuroAppTheme.colors
+    val context = LocalContext.current
     val commentsResult by viewModel.trackComments.collectAsState()
     val isLoading by viewModel.isLoadingComments.collectAsState()
     val isPosting by viewModel.isPostingComment.collectAsState()
@@ -79,9 +85,11 @@ fun CommentsBottomSheet(
     val keyboardController = LocalSoftwareKeyboardController.current
 
     var commentDraft by remember { mutableStateOf("") }
+    var statusBanner by remember { mutableStateOf<String?>(null) }
+    val likedCommentIds = remember(track.id) { mutableStateListOf<String>() }
 
     LaunchedEffect(track.id) {
-        viewModel.loadCommentsForCurrentTrack(track.id)
+        viewModel.loadCommentsForCurrentTrack(track.id, force = false)
     }
 
     ModalBottomSheet(
@@ -129,20 +137,61 @@ fun CommentsBottomSheet(
                         )
                     }
                 }
-                IconButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.size(34.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Close",
-                        tint = colors.textMuted,
-                        modifier = Modifier.size(20.dp)
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = { viewModel.loadCommentsForCurrentTrack(track.id, force = true) },
+                        modifier = Modifier.size(34.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Refresh Comments",
+                            tint = colors.textMuted,
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(34.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = colors.textMuted,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
 
             HorizontalDivider(color = colors.border.copy(alpha = 0.5f))
+
+            if (!statusBanner.isNullOrBlank()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(colors.card)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = statusBanner!!,
+                        style = Typography.bodySmall,
+                        color = colors.textPrimary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = "Dismiss",
+                        style = Typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = colors.accent,
+                        modifier = Modifier
+                            .clickable { statusBanner = null }
+                            .padding(start = 8.dp)
+                    )
+                }
+                HorizontalDivider(color = colors.border.copy(alpha = 0.4f))
+            }
 
             Box(
                 modifier = Modifier
@@ -151,7 +200,9 @@ fun CommentsBottomSheet(
             ) {
                 if (isLoading && commentsResult.comments.isEmpty()) {
                     Box(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 56.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 56.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator(
@@ -179,6 +230,20 @@ fun CommentsBottomSheet(
                             style = Typography.bodyMedium,
                             color = colors.textMuted
                         )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+                                .clickable { viewModel.loadCommentsForCurrentTrack(track.id, force = true) }
+                                .padding(horizontal = 16.dp, vertical = 7.dp)
+                        ) {
+                            Text(
+                                text = "Retry",
+                                style = Typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                color = colors.textPrimary
+                            )
+                        }
                     }
                 } else {
                     LazyColumn(
@@ -187,6 +252,7 @@ fun CommentsBottomSheet(
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         items(commentsResult.comments, key = { it.id }) { comment ->
+                            val isLikedLocal = comment.id in likedCommentIds
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.Top
@@ -253,38 +319,46 @@ fun CommentsBottomSheet(
                                         color = colors.textPrimary
                                     )
 
-                                    if (comment.likeCountText.isNotBlank() || comment.isHearted) {
-                                        Spacer(modifier = Modifier.height(6.dp))
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
                                         Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                        ) {
-                                            if (comment.likeCountText.isNotBlank()) {
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Outlined.ThumbUp,
-                                                        contentDescription = null,
-                                                        tint = colors.textMuted,
-                                                        modifier = Modifier.size(13.dp)
-                                                    )
-                                                    Text(
-                                                        text = comment.likeCountText,
-                                                        style = Typography.labelSmall.copy(fontSize = 11.sp),
-                                                        color = colors.textMuted
-                                                    )
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .clickable {
+                                                    if (isLikedLocal) {
+                                                        likedCommentIds.remove(comment.id)
+                                                    } else {
+                                                        likedCommentIds.add(comment.id)
+                                                    }
                                                 }
-                                            }
-                                            if (comment.isHearted) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Favorite,
-                                                    contentDescription = "Liked by artist",
-                                                    tint = colors.textPrimary,
-                                                    modifier = Modifier.size(13.dp)
+                                                .padding(vertical = 2.dp, horizontal = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (isLikedLocal) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp,
+                                                contentDescription = "Like comment",
+                                                tint = if (isLikedLocal) colors.textPrimary else colors.textMuted,
+                                                modifier = Modifier.size(13.dp)
+                                            )
+                                            if (comment.likeCountText.isNotBlank() || isLikedLocal) {
+                                                Text(
+                                                    text = if (isLikedLocal && comment.likeCountText.isBlank()) "1" else comment.likeCountText,
+                                                    style = Typography.labelSmall.copy(fontSize = 11.sp),
+                                                    color = if (isLikedLocal) colors.textPrimary else colors.textMuted
                                                 )
                                             }
+                                        }
+                                        if (comment.isHearted) {
+                                            Icon(
+                                                imageVector = Icons.Default.Favorite,
+                                                contentDescription = "Liked by artist",
+                                                tint = colors.textPrimary,
+                                                modifier = Modifier.size(13.dp)
+                                            )
                                         }
                                     }
                                 }
@@ -313,6 +387,24 @@ fun CommentsBottomSheet(
                             .padding(vertical = 6.dp)
                     )
                 } else {
+                    val submitCommentAction = {
+                        if (commentDraft.isNotBlank() && !isPosting) {
+                            keyboardController?.hide()
+                            val toSend = commentDraft
+                            statusBanner = null
+                            viewModel.postCommentOnCurrentTrack(toSend) { ok ->
+                                if (ok) {
+                                    commentDraft = ""
+                                    statusBanner = "Comment posted to YouTube."
+                                    Toast.makeText(context, "Comment posted", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    statusBanner = "Could not post comment (comments may be restricted on this official audio track)."
+                                    Toast.makeText(context, "Could not post comment on this track", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    }
+
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -342,17 +434,7 @@ fun CommentsBottomSheet(
                             ),
                             cursorBrush = SolidColor(colors.accent),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                            keyboardActions = KeyboardActions(
-                                onSend = {
-                                    if (commentDraft.isNotBlank() && !isPosting) {
-                                        keyboardController?.hide()
-                                        val toSend = commentDraft
-                                        viewModel.postCommentOnCurrentTrack(toSend) { ok ->
-                                            if (ok) commentDraft = ""
-                                        }
-                                    }
-                                }
-                            ),
+                            keyboardActions = KeyboardActions(onSend = { submitCommentAction() }),
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -365,11 +447,7 @@ fun CommentsBottomSheet(
                             .clip(CircleShape)
                             .background(if (commentDraft.isNotBlank()) colors.accent else colors.card)
                             .clickable(enabled = commentDraft.isNotBlank() && !isPosting) {
-                                keyboardController?.hide()
-                                val toSend = commentDraft
-                                viewModel.postCommentOnCurrentTrack(toSend) { ok ->
-                                    if (ok) commentDraft = ""
-                                }
+                                submitCommentAction()
                             },
                         contentAlignment = Alignment.Center
                     ) {

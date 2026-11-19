@@ -346,7 +346,10 @@ fun MainAppScreen(viewModel: MusicViewModel, onPageChanged: (Int) -> Unit = {}) 
                             .pagerMotionBlurTransition(pageOffsetProvider = pageOffsetProvider)
                     ) {
                         when (page) {
-                            0 -> HomeScreen(viewModel = viewModel)
+                            0 -> HomeScreen(
+                                viewModel = viewModel,
+                                onOpenSearchTab = { navigateToPage(1) }
+                            )
                             1 -> SearchScreen(
                                 viewModel = viewModel,
                                 pageOffsetProvider = pageOffsetProvider
@@ -474,6 +477,7 @@ fun MiniPlayerContainer(
         onSkipNextClick = { viewModel.skipNext() },
         onSkipPreviousClick = { viewModel.skipPrevious() },
         onFavoriteClick = { viewModel.toggleFavorite(track) },
+        onAudioOutputClick = { viewModel.openAudioOutputSettings() },
         onSwipeDown = {
             if (isPlaying) {
                 viewModel.togglePlayPause()

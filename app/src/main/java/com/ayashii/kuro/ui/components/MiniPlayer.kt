@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.Speaker
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -73,6 +74,7 @@ fun MiniPlayer(
     onSkipNextClick: () -> Unit,
     onSkipPreviousClick: (() -> Unit)? = null,
     onFavoriteClick: (() -> Unit)? = null,
+    onAudioOutputClick: (() -> Unit)? = null,
     onSwipeDown: (() -> Unit)? = null,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -262,35 +264,23 @@ fun MiniPlayer(
                 }
             }
 
-            if (onFavoriteClick != null) {
-                IconButton(
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            IconButton(
+                onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    if (onAudioOutputClick != null) {
+                        onAudioOutputClick()
+                    } else if (onFavoriteClick != null) {
                         onFavoriteClick()
-                    },
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    val favColor by animateColorAsState(
-                        targetValue = if (track.isFavorite) colors.textPrimary else colors.textMuted,
-                        animationSpec = tween(180),
-                        label = "mini_fav_tint"
-                    )
-                    AnimatedContent(
-                        targetState = track.isFavorite,
-                        transitionSpec = {
-                            (scaleIn(initialScale = 0.6f, animationSpec = KuroMotion.appleSnappySpring()) + fadeIn(tween(140)))
-                                .togetherWith(scaleOut(targetScale = 0.6f, animationSpec = tween(110)) + fadeOut(tween(110)))
-                        },
-                        label = "mini_fav_icon"
-                    ) { isFav ->
-                        Icon(
-                            imageVector = if (isFav) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                            contentDescription = "Favorite",
-                            tint = favColor,
-                            modifier = Modifier.size(19.dp)
-                        )
                     }
-                }
+                },
+                modifier = Modifier.size(38.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Speaker,
+                    contentDescription = "Cast / Audio Output",
+                    tint = colors.textMuted,
+                    modifier = Modifier.size(20.dp)
+                )
             }
 
             if (isLoading) {
@@ -316,18 +306,6 @@ fun MiniPlayer(
                         modifier = Modifier.size(24.dp)
                     )
                 }
-            }
-
-            IconButton(
-                onClick = onSkipNextClick,
-                modifier = Modifier.size(38.dp)
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_kuro_fast_forward),
-                    contentDescription = "Next",
-                    tint = colors.textPrimary,
-                    modifier = Modifier.size(22.dp)
-                )
             }
         }
 

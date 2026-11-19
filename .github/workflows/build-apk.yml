@@ -109,18 +109,18 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.9.6 — YouTube Music Redesign & Playback Fixes
+          ## Kuro v3.9.7 — YTM 2026 UI, Dynamic Home & Fixes
 
-          - **YTM-Style Redesign**:
-            - Reworked Home, Search, and the full player with YouTube Music-style layout, including collection and artist detail sheets.
-          - **Collections & Comments**:
-            - Open playlists, albums, mixes, and artist profiles inline via PlaylistDetailSheet; added a comments sheet to read and post comments from the player.
-          - **Discovery & Metadata**:
-            - Home mood chips, explore shelves, and richer track/section metadata (browseId/playlistId, collection and artist detection).
-          - **Playback Fixes**:
-            - Per-client User-Agent selection for stream requests, faster buffer tuning, and cookies restricted to playlist browse calls to avoid 403/Sabr throttling.
-          - **Navigation**:
-            - Back handling now respects open collection sheets.
+          - **YTM 2026 UI**:
+            - Dynamic Home and Search layouts with refreshed player, mini player, and sheet styling.
+          - **Comments**:
+            - Modern comment parsing via framework updates/entity payloads with legacy fallback; wider comment sheet with avatars and likes, plus posting fixes.
+          - **Search & Radio**:
+            - Native song/video parsing, official-shelf prioritization, and forced radio refresh.
+          - **Controls**:
+            - Audio output shortcut in the mini player, open-collection/artist action in track options, and queue dismiss-on-tap.
+          - **Fixes**:
+            - Restored the missing fillMaxSize import and general stability/performance tuning.
           - Published signed release, per-ABI, and debug APKs.
           EOF
           gh release delete "$RELEASE_TAG" --yes --cleanup-tag 2>/dev/null || true
@@ -129,7 +129,7 @@ jobs:
             "${{ steps.apk.outputs.arm64_path }}" \
             "${{ steps.apk.outputs.arm32_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (YouTube Music Redesign & Playback Fixes)" \
+            --title "Kuro $RELEASE_TAG (YTM 2026 UI, Dynamic Home & Fixes)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 

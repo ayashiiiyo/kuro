@@ -162,7 +162,7 @@ fun QueueBottomSheet(
                             QueueItemRow(
                                 track = nowPlaying,
                                 isCurrent = true,
-                                onClick = {}
+                                onClick = { onDismiss() }
                             )
                             Spacer(modifier = Modifier.height(14.dp))
                         }

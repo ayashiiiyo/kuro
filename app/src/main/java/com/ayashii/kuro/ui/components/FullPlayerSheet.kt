@@ -52,6 +52,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
@@ -189,6 +191,10 @@ fun FullPlayerSheet(
         isDraggingSheet = false
         isDismissingSheet = false
         pullUpLyricsY = 0f
+    }
+
+    LaunchedEffect(track.id) {
+        viewModel.loadCommentsForCurrentTrack(track.id, force = false)
     }
 
     LaunchedEffect(showHeartBurst) {
@@ -406,32 +412,39 @@ fun FullPlayerSheet(
 
                         Row(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(colors.card.copy(alpha = 0.85f))
-                                .border(1.dp, colors.border.copy(alpha = 0.55f), RoundedCornerShape(20.dp))
+                                .clip(RoundedCornerShape(22.dp))
+                                .background(colors.card.copy(alpha = 0.92f))
+                                .border(1.dp, colors.border.copy(alpha = 0.5f), RoundedCornerShape(22.dp))
                                 .padding(3.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            val tabs = listOf("Song", "Lyrics")
-                            tabs.forEachIndexed { idx, label ->
+                            val switchIcons = listOf(
+                                Icons.Outlined.Headphones to "Song",
+                                Icons.Outlined.Lyrics to "Lyrics"
+                            )
+                            switchIcons.forEachIndexed { idx, (iconVec, desc) ->
                                 val active = topSwitchMode == idx
+                                val pillBg by animateColorAsState(
+                                    targetValue = if (active) colors.textPrimary.copy(alpha = 0.16f) else Color.Transparent,
+                                    animationSpec = tween(180),
+                                    label = "top_switch_bg_$idx"
+                                )
                                 Box(
                                     modifier = Modifier
-                                        .clip(RoundedCornerShape(17.dp))
-                                        .background(if (active) colors.surface else Color.Transparent)
+                                        .clip(RoundedCornerShape(18.dp))
+                                        .background(pillBg)
                                         .clickable {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                             topSwitchMode = idx
                                         }
-                                        .padding(horizontal = 18.dp, vertical = 6.dp),
+                                        .padding(horizontal = 18.dp, vertical = 7.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text(
-                                        text = label,
-                                        style = Typography.labelMedium.copy(
-                                            fontSize = 13.sp,
-                                            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium
-                                        ),
-                                        color = if (active) colors.textPrimary else colors.textMuted
+                                    Icon(
+                                        imageVector = iconVec,
+                                        contentDescription = desc,
+                                        tint = if (active) colors.textPrimary else colors.textMuted,
+                                        modifier = Modifier.size(18.dp)
                                     )
                                 }
                             }
@@ -589,103 +602,77 @@ fun FullPlayerSheet(
                     )
                 }
 
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 24.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(horizontal = 24.dp)
+                        .clickable { showRelatedSheet = true }
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable { showRelatedSheet = true }
-                    ) {
-                        AnimatedContent(
-                            targetState = track,
-                            contentKey = { it.id },
-                            transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(160)) },
-                            label = "full_player_title"
-                        ) { animatedTrack ->
-                            Column {
+                    AnimatedContent(
+                        targetState = track,
+                        contentKey = { it.id },
+                        transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(160)) },
+                        label = "full_player_title"
+                    ) { animatedTrack ->
+                        Column {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
                                 Text(
                                     text = animatedTrack.title,
                                     style = Typography.headlineMedium.copy(
-                                        fontSize = 22.sp,
+                                        fontSize = 23.sp,
                                         fontWeight = FontWeight.ExtraBold
                                     ),
                                     color = colors.textPrimary,
                                     maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f, fill = false)
                                 )
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = animatedTrack.artist,
-                                    style = Typography.titleMedium.copy(
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Medium
-                                    ),
-                                    color = colors.textMuted,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    imageVector = Icons.Default.KeyboardArrowRight,
+                                    contentDescription = "Related Info",
+                                    tint = colors.textMuted,
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
-                        }
-                    }
-
-                    IconButton(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            onFavoriteClick()
-                        },
-                        modifier = Modifier.size(42.dp)
-                    ) {
-                        val favTint by animateColorAsState(
-                            targetValue = if (track.isFavorite) colors.textPrimary else colors.textMuted,
-                            animationSpec = tween(durationMillis = 200),
-                            label = "player_fav_tint"
-                        )
-                        AnimatedContent(
-                            targetState = track.isFavorite,
-                            transitionSpec = {
-                                (scaleIn(
-                                    initialScale = 0.55f,
-                                    animationSpec = KuroMotion.appleSnappySpring()
-                                ) + fadeIn(tween(150)))
-                                    .togetherWith(
-                                        scaleOut(
-                                            targetScale = 0.55f,
-                                            animationSpec = tween(120)
-                                        ) + fadeOut(tween(120))
-                                    )
-                            },
-                            label = "player_fav_icon_morph"
-                        ) { isFav ->
-                            Icon(
-                                imageVector = if (isFav) Icons.Default.CheckCircle else Icons.Outlined.AddCircleOutline,
-                                contentDescription = "Save / Favorite",
-                                tint = favTint,
-                                modifier = Modifier.size(26.dp)
+                            Spacer(modifier = Modifier.height(3.dp))
+                            Text(
+                                text = animatedTrack.artist,
+                                style = Typography.titleMedium.copy(
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium
+                                ),
+                                color = colors.textMuted,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
-                /* Authentic YouTube Music Action Pill Carousel */
+                /* Authentic YouTube Music 2026 Action Pill Carousel */
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 24.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     item(key = "pill_like_dislike") {
+                        val favTint by animateColorAsState(
+                            targetValue = if (track.isFavorite) colors.textPrimary else colors.textSecondary,
+                            animationSpec = tween(durationMillis = 200),
+                            label = "player_fav_tint"
+                        )
                         Row(
                             modifier = Modifier
                                 .height(36.dp)
                                 .clip(RoundedCornerShape(18.dp))
-                                .background(colors.card.copy(alpha = 0.9f))
-                                .border(1.dp, colors.border.copy(alpha = 0.6f), RoundedCornerShape(18.dp)),
+                                .background(colors.card.copy(alpha = 0.92f))
+                                .border(1.dp, colors.border.copy(alpha = 0.55f), RoundedCornerShape(18.dp)),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(
@@ -697,12 +684,29 @@ fun FullPlayerSheet(
                                     .padding(horizontal = 14.dp, vertical = 7.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    imageVector = if (track.isFavorite) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp,
-                                    contentDescription = "Like",
-                                    tint = colors.textPrimary,
-                                    modifier = Modifier.size(16.dp)
-                                )
+                                AnimatedContent(
+                                    targetState = track.isFavorite,
+                                    transitionSpec = {
+                                        (scaleIn(
+                                            initialScale = 0.55f,
+                                            animationSpec = KuroMotion.appleSnappySpring()
+                                        ) + fadeIn(tween(150)))
+                                            .togetherWith(
+                                                scaleOut(
+                                                    targetScale = 0.55f,
+                                                    animationSpec = tween(120)
+                                                ) + fadeOut(tween(120))
+                                            )
+                                    },
+                                    label = "player_fav_icon_morph"
+                                ) { isFav ->
+                                    Icon(
+                                        imageVector = if (isFav) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp,
+                                        contentDescription = "Like",
+                                        tint = favTint,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = if (track.isFavorite) "Liked" else "Like",
@@ -735,10 +739,25 @@ fun FullPlayerSheet(
                         }
                     }
 
+                    item(key = "pill_lyrics") {
+                        YtmActionPill(
+                            icon = Icons.Outlined.Lyrics,
+                            label = stringResource(R.string.player_lyrics),
+                            isActive = showFullScreenLyrics || topSwitchMode == 1,
+                            onClick = { showFullScreenLyrics = true }
+                        )
+                    }
+
                     item(key = "pill_comments") {
+                        val cCount = viewModel.trackComments.collectAsState().value.commentCountText
+                        val cLabel = if (cCount.isNotBlank() && !cCount.equals("Comments", ignoreCase = true)) {
+                            cCount
+                        } else {
+                            "Comments"
+                        }
                         YtmActionPill(
                             icon = Icons.Outlined.ChatBubbleOutline,
-                            label = "Comments",
+                            label = cLabel,
                             onClick = { showCommentsSheet = true }
                         )
                     }
@@ -748,15 +767,6 @@ fun FullPlayerSheet(
                             icon = Icons.Outlined.PlaylistAdd,
                             label = stringResource(R.string.player_save),
                             onClick = { showAddToPlaylist = true }
-                        )
-                    }
-
-                    item(key = "pill_lyrics") {
-                        YtmActionPill(
-                            icon = Icons.Outlined.Lyrics,
-                            label = stringResource(R.string.player_lyrics),
-                            isActive = showFullScreenLyrics || topSwitchMode == 1,
-                            onClick = { showFullScreenLyrics = true }
                         )
                     }
 
@@ -914,74 +924,95 @@ fun FullPlayerSheet(
                 Spacer(modifier = Modifier.height(14.dp))
             }
 
-            /* Authentic YouTube Music Bottom Sheet Drawer: UP NEXT | LYRICS | RELATED */
+            /* Authentic YouTube Music 2026 Split-View Up Next / Mix Bottom Handle Drawer */
+            val queueTracks by viewModel.queueState.collectAsState()
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
+                    .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
                     .background(colors.surface)
                     .border(
                         1.dp,
-                        colors.border.copy(alpha = 0.55f),
-                        RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)
+                        colors.border.copy(alpha = 0.5f),
+                        RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
                     )
-                    .padding(top = 8.dp, bottom = 10.dp),
+                    .clickable { showQueueSheet = true }
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures { change, dragAmount ->
+                            if (dragAmount < -14f) {
+                                change.consume()
+                                showQueueSheet = true
+                            }
+                        }
+                    }
+                    .padding(top = 8.dp, bottom = 12.dp, start = 20.dp, end = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Box(
                     modifier = Modifier
-                        .width(34.dp)
+                        .width(36.dp)
                         .height(4.dp)
                         .clip(CircleShape)
-                        .background(colors.textMuted.copy(alpha = 0.4f))
+                        .background(colors.textMuted.copy(alpha = 0.45f))
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "UP NEXT",
-                        style = Typography.labelMedium.copy(
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.9.sp
-                        ),
-                        color = colors.textPrimary,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { showQueueSheet = true }
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
-                    Text(
-                        text = "LYRICS",
-                        style = Typography.labelMedium.copy(
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.9.sp
-                        ),
-                        color = if (hasLyricsAvailable) colors.textPrimary else colors.textMuted,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { showFullScreenLyrics = true }
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
-                    Text(
-                        text = "RELATED",
-                        style = Typography.labelMedium.copy(
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.9.sp
-                        ),
-                        color = colors.textPrimary,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { showRelatedSheet = true }
-                            .padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "${track.title} Mix",
+                            style = Typography.titleSmall.copy(
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = colors.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "Up Next • ${queueTracks.size.coerceAtLeast(1)} songs",
+                            style = Typography.labelSmall.copy(fontSize = 11.sp),
+                            color = colors.textMuted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(colors.card)
+                                .border(1.dp, colors.border.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                                .clickable { showRelatedSheet = true }
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "Related",
+                                style = Typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = colors.textPrimary
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(colors.card)
+                                .border(1.dp, colors.border.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                                .clickable { showQueueSheet = true }
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "Queue",
+                                style = Typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = colors.textPrimary
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -1406,22 +1437,38 @@ fun PlayerScrubber(
 
     val colors = KuroAppTheme.colors
 
+    val barHeight by animateDpAsState(
+        targetValue = if (isDragging) 11.dp else 6.5.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "ytm2026_scrubber_height"
+    )
+
     Column(modifier = modifier.fillMaxWidth()) {
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 10.dp)
-                    .height(5.dp)
-                    .clip(RoundedCornerShape(2.5.dp))
-                    .background(colors.border.copy(alpha = 0.45f))
+                    .padding(horizontal = 8.dp)
+                    .height(barHeight)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(colors.border.copy(alpha = 0.42f))
             ) {
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth(bufferedProgress)
-                        .height(5.dp)
-                        .clip(RoundedCornerShape(2.5.dp))
-                        .background(colors.textSecondary.copy(alpha = 0.45f))
+                        .fillMaxWidth(bufferedProgress.coerceIn(0f, 1f))
+                        .height(barHeight)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(colors.textSecondary.copy(alpha = 0.35f))
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(displayProgress.coerceIn(0f, 1f))
+                        .height(barHeight)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(colors.textPrimary)
                 )
             }
             Slider(
@@ -1435,8 +1482,8 @@ fun PlayerScrubber(
                     isDragging = false
                 },
                 colors = SliderDefaults.colors(
-                    thumbColor = colors.textPrimary,
-                    activeTrackColor = colors.textPrimary,
+                    thumbColor = if (isDragging) colors.textPrimary else Color.Transparent,
+                    activeTrackColor = Color.Transparent,
                     inactiveTrackColor = Color.Transparent
                 ),
                 modifier = Modifier.fillMaxWidth()

@@ -259,105 +259,129 @@ fun PlaylistDetailSheet(
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                            horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(colors.card)
+                                    .border(1.dp, colors.border, CircleShape)
+                                    .clickable(enabled = details.tracks.isNotEmpty()) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        isBatchDownloading = true
+                                        details.tracks.take(25).forEach { t ->
+                                            viewModel.downloadTrack(t)
+                                        }
+                                    },
+                                contentAlignment = Alignment.Center
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(44.dp)
-                                        .clip(CircleShape)
-                                        .background(colors.card)
-                                        .border(1.dp, colors.border, CircleShape)
-                                        .clickable(enabled = details.tracks.isNotEmpty()) {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            isBatchDownloading = true
-                                            details.tracks.take(25).forEach { t ->
-                                                viewModel.downloadTrack(t)
-                                            }
-                                        },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = if (isBatchDownloading) Icons.Default.Check else Icons.Outlined.Download,
-                                        contentDescription = "Download Mix",
-                                        tint = colors.textPrimary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-
-                                Box(
-                                    modifier = Modifier
-                                        .size(44.dp)
-                                        .clip(CircleShape)
-                                        .background(if (isSavedToLibrary) colors.accent else colors.card)
-                                        .border(1.dp, colors.border, CircleShape)
-                                        .clickable(enabled = details.tracks.isNotEmpty() && !isSavedToLibrary) {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                            viewModel.saveBrowseDetailsAsPlaylist(details)
-                                            isSavedToLibrary = true
-                                        },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = if (isSavedToLibrary) Icons.Default.Check else Icons.Outlined.LibraryAdd,
-                                        contentDescription = "Save to Library",
-                                        tint = if (isSavedToLibrary) colors.background else colors.textPrimary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-
-                                Box(
-                                    modifier = Modifier
-                                        .size(44.dp)
-                                        .clip(CircleShape)
-                                        .background(colors.card)
-                                        .border(1.dp, colors.border, CircleShape)
-                                        .clickable(enabled = details.tracks.isNotEmpty()) {
-                                            if (details.tracks.isNotEmpty()) {
-                                                val shuffled = details.tracks.shuffled()
-                                                viewModel.playTrack(shuffled.first(), shuffled)
-                                            }
-                                        },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Shuffle,
-                                        contentDescription = "Shuffle",
-                                        tint = colors.textPrimary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
+                                Icon(
+                                    imageVector = if (isBatchDownloading) Icons.Default.Check else Icons.Outlined.Download,
+                                    contentDescription = "Download Mix",
+                                    tint = colors.textPrimary,
+                                    modifier = Modifier.size(20.dp)
+                                )
                             }
 
-                            Row(
+                            Box(
                                 modifier = Modifier
-                                    .height(46.dp)
-                                    .clip(RoundedCornerShape(23.dp))
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isSavedToLibrary) colors.accent else colors.card)
+                                    .border(1.dp, colors.border, CircleShape)
+                                    .clickable(enabled = details.tracks.isNotEmpty() && !isSavedToLibrary) {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        viewModel.saveBrowseDetailsAsPlaylist(details)
+                                        isSavedToLibrary = true
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (isSavedToLibrary) Icons.Default.Check else Icons.Outlined.LibraryAdd,
+                                    contentDescription = "Save to Library",
+                                    tint = if (isSavedToLibrary) colors.background else colors.textPrimary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .clip(CircleShape)
                                     .background(colors.accent)
                                     .clickable(enabled = details.tracks.isNotEmpty()) {
                                         if (details.tracks.isNotEmpty()) {
-                                            viewModel.playTrack(details.tracks.first(), details.tracks)
+                                            val playable = details.tracks.filter { !it.isCollection && !it.isArtistProfile }
+                                            val listToPlay = playable.ifEmpty { details.tracks }
+                                            viewModel.playTrack(listToPlay.first(), listToPlay)
                                         }
-                                    }
-                                    .padding(horizontal = 24.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
+                                    },
+                                contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.PlayArrow,
                                     contentDescription = "Play",
                                     tint = colors.background,
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(34.dp)
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Play",
-                                    style = Typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = colors.background
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(colors.card)
+                                    .border(1.dp, colors.border, CircleShape)
+                                    .clickable(enabled = details.tracks.isNotEmpty()) {
+                                        val playable = details.tracks.filter { !it.isCollection && !it.isArtistProfile }
+                                        val listToShuffle = playable.ifEmpty { details.tracks }
+                                        if (listToShuffle.isNotEmpty()) {
+                                            val shuffled = listToShuffle.shuffled()
+                                            viewModel.playTrack(shuffled.first(), shuffled)
+                                        }
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Shuffle,
+                                    contentDescription = "Shuffle",
+                                    tint = colors.textPrimary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(CircleShape)
+                                    .background(colors.card)
+                                    .border(1.dp, colors.border, CircleShape)
+                                    .clickable {
+                                        val shareId = details.playlistId ?: details.browseId?.removePrefix("VL")
+                                        val shareUrl = if (!shareId.isNullOrBlank()) {
+                                            "https://music.youtube.com/playlist?list=$shareId"
+                                        } else {
+                                            details.tracks.firstOrNull()?.url.orEmpty()
+                                        }
+                                        if (shareUrl.isNotBlank()) {
+                                            runCatching {
+                                                val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                                    putExtra(Intent.EXTRA_TEXT, "${details.title} - $shareUrl")
+                                                    type = "text/plain"
+                                                }
+                                                context.startActivity(Intent.createChooser(sendIntent, details.title))
+                                            }
+                                        }
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Share,
+                                    contentDescription = "Share",
+                                    tint = colors.textPrimary,
+                                    modifier = Modifier.size(19.dp)
                                 )
                             }
                         }

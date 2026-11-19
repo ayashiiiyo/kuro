@@ -329,6 +329,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private var lyricsJob: Job? = null
     private var searchJob: Job? = null
     private var genreJob: Job? = null
+    private var commentsJob: Job? = null
+    private var lastCommentsVideoId: String? = null
     private var hasPendingServicePlay = false
     private var lastLyricsLoadedForId: String? = null
 
@@ -786,33 +788,263 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     private var homeRefreshCycle = 0
 
-    private fun personalizeHomeShelves(shelves: List<HomeSection>, rotateTop: Boolean): List<HomeSection> {
-        if (shelves.isEmpty()) return shelves
-        val affinityArtists = (_favorites.value + recentlyPlayed.value)
-            .map { it.artist.substringBefore("•").substringBefore(",").trim().lowercase() }
-            .filter { it.length >= 2 && it != "unknown artist" }
-            .groupingBy { it }
-            .eachCount()
+    private fun <T> rotateListBy(items: List<T>, offset: Int): List<T> {
+        if (items.size <= 1) return items
+        val shift = ((offset % items.size) + items.size) % items.size
+        if (shift == 0) return items
+        return items.drop(shift) + items.take(shift)
+    }
 
-        val deduped = shelves.distinctBy { it.title.trim().lowercase() }
-        val personalized = if (affinityArtists.isEmpty()) {
-            deduped
+    private fun selectRotatingHomeSeed(fallbackPool: List<Track>): Track? {
+        val candidates = ArrayList<Track>()
+        val seen = HashSet<String>()
+        for (t in (recentlyPlayed.value.take(10) + _favorites.value.take(12) + fallbackPool.take(12))) {
+            if (!t.isCollection && !t.isArtistProfile && t.id.isNotBlank() && seen.add(t.id)) {
+                candidates.add(t)
+            }
+        }
+        if (candidates.isEmpty()) return null
+        return candidates[homeRefreshCycle % candidates.size]
+    }
+
+    private fun personalizeHomeShelves(
+        shelves: List<HomeSection>,
+        rotateTop: Boolean,
+        freshQuickPickTracks: List<Track> = emptyList(),
+        seedTrack: Track? = null
+    ): List<HomeSection> {
+        if (shelves.isEmpty() && freshQuickPickTracks.isEmpty()) return shelves
+        if (rotateTop) {
+            homeRefreshCycle = (homeRefreshCycle + 1) % 1024
+        }
+        val cycle = homeRefreshCycle
+        val recents = recentlyPlayed.value
+        val favs = _favorites.value
+        val activeNow = _currentTrack.value
+
+        val dedupedServer = shelves.distinctBy { it.title.trim().lowercase() }
+        val allServerSongs = dedupedServer.flatMap { it.tracks }
+            .filter { !it.isCollection && !it.isArtistProfile && it.id.isNotBlank() }
+            .distinctBy { it.id }
+        val allServerCollections = dedupedServer.flatMap { it.tracks }
+            .filter { (it.isCollection || it.isArtistProfile) && it.id.isNotBlank() }
+            .distinctBy { it.id }
+
+        /* 1. Dynamic Speed Dial (3x3 Multi-Page Grid, up to 27 items / 3 pages) */
+        val serverSpeedDial = dedupedServer.firstOrNull {
+            it.layoutType == com.ayashii.kuro.data.model.HomeSectionType.SPEED_DIAL ||
+                "speed dial" in it.title.lowercase()
+        }
+        val anchorSpeedItems = ArrayList<Track>()
+        val speedSeen = HashSet<String>()
+        if (activeNow != null && activeNow.id.isNotBlank() && speedSeen.add(activeNow.id)) {
+            anchorSpeedItems.add(activeNow)
+        }
+        for (r in recents.take(3)) {
+            if (r.id.isNotBlank() && speedSeen.add(r.id)) {
+                anchorSpeedItems.add(r)
+            }
+        }
+        val rotatingSpeedPool = ArrayList<Track>()
+        val rawSpeedCandidates = (serverSpeedDial?.tracks.orEmpty()) +
+            recents.drop(3) +
+            favs +
+            allServerCollections.take(9) +
+            allServerSongs.take(18)
+        for (item in rawSpeedCandidates) {
+            if (item.id.isNotBlank() && speedSeen.add(item.id)) {
+                rotatingSpeedPool.add(item)
+            }
+        }
+        val rotatedSpeedTail = rotateListBy(rotatingSpeedPool, cycle * 3)
+        val finalSpeedDialTracks = (anchorSpeedItems + rotatedSpeedTail).take(27)
+        val speedDialSection = if (finalSpeedDialTracks.size >= 6) {
+            val accountName = authState.value?.name?.takeIf { it.isNotBlank() }
+            HomeSection(
+                title = serverSpeedDial?.title ?: "Speed dial",
+                subtitle = serverSpeedDial?.subtitle?.takeIf { it.isNotBlank() }
+                    ?: accountName?.uppercase().orEmpty(),
+                tracks = finalSpeedDialTracks,
+                layoutType = com.ayashii.kuro.data.model.HomeSectionType.SPEED_DIAL,
+                headerAvatarUrl = authState.value?.avatarUrl?.takeIf { it.isNotBlank() }
+            )
+        } else null
+
+        /* 2. Dynamic Quick Picks (Re-seeded via Automix Radio + Rotated Server Songs) */
+        val serverQuickPicks = dedupedServer.firstOrNull {
+            "quick picks" in it.title.lowercase() ||
+                "pilihan cepat" in it.title.lowercase() ||
+                it.layoutType == com.ayashii.kuro.data.model.HomeSectionType.COMPACT_COLUMNS
+        }
+        val rotatedServerQp = rotateListBy(
+            serverQuickPicks?.tracks?.filter { !it.isCollection && !it.isArtistProfile }.orEmpty(),
+            cycle * 4
+        )
+        val mergedQuickPicks = ArrayList<Track>()
+        val qpSeen = HashSet<String>()
+        val interleavedQp = ArrayList<Track>()
+        val maxQpLen = maxOf(freshQuickPickTracks.size, rotatedServerQp.size)
+        for (i in 0 until maxQpLen) {
+            if (i < freshQuickPickTracks.size) interleavedQp.add(freshQuickPickTracks[i])
+            if (i < rotatedServerQp.size) interleavedQp.add(rotatedServerQp[i])
+        }
+        for (t in (interleavedQp + rotateListBy(allServerSongs, cycle * 5))) {
+            if (t.id.isNotBlank() && qpSeen.add(t.id)) {
+                mergedQuickPicks.add(t)
+                if (mergedQuickPicks.size >= 20) break
+            }
+        }
+        val qpStrapline = if (seedTrack != null && (cycle % 2 == 1 || freshQuickPickTracks.isNotEmpty())) {
+            "START RADIO BASED ON ${seedTrack.title.uppercase()}"
         } else {
-            val head = deduped.take(2)
-            val tail = deduped.drop(2).sortedByDescending { sec ->
-                sec.tracks.sumOf { t ->
-                    val a = t.artist.substringBefore("•").substringBefore(",").trim().lowercase()
-                    affinityArtists[a] ?: 0
+            "START RADIO FROM A SONG"
+        }
+        val quickPicksSection = if (mergedQuickPicks.isNotEmpty()) {
+            HomeSection(
+                title = serverQuickPicks?.title ?: "Quick picks",
+                subtitle = qpStrapline,
+                tracks = mergedQuickPicks,
+                layoutType = com.ayashii.kuro.data.model.HomeSectionType.COMPACT_COLUMNS
+            )
+        } else null
+
+        /* 3. Dynamic Listen Again Shelf */
+        val serverListenAgain = dedupedServer.firstOrNull {
+            "listen again" in it.title.lowercase() || "dengarkan lagi" in it.title.lowercase()
+        }
+        val listenAgainPool = (rotateListBy(recents, cycle * 2) +
+            serverListenAgain?.tracks.orEmpty() +
+            rotateListBy(favs, cycle * 3))
+            .distinctBy { it.id }
+            .take(14)
+        val listenAgainSection = if (listenAgainPool.size >= 4) {
+            HomeSection(
+                title = serverListenAgain?.title ?: "Listen again",
+                subtitle = serverListenAgain?.subtitle?.takeIf { it.isNotBlank() } ?: "FROM YOUR RECENT SESSIONS",
+                tracks = listenAgainPool,
+                layoutType = com.ayashii.kuro.data.model.HomeSectionType.SQUARE_CAROUSEL
+            )
+        } else null
+
+        /* 4. Dynamic Forgotten Favorites Shelf */
+        val recentTopIds = recents.take(3).mapTo(HashSet()) { it.id }
+        val serverForgotten = dedupedServer.firstOrNull {
+            "forgotten" in it.title.lowercase()
+        }
+        val forgottenPool = (rotateListBy(favs.filterNot { it.id in recentTopIds }, cycle * 3) +
+            rotateListBy(recents.drop(4), cycle * 2) +
+            serverForgotten?.tracks.orEmpty())
+            .distinctBy { it.id }
+            .take(12)
+        val forgottenSection = if (forgottenPool.size >= 4) {
+            HomeSection(
+                title = serverForgotten?.title ?: "Forgotten favorites",
+                subtitle = "REDISCOVER YOUR SOUND",
+                tracks = forgottenPool,
+                layoutType = com.ayashii.kuro.data.model.HomeSectionType.WIDE_CARDS
+            )
+        } else null
+
+        /* 5. Dynamic Similar To [Artist] Shelf */
+        val artistSourceTracks = (recents + favs + allServerSongs)
+            .filter {
+                val clean = it.artist.substringBefore("•").substringBefore(",").trim()
+                clean.length >= 2 && !clean.equals("Unknown Artist", ignoreCase = true)
+            }
+        val distinctArtists = artistSourceTracks
+            .groupBy { it.artist.substringBefore("•").substringBefore(",").trim() }
+            .entries
+            .filter { it.key.isNotBlank() }
+            .toList()
+        val dynamicSimilarSection = if (distinctArtists.isNotEmpty()) {
+            val chosenEntry = distinctArtists[cycle % distinctArtists.size]
+            val artistName = chosenEntry.key
+            val artistTracks = chosenEntry.value
+            val avatarThumb = artistTracks.firstOrNull { it.thumbnailUrl.isNotBlank() }?.thumbnailUrl
+            val relatedForArtist = (artistTracks +
+                freshQuickPickTracks.filter { it.artist.contains(artistName, ignoreCase = true) } +
+                rotateListBy(freshQuickPickTracks.ifEmpty { allServerSongs }, cycle * 3))
+                .distinctBy { it.id }
+                .take(12)
+            if (relatedForArtist.size >= 4) {
+                HomeSection(
+                    title = artistName,
+                    subtitle = "SIMILAR TO",
+                    tracks = relatedForArtist,
+                    layoutType = com.ayashii.kuro.data.model.HomeSectionType.SIMILAR_TO,
+                    headerAvatarUrl = avatarThumb
+                )
+            } else null
+        } else null
+
+        /* 6. Dynamic Time-of-Day Vibe Shelf */
+        val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+        val (timeTitle, timeSub) = when (hour) {
+            in 5..11 -> "Morning energize" to "FRESH START FOR TODAY"
+            in 12..16 -> "Afternoon focus" to "MIDDAY FLOW"
+            in 17..21 -> "Evening feel good" to "UNWIND & VIBE"
+            else -> "Late night chill" to "AFTER HOURS SESSIONS"
+        }
+        val timeTracks = rotateListBy(
+            (allServerSongs + freshQuickPickTracks + favs).distinctBy { it.id },
+            cycle * 7 + 3
+        ).take(12)
+        val timeSection = if (timeTracks.size >= 5) {
+            HomeSection(
+                title = timeTitle,
+                subtitle = timeSub,
+                tracks = timeTracks,
+                layoutType = com.ayashii.kuro.data.model.HomeSectionType.SQUARE_CAROUSEL
+            )
+        } else null
+
+        /* 7. Remaining Server Shelves (Rotated & Internal Tracks Shifted on Refresh) */
+        val consumedTitles = setOfNotNull(
+            serverSpeedDial?.title?.lowercase(),
+            serverQuickPicks?.title?.lowercase(),
+            serverListenAgain?.title?.lowercase(),
+            serverForgotten?.title?.lowercase()
+        )
+        val remainingServerShelves = dedupedServer
+            .filterNot { it.title.trim().lowercase() in consumedTitles }
+            .mapIndexed { idx, sec ->
+                if (rotateTop && sec.tracks.size > 3) {
+                    sec.copy(tracks = rotateListBy(sec.tracks, cycle * 2 + idx + 1))
+                } else {
+                    sec
                 }
             }
-            head + tail
+        val rotatedServerTail = if (rotateTop && remainingServerShelves.size > 2) {
+            rotateListBy(remainingServerShelves, cycle)
+        } else {
+            remainingServerShelves
         }
 
-        if (!rotateTop || personalized.size <= 2) return personalized
-        homeRefreshCycle = (homeRefreshCycle + 1) % minOf(personalized.size, 4)
-        if (homeRefreshCycle == 0) return personalized
-        val promoted = personalized[homeRefreshCycle]
-        return listOf(promoted) + personalized.filterIndexed { index, _ -> index != homeRefreshCycle }
+        /* 8. Assemble Dynamic Living Feed (Alternates Top Anchor & Mid-Feed Rotation) */
+        val assembled = ArrayList<HomeSection>()
+        if (cycle % 2 == 0) {
+            if (speedDialSection != null) assembled.add(speedDialSection)
+            if (quickPicksSection != null) assembled.add(quickPicksSection)
+        } else {
+            if (quickPicksSection != null) assembled.add(quickPicksSection)
+            if (speedDialSection != null) assembled.add(speedDialSection)
+        }
+
+        val midDynamicPool = listOfNotNull(
+            listenAgainSection,
+            dynamicSimilarSection,
+            timeSection,
+            forgottenSection
+        )
+        val rotatedMidDynamic = rotateListBy(midDynamicPool, cycle)
+
+        val maxLen = maxOf(rotatedMidDynamic.size, rotatedServerTail.size)
+        for (i in 0 until maxLen) {
+            if (i < rotatedMidDynamic.size) assembled.add(rotatedMidDynamic[i])
+            if (i < rotatedServerTail.size) assembled.add(rotatedServerTail[i])
+        }
+
+        return assembled.distinctBy { "${it.layoutType}_${it.title.trim().lowercase()}" }
     }
 
     fun refreshHome() {
@@ -821,8 +1053,21 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             _isRefreshingHome.value = true
             try {
                 val ytmShelves = repository.getHomeShelves(forceRefresh = true)
-                if (ytmShelves.isNotEmpty()) {
-                    val personalized = ytmShelves.distinctBy { it.title.trim().lowercase() }
+                val baseSongs = ytmShelves.flatMap { it.tracks }
+                val seed = selectRotatingHomeSeed(baseSongs)
+                val tuners = listOf("AUTOMIX_SETTING_NORMAL", "AUTOMIX_SETTING_DISCOVER", "AUTOMIX_SETTING_FAMILIAR")
+                val tuner = tuners[(homeRefreshCycle + 1) % tuners.size]
+                val freshRadio = if (seed != null) {
+                    repository.getRadioTracks(seed.id, tunerSetting = tuner, forceRefresh = true)
+                } else emptyList()
+
+                if (ytmShelves.isNotEmpty() || freshRadio.isNotEmpty()) {
+                    val personalized = personalizeHomeShelves(
+                        shelves = ytmShelves,
+                        rotateTop = true,
+                        freshQuickPickTracks = freshRadio,
+                        seedTrack = seed
+                    )
                     _homeSections.value = personalized
                     _trendingTracks.value = personalized.flatMap { it.tracks }.distinctBy { it.id }
                 } else {
@@ -839,15 +1084,44 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isLoadingTrending.value = true
             val ytmShelves = repository.getHomeShelves()
-            val personalized = ytmShelves.distinctBy { it.title.trim().lowercase() }
-            _homeSections.value = personalized
-            val tracks = if (personalized.isNotEmpty()) {
-                personalized.flatMap { it.tracks }.distinctBy { it.id }
+            val baseSongs = ytmShelves.flatMap { it.tracks }
+            val seed = selectRotatingHomeSeed(baseSongs)
+            val initialPersonalized = personalizeHomeShelves(
+                shelves = ytmShelves,
+                rotateTop = true,
+                freshQuickPickTracks = emptyList(),
+                seedTrack = seed
+            )
+            _homeSections.value = initialPersonalized
+            val tracks = if (initialPersonalized.isNotEmpty()) {
+                initialPersonalized.flatMap { it.tracks }.distinctBy { it.id }
             } else {
                 repository.getTrendingTracks()
             }
             _trendingTracks.value = tracks
             _isLoadingTrending.value = false
+
+            if (seed != null) {
+                launch(Dispatchers.IO) {
+                    try {
+                        val tuners = listOf("AUTOMIX_SETTING_NORMAL", "AUTOMIX_SETTING_DISCOVER", "AUTOMIX_SETTING_FAMILIAR")
+                        val freshRadio = repository.getRadioTracks(
+                            seed.id,
+                            tunerSetting = tuners[homeRefreshCycle % tuners.size],
+                            forceRefresh = false
+                        )
+                        if (freshRadio.isNotEmpty()) {
+                            val enriched = personalizeHomeShelves(
+                                shelves = ytmShelves,
+                                rotateTop = false,
+                                freshQuickPickTracks = freshRadio,
+                                seedTrack = seed
+                            )
+                            _homeSections.value = enriched
+                        }
+                    } catch (_: Exception) {}
+                }
+            }
 
             launch(Dispatchers.IO) {
                 delay(2000)
@@ -1021,16 +1295,37 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         details.tracks.forEach { trk ->
             playlistManager.addTrackToPlaylist(newPl.id, trk)
         }
+        val remoteTarget = details.playlistId ?: details.browseId
+        if (!remoteTarget.isNullOrBlank()) {
+            viewModelScope.launch(Dispatchers.IO) {
+                repository.saveRemotePlaylistToLibrary(remoteTarget, isSaved = true)
+            }
+        }
     }
 
-    fun loadCommentsForCurrentTrack(videoId: String) {
+    fun loadCommentsForCurrentTrack(videoId: String, force: Boolean = false) {
         if (videoId.isBlank()) return
-        viewModelScope.launch {
+        if (!force && lastCommentsVideoId == videoId && _trackComments.value.comments.isNotEmpty()) {
+            return
+        }
+        commentsJob?.cancel()
+        if (lastCommentsVideoId != videoId) {
+            lastCommentsVideoId = videoId
+            _trackComments.value = CommentsResult()
+        }
+        commentsJob = viewModelScope.launch {
             _isLoadingComments.value = true
             try {
-                _trackComments.value = repository.getTrackComments(videoId)
+                val fetched = repository.getTrackComments(videoId)
+                if (lastCommentsVideoId == videoId) {
+                    if (fetched.comments.isNotEmpty() || _trackComments.value.comments.isEmpty()) {
+                        _trackComments.value = fetched
+                    }
+                }
             } finally {
-                _isLoadingComments.value = false
+                if (lastCommentsVideoId == videoId) {
+                    _isLoadingComments.value = false
+                }
             }
         }
     }
@@ -1083,6 +1378,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isLoadingTrack.value = true
             val tracks = repository.getPlaylistOrBrowseTracks(item.browseId, item.playlistId)
+                .filter { !it.isCollection && !it.isArtistProfile }
             if (tracks.isNotEmpty()) {
                 playTrack(tracks.first(), tracks)
             } else {
@@ -1325,7 +1621,16 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             if (snapshot != null) {
                 _restoredPage.value = snapshot.lastPage
                 if (_homeSections.value.isEmpty() && snapshot.homeSections.isNotEmpty()) {
-                    _homeSections.value = snapshot.homeSections
+                    val rotatedSnapshot = personalizeHomeShelves(
+                        shelves = snapshot.homeSections,
+                        rotateTop = true
+                    )
+                    _homeSections.value = rotatedSnapshot
+                } else if (_homeSections.value.isNotEmpty()) {
+                    _homeSections.value = personalizeHomeShelves(
+                        shelves = _homeSections.value,
+                        rotateTop = true
+                    )
                 }
                 if (_trendingTracks.value.isEmpty() && snapshot.trendingTracks.isNotEmpty()) {
                     _trendingTracks.value = snapshot.trendingTracks
@@ -1337,7 +1642,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             val needsRefresh = snapshot == null ||
-                (System.currentTimeMillis() - snapshot.savedAtMs) > 2 * 60 * 1000L
+                (System.currentTimeMillis() - snapshot.savedAtMs) > 45 * 1000L
             if (needsRefresh || _homeSections.value.isEmpty()) {
                 loadTrending()
             }

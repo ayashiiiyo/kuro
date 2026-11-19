@@ -1,6 +1,23 @@
 package com.ayashii.kuro.ui.screens
 
 import androidx.activity.compose.BackHandler
+import android.app.Activity
+import android.content.Intent
+import android.speech.RecognizerIntent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Mood
+import androidx.compose.material.icons.outlined.NewReleases
+import androidx.compose.material.icons.outlined.Radio
+import androidx.compose.material.icons.outlined.TrendingUp
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.lerp
+import com.ayashii.kuro.ui.theme.PureBlack
+import com.ayashii.kuro.ui.theme.PureWhite
+import com.ayashii.kuro.ui.theme.rememberDynamicDominantColor
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -149,6 +166,31 @@ fun SearchScreen(
     val haptic = LocalHapticFeedback.current
     val focusRequester = remember { FocusRequester() }
     val colors = KuroAppTheme.colors
+    val voiceLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val spoken = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()?.trim()
+            if (!spoken.isNullOrBlank()) {
+                searchQuery = spoken
+                isSearchActive = true
+                focusManager.clearFocus()
+                keyboardController?.hide()
+                viewModel.searchWithFilter(spoken, selectedFilterChip)
+            }
+        }
+    }
+    val launchVoiceSearch: () -> Unit = {
+        runCatching {
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak song, artist, or lyrics")
+            }
+            voiceLauncher.launch(intent)
+        }.onFailure {
+            isSearchActive = true
+        }
+    }
     val focusedTextColor = colors.textPrimary
     val unfocusedTextColor = colors.textPrimary
 
@@ -217,63 +259,27 @@ fun SearchScreen(
                 modifier = Modifier.cascadeSection(stage = 0, pageOffsetProvider = pageOffsetProvider)
             ) { activeHeader ->
                 if (!activeHeader) {
-                    Column {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp, bottom = 4.dp)
+                    ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            AccountTopButton(
-                                account = currentAccount,
-                                onClick = { showProfileMenu = true }
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = stringResource(R.string.search_title),
-                                style = Typography.headlineLarge.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold),
-                                color = colors.textPrimary
-                            )
-                            Spacer(modifier = Modifier.weight(1f))
-                            IconButton(
-                                onClick = {
-                                    val pool = (favorites + recentlyPlayed + trendingTracks).distinctBy { it.id }
-                                    if (pool.isNotEmpty()) {
-                                        val shuffled = pool.shuffled()
-                                        viewModel.playTrack(shuffled.first(), shuffled)
-                                    } else {
-                                        isSearchActive = true
-                                    }
-                                },
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .background(colors.card)
-                                    .border(1.dp, colors.border, CircleShape)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Shuffle,
-                                    contentDescription = "Quick Shuffle",
-                                    tint = colors.textPrimary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 4.dp)
+                                .padding(horizontal = 16.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Row(
                                 modifier = Modifier
-                                    .fillMaxWidth()
+                                    .weight(1f)
                                     .height(46.dp)
                                     .clip(CircleShape)
-                                    .background(colors.card)
-                                    .border(1.dp, colors.border, CircleShape)
+                                    .background(if (colors.isDark) PureWhite.copy(alpha = 0.09f) else colors.card)
+                                    .border(1.dp, colors.border.copy(alpha = 0.5f), CircleShape)
                                     .clickable { isSearchActive = true }
-                                    .padding(horizontal = 16.dp),
+                                    .padding(start = 16.dp, end = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
@@ -292,9 +298,26 @@ fun SearchScreen(
                                         fontSize = 15.sp,
                                         lineHeight = 20.sp,
                                         fontWeight = FontWeight.Normal
-                                    )
+                                    ),
+                                    modifier = Modifier.weight(1f)
                                 )
+                                IconButton(
+                                    onClick = launchVoiceSearch,
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Mic,
+                                        contentDescription = "Voice Search",
+                                        tint = colors.textPrimary,
+                                        modifier = Modifier.size(19.dp)
+                                    )
+                                }
                             }
+
+                            AccountTopButton(
+                                account = currentAccount,
+                                onClick = { showProfileMenu = true }
+                            )
                         }
                     }
                 } else {
@@ -401,6 +424,18 @@ fun SearchScreen(
                                             modifier = Modifier.size(18.dp)
                                         )
                                     }
+                                } else {
+                                    IconButton(
+                                        onClick = launchVoiceSearch,
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Mic,
+                                            contentDescription = "Voice Search",
+                                            tint = colors.textPrimary,
+                                            modifier = Modifier.size(19.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -413,22 +448,28 @@ fun SearchScreen(
                             ) {
                                 items(filterChips, key = { it }) { chip ->
                                     val isSelected = selectedFilterChip == chip
+                                    val chipBg = when {
+                                        isSelected -> colors.accent
+                                        colors.isDark -> PureWhite.copy(alpha = 0.10f)
+                                        else -> colors.card
+                                    }
+                                    val chipBorder = when {
+                                        isSelected -> colors.accent
+                                        colors.isDark -> PureWhite.copy(alpha = 0.14f)
+                                        else -> colors.border
+                                    }
                                     Box(
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(8.dp))
-                                            .background(if (isSelected) colors.accent else colors.card)
-                                            .border(
-                                                1.dp,
-                                                if (isSelected) colors.accent else colors.border,
-                                                RoundedCornerShape(8.dp)
-                                            )
+                                            .background(chipBg)
+                                            .border(1.dp, chipBorder, RoundedCornerShape(8.dp))
                                             .clickable {
                                                 selectedFilterChip = chip
                                                 focusManager.clearFocus()
                                                 keyboardController?.hide()
                                                 viewModel.searchWithFilter(searchQuery, chip)
                                             }
-                                            .padding(horizontal = 14.dp, vertical = 6.dp),
+                                            .padding(horizontal = 14.dp, vertical = 7.dp),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
@@ -565,9 +606,36 @@ fun SearchScreen(
                             }
 
                             if (searchResults.isNotEmpty()) {
-                                items(searchResults, key = { it.id }, contentType = { "search_track" }) { track ->
+                                val showTopCard = selectedFilterChip == "All" && suggestions.isEmpty()
+                                val topResult = if (showTopCard) searchResults.firstOrNull() else null
+                                val listResults = if (topResult != null) searchResults.drop(1) else searchResults
+
+                                if (topResult != null) {
+                                    item(key = "top_result_${topResult.id}") {
+                                        YtmTopResultCard(
+                                            track = topResult,
+                                            isPlaying = currentTrack?.id == topResult.id,
+                                            isSaved = topResult.id in favoriteIds,
+                                            onPlayClick = {
+                                                focusManager.clearFocus()
+                                                keyboardController?.hide()
+                                                viewModel.playTrackFromSearch(topResult)
+                                            },
+                                            onRadioOrSaveClick = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                if (topResult.isCollection || topResult.isArtistProfile) {
+                                                    viewModel.openBrowseItemDetails(topResult)
+                                                } else {
+                                                    viewModel.playTrack(topResult, searchResults.filter { !it.isCollection && !it.isArtistProfile })
+                                                }
+                                            },
+                                            onMoreClick = { trackForOptions = topResult }
+                                        )
+                                    }
+                                }
+
+                                items(listResults, key = { it.id }, contentType = { "search_track" }) { track ->
                                     val isCurrent = currentTrack?.id == track.id
-                                    val isSaved = track.id in favoriteIds
                                     val thumbShape = if (track.isArtistProfile) CircleShape else RoundedCornerShape(6.dp)
 
                                     Row(
@@ -591,7 +659,7 @@ fun SearchScreen(
                                             model = track.thumbnailUrlForDisplay(160),
                                             contentDescription = track.title,
                                             modifier = Modifier
-                                                .size(50.dp)
+                                                .size(52.dp)
                                                 .clip(thumbShape)
                                                 .background(colors.card),
                                             contentScale = ContentScale.Crop
@@ -615,7 +683,7 @@ fun SearchScreen(
                                             val subtitleLabel = when {
                                                 track.isArtistProfile -> "Artist • ${track.artist}"
                                                 track.isCollection -> track.artist
-                                                track.durationSeconds > 0 -> "${track.artist} • ${track.formattedDuration}"
+                                                track.durationSeconds > 0 -> "Song • ${track.artist} • ${track.formattedDuration}"
                                                 else -> stringResource(R.string.search_song_subtitle, track.artist)
                                             }
                                             Text(
@@ -630,55 +698,18 @@ fun SearchScreen(
                                             )
                                         }
 
-                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
 
-                                        if (!track.isCollection && !track.isArtistProfile) {
-                                            IconButton(
-                                                onClick = { trackForOptions = track },
-                                                modifier = Modifier.size(36.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.MoreVert,
-                                                    contentDescription = "Options",
-                                                    tint = colors.textMuted,
-                                                    modifier = Modifier.size(20.dp)
-                                                )
-                                            }
-
-                                            Spacer(modifier = Modifier.width(4.dp))
-
-                                            IconButton(
-                                                onClick = {
-                                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                                    if (isSaved) {
-                                                        viewModel.toggleFavorite(track)
-                                                    } else {
-                                                        trackForPlaylist = track
-                                                    }
-                                                },
-                                                modifier = Modifier.size(36.dp)
-                                            ) {
-                                                val saveTint by animateColorAsState(
-                                                    targetValue = if (isSaved) colors.accent else colors.textMuted,
-                                                    animationSpec = tween(180),
-                                                    label = "search_save_tint"
-                                                )
-                                                AnimatedContent(
-                                                    targetState = isSaved,
-                                                    transitionSpec = {
-                                                        (scaleIn(initialScale = 0.6f, animationSpec = KuroMotion.appleSnappySpring()) + fadeIn(tween(140)))
-                                                            .togetherWith(scaleOut(targetScale = 0.6f, animationSpec = tween(110)) + fadeOut(tween(110)))
-                                                    },
-                                                    label = "search_save_icon"
-                                                ) { saved ->
-                                                    Icon(
-                                                        imageVector = if (saved) Icons.Default.CheckCircle else Icons.Outlined.AddCircleOutline,
-                                                        contentDescription = "Save track",
-                                                        tint = saveTint,
-                                                        modifier = Modifier.size(22.dp)
-                                                    )
-                                                }
-                                            }
+                                        IconButton(
+                                            onClick = { trackForOptions = track },
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.MoreVert,
+                                                contentDescription = "Options",
+                                                tint = colors.textMuted,
+                                                modifier = Modifier.size(20.dp)
+                                            )
                                         }
                                     }
                                 }
@@ -895,8 +926,126 @@ fun SearchScreen(
                                 .padding(horizontal = 16.dp),
                             contentPadding = PaddingValues(bottom = 156.dp)
                         ) {
+                            /* YouTube Music 2026 Unified Search + Explore Quick Grid */
                             item {
-                                Spacer(modifier = Modifier.height(10.dp))
+                                Spacer(modifier = Modifier.height(8.dp))
+                                val exploreCards = listOf(
+                                    Triple(Icons.Outlined.NewReleases, "New releases", "New Releases 2026"),
+                                    Triple(Icons.Outlined.TrendingUp, "Charts", "Top Global Charts 2026"),
+                                    Triple(Icons.Outlined.Mood, "Moods & genres", "Moods and Genres Mix"),
+                                    Triple(Icons.Default.Shuffle, "Quick shuffle", "")
+                                )
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .cascadeSection(stage = 1, pageOffsetProvider = pageOffsetProvider)
+                                ) {
+                                    exploreCards.chunked(2).forEach { pair ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            pair.forEach { (icon, label, queryTarget) ->
+                                                Row(
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .clip(RoundedCornerShape(10.dp))
+                                                        .background(if (colors.isDark) PureWhite.copy(alpha = 0.08f) else colors.card)
+                                                        .border(1.dp, colors.border.copy(alpha = 0.45f), RoundedCornerShape(10.dp))
+                                                        .clickable {
+                                                            if (queryTarget.isBlank()) {
+                                                                val pool = (favorites + recentlyPlayed + trendingTracks).distinctBy { it.id }
+                                                                if (pool.isNotEmpty()) {
+                                                                    val shuffled = pool.shuffled()
+                                                                    viewModel.playTrack(shuffled.first(), shuffled)
+                                                                } else {
+                                                                    isSearchActive = true
+                                                                }
+                                                            } else {
+                                                                searchQuery = queryTarget
+                                                                isSearchActive = true
+                                                                focusManager.clearFocus()
+                                                                keyboardController?.hide()
+                                                                viewModel.search(queryTarget)
+                                                            }
+                                                        }
+                                                        .padding(horizontal = 14.dp, vertical = 13.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(
+                                                        imageVector = icon,
+                                                        contentDescription = label,
+                                                        tint = colors.textPrimary,
+                                                        modifier = Modifier.size(19.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(10.dp))
+                                                    Text(
+                                                        text = label,
+                                                        style = Typography.labelLarge.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold),
+                                                        color = colors.textPrimary,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (searchRecents.isNotEmpty()) {
+                                item {
+                                    Spacer(modifier = Modifier.height(18.dp))
+                                    Text(
+                                        text = "Recent searches",
+                                        style = Typography.titleMedium.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold),
+                                        color = colors.textPrimary,
+                                        modifier = Modifier.padding(bottom = 8.dp)
+                                    )
+                                }
+                                items(searchRecents.take(4), key = { "landing_recent_${it.id}" }) { rTrack ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .clickable {
+                                                searchQuery = rTrack.title
+                                                isSearchActive = true
+                                                focusManager.clearFocus()
+                                                keyboardController?.hide()
+                                                viewModel.search(rTrack.title)
+                                            }
+                                            .padding(vertical = 8.dp, horizontal = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.History,
+                                            contentDescription = null,
+                                            tint = colors.textMuted,
+                                            modifier = Modifier.size(19.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(14.dp))
+                                        Text(
+                                            text = rTrack.title,
+                                            style = Typography.bodyMedium.copy(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+                                            color = colors.textPrimary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        Icon(
+                                            imageVector = Icons.Default.NorthWest,
+                                            contentDescription = "Fill query",
+                                            tint = colors.textMuted,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            item {
+                                Spacer(modifier = Modifier.height(18.dp))
                                 Text(
                                     text = "Moods & genres",
                                     style = Typography.titleLarge.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold),
@@ -1099,5 +1248,147 @@ fun SearchScreen(
             viewModel = viewModel,
             onDismiss = { trackForPlaylist = null }
         )
+    }
+}
+
+@Composable
+private fun YtmTopResultCard(
+    track: Track,
+    isPlaying: Boolean,
+    isSaved: Boolean,
+    onPlayClick: () -> Unit,
+    onRadioOrSaveClick: () -> Unit,
+    onMoreClick: () -> Unit
+) {
+    val colors = KuroAppTheme.colors
+    val dominant = rememberDynamicDominantColor(track.thumbnailUrlForDisplay(256), colors.card)
+    val cardGradient = remember(dominant, colors.card, colors.isDark) {
+        val tint = lerp(colors.card, dominant, if (colors.isDark) 0.28f else 0.14f)
+        Brush.verticalGradient(listOf(tint, colors.card))
+    }
+    val thumbShape = if (track.isArtistProfile) CircleShape else RoundedCornerShape(10.dp)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(cardGradient)
+            .border(1.dp, colors.border.copy(alpha = 0.55f), RoundedCornerShape(14.dp))
+            .clickable(onClick = onPlayClick)
+            .padding(14.dp)
+    ) {
+        Text(
+            text = "TOP RESULT",
+            style = Typography.labelSmall.copy(
+                fontSize = 10.sp,
+                letterSpacing = 0.9.sp,
+                fontWeight = FontWeight.Bold
+            ),
+            color = colors.textMuted
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AsyncImage(
+                model = track.thumbnailUrlForDisplay(256),
+                contentDescription = track.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(thumbShape)
+                    .background(colors.surface)
+            )
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = track.title,
+                    style = Typography.titleLarge.copy(fontSize = 19.sp, fontWeight = FontWeight.ExtraBold),
+                    color = if (isPlaying) colors.accent else colors.textPrimary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(3.dp))
+                val typeLabel = when {
+                    track.isArtistProfile -> "Artist • ${track.artist}"
+                    track.isCollection -> track.artist
+                    track.durationSeconds > 0 -> "Song • ${track.artist} • ${track.formattedDuration}"
+                    else -> "Song • ${track.artist}"
+                }
+                Text(
+                    text = typeLabel,
+                    style = Typography.bodySmall.copy(fontSize = 13.sp),
+                    color = colors.textMuted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            IconButton(
+                onClick = onMoreClick,
+                modifier = Modifier.size(34.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = "Options",
+                    tint = colors.textMuted,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(14.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(38.dp)
+                    .clip(RoundedCornerShape(19.dp))
+                    .background(colors.accent)
+                    .clickable(onClick = onPlayClick),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.PlayArrow,
+                    contentDescription = "Play",
+                    tint = colors.background,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (track.isCollection || track.isArtistProfile) "Open" else "Play",
+                    style = Typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                    color = colors.background
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(38.dp)
+                    .clip(RoundedCornerShape(19.dp))
+                    .background(if (colors.isDark) PureWhite.copy(alpha = 0.12f) else colors.surface)
+                    .border(1.dp, colors.border.copy(alpha = 0.5f), RoundedCornerShape(19.dp))
+                    .clickable(onClick = onRadioOrSaveClick),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Radio,
+                    contentDescription = "Radio",
+                    tint = colors.textPrimary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (track.isCollection || track.isArtistProfile) "Browse" else "Radio",
+                    style = Typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                    color = colors.textPrimary
+                )
+            }
+        }
     }
 }

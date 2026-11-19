@@ -479,8 +479,11 @@ class MusicRepository {
 
             val response = client.newCall(reqBuilder.build()).execute()
             val jsonStr = response.use { it.body?.string() } ?: return emptyList()
-            com.ayashii.kuro.data.native.KuroNativeCore.parseYtmSearch(jsonStr)
-                ?: parseYtmSearchTracks(org.json.JSONObject(jsonStr))
+            val canUseNativeSongParser = params == null || params == YTM_PARAMS_SONGS || params == YTM_PARAMS_VIDEOS
+            val nativeParsed = if (canUseNativeSongParser) {
+                com.ayashii.kuro.data.native.KuroNativeCore.parseYtmSearch(jsonStr)
+            } else null
+            nativeParsed ?: parseYtmSearchTracks(org.json.JSONObject(jsonStr))
         } catch (e: Exception) {
             Log.e("MusicRepository", "YTM Search exception: ${e.message}")
             emptyList()
@@ -737,6 +740,9 @@ class MusicRepository {
                     }
                 }
             }
+        }
+        if (forceRefresh && !com.ayashii.kuro.data.auth.AuthManager.getInstance().isLoggedIn()) {
+            cachedVisitorData = null
         }
         val ytmShelves = fetchYouTubeMusicShelves(filterParams = filterParams)
         if (ytmShelves.isNotEmpty()) {
@@ -996,14 +1002,16 @@ class MusicRepository {
         emptyList()
     }
 
-    suspend fun getRadioTracks(videoId: String, tunerSetting: String? = null): List<Track> = withContext(Dispatchers.IO) {
+    suspend fun getRadioTracks(videoId: String, tunerSetting: String? = null, forceRefresh: Boolean = false): List<Track> = withContext(Dispatchers.IO) {
         if (videoId.isBlank()) return@withContext emptyList()
         val cacheKey = if (tunerSetting != null) "${videoId}_$tunerSetting" else videoId
         val now = System.currentTimeMillis()
-        synchronized(radioCache) {
-            radioCache.get(cacheKey)?.let { (cached, time) ->
-                if (now - time < RADIO_CACHE_TTL) {
-                    return@withContext cached
+        if (!forceRefresh) {
+            synchronized(radioCache) {
+                radioCache.get(cacheKey)?.let { (cached, time) ->
+                    if (now - time < RADIO_CACHE_TTL) {
+                        return@withContext cached
+                    }
                 }
             }
         }
@@ -1484,7 +1492,32 @@ class MusicRepository {
                 if (title.isBlank()) return null
 
                 val videoId = extractVideoIdFromResponsiveItem(r, cols)
-                if (videoId.isBlank()) return null
+                var browseId = r.optJSONObject("navigationEndpoint")
+                    ?.optJSONObject("browseEndpoint")
+                    ?.optString("browseId", "")
+                    .orEmpty()
+                if (browseId.isBlank()) {
+                    browseId = col0Runs.optJSONObject(0)
+                        ?.optJSONObject("navigationEndpoint")
+                        ?.optJSONObject("browseEndpoint")
+                        ?.optString("browseId", "")
+                        .orEmpty()
+                }
+                var playlistId = r.optJSONObject("navigationEndpoint")
+                    ?.optJSONObject("watchPlaylistEndpoint")
+                    ?.optString("playlistId", "")
+                    .orEmpty()
+                if (playlistId.isBlank()) {
+                    playlistId = r.optJSONObject("overlay")
+                        ?.optJSONObject("musicItemThumbnailOverlayRenderer")
+                        ?.optJSONObject("content")
+                        ?.optJSONObject("musicPlayButtonRenderer")
+                        ?.optJSONObject("playNavigationEndpoint")
+                        ?.optJSONObject("watchPlaylistEndpoint")
+                        ?.optString("playlistId", "")
+                        .orEmpty()
+                }
+                if (videoId.isBlank() && browseId.isBlank() && playlistId.isBlank()) return null
 
                 val fixedCols = r.optJSONArray("fixedColumns")
                 val (artist, durationSec) = extractArtistAndDuration(cols, fixedCols)
@@ -1497,13 +1530,22 @@ class MusicRepository {
                     thumbUrl = thumbs.optJSONObject(thumbs.length() - 1)?.optString("url", "") ?: ""
                 }
 
+                val effectiveId = videoId.ifBlank { playlistId.ifBlank { browseId } }
+                val effectiveUrl = if (videoId.isNotBlank()) {
+                    "https://www.youtube.com/watch?v=$videoId"
+                } else {
+                    "https://music.youtube.com/playlist?list=${playlistId.ifBlank { browseId }}"
+                }
+
                 return Track(
-                    id = videoId,
-                    url = "https://www.youtube.com/watch?v=$videoId",
+                    id = effectiveId,
+                    url = effectiveUrl,
                     title = cleanTrackTitle(title),
                     artist = artist,
                     thumbnailUrl = upgradeThumbnailUrl(thumbUrl),
-                    durationSeconds = durationSec
+                    durationSeconds = durationSec,
+                    browseId = browseId.takeIf { it.isNotBlank() },
+                    playlistId = playlistId.takeIf { it.isNotBlank() }
                 )
             } else if (it.has("musicTwoRowItemRenderer")) {
                 val r = it.getJSONObject("musicTwoRowItemRenderer")
@@ -2298,9 +2340,196 @@ class MusicRepository {
         }
     }
 
+    private val CREATE_COMMENT_PARAMS_REGEX = Regex("\"createCommentParams\"\\s*:\\s*\"([^\"]+)\"")
+
+    private fun extractCreateCommentParamsDeep(jsonStr: String): String? {
+        if (jsonStr.isBlank()) return null
+        val m = CREATE_COMMENT_PARAMS_REGEX.find(jsonStr)?.groupValues?.getOrNull(1)
+        return m?.takeIf { it.isNotBlank() }
+    }
+
+    private fun extractCommentTokensRecursive(node: Any?, outTokens: MutableList<String>) {
+        when (node) {
+            is org.json.JSONObject -> {
+                val panelId = node.optString("panelIdentifier", "")
+                val secId = node.optString("sectionIdentifier", "")
+                val targetId = node.optString("targetId", "")
+                val isCommentSection = panelId.contains("comment", ignoreCase = true) ||
+                    secId.contains("comment", ignoreCase = true) ||
+                    targetId.contains("comment", ignoreCase = true)
+
+                if (isCommentSection) {
+                    val subStr = node.toString()
+                    val tokenMatches = Regex("\"(?:token|continuation)\"\\s*:\\s*\"([^\"]+)\"").findAll(subStr)
+                    for (tm in tokenMatches) {
+                        val tok = tm.groupValues.getOrNull(1).orEmpty()
+                        if (tok.length >= 16 && tok !in outTokens) {
+                            outTokens.add(tok)
+                        }
+                    }
+                }
+                val keys = node.keys()
+                while (keys.hasNext()) {
+                    val k = keys.next()
+                    extractCommentTokensRecursive(node.opt(k), outTokens)
+                }
+            }
+            is org.json.JSONArray -> {
+                for (i in 0 until node.length()) {
+                    extractCommentTokensRecursive(node.opt(i), outTokens)
+                }
+            }
+        }
+    }
+
+    private fun parseCommentsFromResponseJson(
+        commentsJson: org.json.JSONObject,
+        rawJsonStr: String,
+        commentsList: MutableList<YtmComment>,
+        seenIds: MutableSet<String>
+    ): Pair<String, String?> {
+        var commentCountText = ""
+        var createCommentParams = extractCreateCommentParamsDeep(rawJsonStr)
+
+        val entityMap = HashMap<String, org.json.JSONObject>()
+        val mutations = commentsJson.optJSONObject("frameworkUpdates")
+            ?.optJSONObject("entityBatchUpdate")
+            ?.optJSONArray("mutations")
+        if (mutations != null) {
+            for (m in 0 until mutations.length()) {
+                val payloadObj = mutations.optJSONObject(m)
+                    ?.optJSONObject("payload")
+                    ?.optJSONObject("commentEntityPayload") ?: continue
+                val cid = payloadObj.optJSONObject("properties")?.optString("commentId", "").orEmpty()
+                if (cid.isNotBlank()) {
+                    entityMap[cid] = payloadObj
+                }
+            }
+        }
+
+        fun inspectItemsArray(items: org.json.JSONArray?) {
+            if (items == null) return
+            for (h in 0 until items.length()) {
+                val item = items.optJSONObject(h) ?: continue
+                val headerR = item.optJSONObject("commentsHeaderRenderer")
+                if (headerR != null) {
+                    val cText = extractRunsText(headerR.optJSONObject("countText"))
+                        .ifBlank { extractRunsText(headerR.optJSONObject("commentsCount")) }
+                    if (cText.isNotBlank()) commentCountText = cText
+                    if (createCommentParams.isNullOrBlank()) {
+                        createCommentParams = extractCreateCommentParamsDeep(headerR.toString())
+                    }
+                }
+
+                val thread = item.optJSONObject("commentThreadRenderer") ?: continue
+                val legacyComment = thread.optJSONObject("comment")?.optJSONObject("commentRenderer")
+                if (legacyComment != null) {
+                    val cid = legacyComment.optString("commentId", "c_$h")
+                    val author = extractRunsText(legacyComment.optJSONObject("authorText")).ifBlank { "User" }
+                    val textContent = extractRunsText(legacyComment.optJSONObject("contentText"))
+                    val pubTime = extractRunsText(legacyComment.optJSONObject("publishedTimeText"))
+                    val likes = extractRunsText(legacyComment.optJSONObject("voteCount"))
+                    val thumbs = legacyComment.optJSONObject("authorThumbnail")?.optJSONArray("thumbnails")
+                    val avatar = if (thumbs != null && thumbs.length() > 0) {
+                        thumbs.optJSONObject(thumbs.length() - 1)?.optString("url", "").orEmpty()
+                    } else ""
+                    if (textContent.isNotBlank() && seenIds.add(cid)) {
+                        commentsList.add(
+                            YtmComment(
+                                id = cid,
+                                authorName = author,
+                                authorAvatarUrl = avatar,
+                                publishedTimeText = pubTime,
+                                text = textContent,
+                                likeCountText = likes,
+                                isHearted = legacyComment.has("actionButtons") && legacyComment.toString().contains("creatorHeart")
+                            )
+                        )
+                    }
+                } else {
+                    val outerVm = thread.optJSONObject("commentViewModel")
+                    val vm = outerVm?.optJSONObject("commentViewModel") ?: outerVm
+                    val cid = vm?.optString("commentId", "").orEmpty()
+                    val entity = entityMap[cid]
+                    if (entity != null) {
+                        val props = entity.optJSONObject("properties")
+                        val authorObj = entity.optJSONObject("author")
+                        val toolbar = entity.optJSONObject("toolbar")
+                        val textContent = props?.optJSONObject("content")?.optString("content", "").orEmpty()
+                        val pubTime = props?.optString("publishedTime", "").orEmpty()
+                        val authorName = authorObj?.optString("displayName", "User").orEmpty()
+                        val avatar = authorObj?.optString("avatarThumbnailUrl", "").orEmpty()
+                        val likes = toolbar?.optString("likeCountNotliked", "")
+                            ?.ifBlank { toolbar.optString("likeCountLiked", "") }.orEmpty()
+                        val hearted = !toolbar?.optString("heartActiveTooltip", "").isNullOrBlank()
+                        if (textContent.isNotBlank() && seenIds.add(cid)) {
+                            commentsList.add(
+                                YtmComment(
+                                    id = cid,
+                                    authorName = authorName,
+                                    authorAvatarUrl = avatar,
+                                    publishedTimeText = pubTime,
+                                    text = textContent,
+                                    likeCountText = likes,
+                                    isHearted = hearted
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        val actions = commentsJson.optJSONArray("onResponseReceivedEndpoints")
+            ?: commentsJson.optJSONArray("onResponseReceivedActions")
+        if (actions != null) {
+            for (a in 0 until actions.length()) {
+                val act = actions.optJSONObject(a) ?: continue
+                inspectItemsArray(act.optJSONObject("reloadContinuationItemsCommand")?.optJSONArray("continuationItems"))
+                inspectItemsArray(act.optJSONObject("appendContinuationItemsAction")?.optJSONArray("continuationItems"))
+            }
+        }
+
+        val contItems = commentsJson.optJSONObject("continuationContents")
+            ?.optJSONObject("itemSectionContinuation")
+            ?.optJSONArray("contents")
+        inspectItemsArray(contItems)
+
+        if (commentsList.isEmpty() && entityMap.isNotEmpty()) {
+            for ((cid, entity) in entityMap) {
+                val props = entity.optJSONObject("properties")
+                val authorObj = entity.optJSONObject("author")
+                val toolbar = entity.optJSONObject("toolbar")
+                val textContent = props?.optJSONObject("content")?.optString("content", "").orEmpty()
+                val pubTime = props?.optString("publishedTime", "").orEmpty()
+                val authorName = authorObj?.optString("displayName", "User").orEmpty()
+                val avatar = authorObj?.optString("avatarThumbnailUrl", "").orEmpty()
+                val likes = toolbar?.optString("likeCountNotliked", "")
+                    ?.ifBlank { toolbar.optString("likeCountLiked", "") }.orEmpty()
+                val hearted = !toolbar?.optString("heartActiveTooltip", "").isNullOrBlank()
+                if (textContent.isNotBlank() && seenIds.add(cid)) {
+                    commentsList.add(
+                        YtmComment(
+                            id = cid,
+                            authorName = authorName,
+                            authorAvatarUrl = avatar,
+                            publishedTimeText = pubTime,
+                            text = textContent,
+                            likeCountText = likes,
+                            isHearted = hearted
+                        )
+                    )
+                }
+            }
+        }
+
+        return Pair(commentCountText, createCommentParams)
+    }
+
     suspend fun getTrackComments(videoId: String): CommentsResult = withContext(Dispatchers.IO) {
         if (videoId.isBlank()) return@withContext CommentsResult()
         val commentsList = mutableListOf<YtmComment>()
+        val seenIds = HashSet<String>()
         var commentCountText = ""
         var createCommentParams: String? = null
 
@@ -2308,9 +2537,10 @@ class MusicRepository {
             val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
             val origin = "https://www.youtube.com"
             val (hlCode, glCode) = resolveHlGl()
-            val clientVersion = "2.20260415.01.00"
+            val clientVersion = "2.20250214.01.00"
+            val visitorData = ensureVisitorData()
 
-            fun postWebNext(continuation: String? = null): org.json.JSONObject? {
+            fun postWebNext(continuation: String? = null): Pair<org.json.JSONObject, String>? {
                 val payload = org.json.JSONObject().apply {
                     put("context", org.json.JSONObject().apply {
                         put("client", org.json.JSONObject().apply {
@@ -2318,6 +2548,9 @@ class MusicRepository {
                             put("clientVersion", clientVersion)
                             put("hl", hlCode)
                             put("gl", glCode)
+                            if (!visitorData.isNullOrBlank()) {
+                                put("visitorData", visitorData)
+                            }
                         })
                     })
                     if (continuation != null) {
@@ -2335,18 +2568,24 @@ class MusicRepository {
                     .header("X-Origin", origin)
                     .header("X-YouTube-Client-Name", "1")
                     .header("X-YouTube-Client-Version", clientVersion)
+                if (!visitorData.isNullOrBlank()) {
+                    reqBuilder.header("X-Goog-Visitor-Id", visitorData)
+                }
 
                 auth.applyAuthToRequest(reqBuilder, payload, origin)
                 reqBuilder.post(payload.toString().toRequestBody("application/json".toMediaType()))
                 HttpClientProvider.client.newCall(reqBuilder.build()).execute().use { resp ->
                     if (!resp.isSuccessful) return null
                     val body = resp.body?.string() ?: return null
-                    return org.json.JSONObject(body)
+                    return Pair(org.json.JSONObject(body), body)
                 }
             }
 
-            val initialJson = postWebNext(null)
-            if (initialJson != null) {
+            val initialPair = postWebNext(null)
+            if (initialPair != null) {
+                val (initialJson, initialRaw) = initialPair
+                createCommentParams = extractCreateCommentParamsDeep(initialRaw)
+
                 val panels = initialJson.optJSONArray("engagementPanels")
                 if (panels != null) {
                     for (p in 0 until panels.length()) {
@@ -2366,143 +2605,49 @@ class MusicRepository {
                     }
                 }
 
-                val results = initialJson.optJSONObject("contents")
-                    ?.optJSONObject("twoColumnWatchNextResults")
-                    ?.optJSONObject("results")
-                    ?.optJSONObject("results")
-                    ?.optJSONArray("contents")
+                val candidateTokens = mutableListOf<String>()
+                extractCommentTokensRecursive(initialJson, candidateTokens)
 
-                var commentsToken: String? = null
-                if (results != null) {
-                    for (i in 0 until results.length()) {
-                        val itemSec = results.optJSONObject(i)?.optJSONObject("itemSectionRenderer") ?: continue
-                        val secId = itemSec.optString("sectionIdentifier", "")
-                        if (secId == "comment-item-section" || itemSec.toString().contains("comment")) {
-                            val secContents = itemSec.optJSONArray("contents") ?: continue
-                            for (k in 0 until secContents.length()) {
-                                val token = secContents.optJSONObject(k)
+                for (token in candidateTokens.take(3)) {
+                    val stepPair = postWebNext(token) ?: continue
+                    val (stepJson, stepRaw) = stepPair
+                    val (cCount, cParams) = parseCommentsFromResponseJson(stepJson, stepRaw, commentsList, seenIds)
+                    if (cCount.isNotBlank() && commentCountText.isBlank()) {
+                        commentCountText = cCount
+                    }
+                    if (!cParams.isNullOrBlank() && createCommentParams.isNullOrBlank()) {
+                        createCommentParams = cParams
+                    }
+                    if (commentsList.isNotEmpty() && !createCommentParams.isNullOrBlank()) {
+                        break
+                    }
+                    if (commentsList.isEmpty()) {
+                        val nestedTokens = mutableListOf<String>()
+                        val reloadItems = stepJson.optJSONArray("onResponseReceivedEndpoints")
+                            ?.optJSONObject(0)
+                            ?.optJSONObject("reloadContinuationItemsCommand")
+                            ?.optJSONArray("continuationItems")
+                        if (reloadItems != null) {
+                            for (r in 0 until reloadItems.length()) {
+                                val subTok = reloadItems.optJSONObject(r)
                                     ?.optJSONObject("continuationItemRenderer")
                                     ?.optJSONObject("continuationEndpoint")
                                     ?.optJSONObject("continuationCommand")
                                     ?.optString("token", "")
                                     .orEmpty()
-                                if (token.isNotBlank()) {
-                                    commentsToken = token
-                                    break
-                                }
+                                if (subTok.isNotBlank()) nestedTokens.add(subTok)
                             }
                         }
-                        if (!commentsToken.isNullOrBlank()) break
-                    }
-                }
-
-                if (!commentsToken.isNullOrBlank()) {
-                    val commentsJson = postWebNext(commentsToken)
-                    if (commentsJson != null) {
-                        val entityMap = HashMap<String, org.json.JSONObject>()
-                        val mutations = commentsJson.optJSONObject("frameworkUpdates")
-                            ?.optJSONObject("entityBatchUpdate")
-                            ?.optJSONArray("mutations")
-                        if (mutations != null) {
-                            for (m in 0 until mutations.length()) {
-                                val payloadObj = mutations.optJSONObject(m)
-                                    ?.optJSONObject("payload")
-                                    ?.optJSONObject("commentEntityPayload") ?: continue
-                                val cid = payloadObj.optJSONObject("properties")?.optString("commentId", "").orEmpty()
-                                if (cid.isNotBlank()) {
-                                    entityMap[cid] = payloadObj
-                                }
-                            }
-                        }
-
-                        val actions = commentsJson.optJSONArray("onResponseReceivedEndpoints")
-                        if (actions != null) {
-                            for (a in 0 until actions.length()) {
-                                val act = actions.optJSONObject(a) ?: continue
-                                val headerItems = act.optJSONObject("reloadContinuationItemsCommand")
-                                    ?.optJSONArray("continuationItems")
-                                    ?: act.optJSONObject("appendContinuationItemsAction")
-                                        ?.optJSONArray("continuationItems")
-                                    ?: continue
-
-                                for (h in 0 until headerItems.length()) {
-                                    val item = headerItems.optJSONObject(h) ?: continue
-                                    val headerR = item.optJSONObject("commentsHeaderRenderer")
-                                    if (headerR != null) {
-                                        val cText = extractRunsText(headerR.optJSONObject("countText"))
-                                        if (cText.isNotBlank()) commentCountText = cText
-                                        val createBox = headerR.optJSONObject("createRenderer")
-                                            ?.optJSONObject("commentSimpleboxRenderer")
-                                        val params = createBox?.optJSONObject("submitButton")
-                                            ?.optJSONObject("buttonRenderer")
-                                            ?.optJSONObject("serviceEndpoint")
-                                            ?.optJSONObject("createCommentEndpoint")
-                                            ?.optString("createCommentParams", "")
-                                            .orEmpty()
-                                        if (params.isNotBlank()) {
-                                            createCommentParams = params
-                                        }
-                                    }
-
-                                    val thread = item.optJSONObject("commentThreadRenderer") ?: continue
-                                    val legacyComment = thread.optJSONObject("comment")?.optJSONObject("commentRenderer")
-                                    if (legacyComment != null) {
-                                        val cid = legacyComment.optString("commentId", "c_$h")
-                                        val author = extractRunsText(legacyComment.optJSONObject("authorText")).ifBlank { "User" }
-                                        val textContent = extractRunsText(legacyComment.optJSONObject("contentText"))
-                                        val pubTime = extractRunsText(legacyComment.optJSONObject("publishedTimeText"))
-                                        val likes = extractRunsText(legacyComment.optJSONObject("voteCount"))
-                                        val thumbs = legacyComment.optJSONObject("authorThumbnail")?.optJSONArray("thumbnails")
-                                        val avatar = if (thumbs != null && thumbs.length() > 0) {
-                                            thumbs.optJSONObject(thumbs.length() - 1)?.optString("url", "").orEmpty()
-                                        } else ""
-                                        if (textContent.isNotBlank()) {
-                                            commentsList.add(
-                                                YtmComment(
-                                                    id = cid,
-                                                    authorName = author,
-                                                    authorAvatarUrl = avatar,
-                                                    publishedTimeText = pubTime,
-                                                    text = textContent,
-                                                    likeCountText = likes,
-                                                    isHearted = legacyComment.has("actionButtons") && legacyComment.toString().contains("creatorHeart")
-                                                )
-                                            )
-                                        }
-                                    } else {
-                                        val vm = thread.optJSONObject("commentViewModel")?.optJSONObject("commentViewModel")
-                                        val cid = vm?.optString("commentId", "").orEmpty()
-                                        val entity = entityMap[cid]
-                                        if (entity != null) {
-                                            val props = entity.optJSONObject("properties")
-                                            val authorObj = entity.optJSONObject("author")
-                                            val toolbar = entity.optJSONObject("toolbar")
-                                            val textContent = props?.optJSONObject("content")?.optString("content", "").orEmpty()
-                                            val pubTime = props?.optString("publishedTime", "").orEmpty()
-                                            val authorName = authorObj?.optString("displayName", "User").orEmpty()
-                                            val avatar = authorObj?.optString("avatarThumbnailUrl", "").orEmpty()
-                                            val likes = toolbar?.optString("likeCountNotliked", "")
-                                                ?.ifBlank { toolbar.optString("likeCountLiked", "") }.orEmpty()
-                                            val hearted = !toolbar?.optString("heartActiveTooltip", "").isNullOrBlank()
-                                            if (textContent.isNotBlank()) {
-                                                commentsList.add(
-                                                    YtmComment(
-                                                        id = cid,
-                                                        authorName = authorName,
-                                                        authorAvatarUrl = avatar,
-                                                        publishedTimeText = pubTime,
-                                                        text = textContent,
-                                                        likeCountText = likes,
-                                                        isHearted = hearted
-                                                    )
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                        for (subTok in nestedTokens.take(2)) {
+                            val subPair = postWebNext(subTok) ?: continue
+                            val (subJson, subRaw) = subPair
+                            val (subCount, subParams) = parseCommentsFromResponseJson(subJson, subRaw, commentsList, seenIds)
+                            if (subCount.isNotBlank() && commentCountText.isBlank()) commentCountText = subCount
+                            if (!subParams.isNullOrBlank() && createCommentParams.isNullOrBlank()) createCommentParams = subParams
+                            if (commentsList.isNotEmpty()) break
                         }
                     }
+                    if (commentsList.isNotEmpty()) break
                 }
             }
         } catch (e: Exception) {
@@ -2523,17 +2668,20 @@ class MusicRepository {
                     if (text.isBlank()) continue
                     val avatar = item.uploaderAvatars.lastOrNull()?.url.orEmpty()
                     val likes = if (item.likeCount > 0) item.likeCount.toString() else item.textualLikeCount.orEmpty()
-                    commentsList.add(
-                        YtmComment(
-                            id = item.commentId ?: "${item.uploaderName}_${commentsList.size}",
-                            authorName = item.uploaderName ?: "YouTube User",
-                            authorAvatarUrl = avatar,
-                            publishedTimeText = item.textualUploadDate ?: "",
-                            text = text,
-                            likeCountText = likes,
-                            isHearted = item.isHeartedByUploader
+                    val cid = item.commentId ?: "${item.uploaderName}_${commentsList.size}"
+                    if (seenIds.add(cid)) {
+                        commentsList.add(
+                            YtmComment(
+                                id = cid,
+                                authorName = item.uploaderName ?: "YouTube User",
+                                authorAvatarUrl = avatar,
+                                publishedTimeText = item.textualUploadDate ?: "",
+                                text = text,
+                                likeCountText = likes,
+                                isHearted = item.isHeartedByUploader
+                            )
                         )
-                    )
+                    }
                 }
             } catch (e: Exception) {
                 Log.d("MusicRepository", "NewPipe comments fallback failed: ${e.message}")
@@ -2547,52 +2695,154 @@ class MusicRepository {
         )
     }
 
+    private fun encodeProtobufVarint(value: Int, out: java.io.ByteArrayOutputStream) {
+        var v = value
+        while ((v and 0x7F.inv()) != 0) {
+            out.write((v and 0x7F) or 0x80)
+            v = v ushr 7
+        }
+        out.write(v and 0x7F)
+    }
+
+    private fun synthesizeCreateCommentParams(videoId: String): String {
+        val vidBytes = videoId.trim().toByteArray(Charsets.UTF_8)
+        val inner = java.io.ByteArrayOutputStream()
+        inner.write(0x10)
+        inner.write(0x00)
+        val innerBytes = inner.toByteArray()
+
+        val outer = java.io.ByteArrayOutputStream()
+        outer.write(0x12)
+        encodeProtobufVarint(vidBytes.size, outer)
+        outer.write(vidBytes)
+        outer.write(0x2A)
+        encodeProtobufVarint(innerBytes.size, outer)
+        outer.write(innerBytes)
+        outer.write(0x38)
+        outer.write(0x01)
+
+        return android.util.Base64.encodeToString(
+            outer.toByteArray(),
+            android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP
+        )
+    }
+
+    suspend fun saveRemotePlaylistToLibrary(playlistId: String, isSaved: Boolean): Boolean = withContext(Dispatchers.IO) {
+        val cleanId = playlistId.removePrefix("VL").trim()
+        if (cleanId.isBlank()) return@withContext false
+        val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
+        if (!auth.isLoggedIn() || auth.getCookie().isNullOrBlank()) return@withContext false
+
+        try {
+            val origin = "https://music.youtube.com"
+            val endpoint = if (isSaved) "like/like" else "like/removelike"
+            val (hlCode, glCode) = resolveHlGl()
+            val payload = org.json.JSONObject().apply {
+                put("context", org.json.JSONObject().apply {
+                    put("client", org.json.JSONObject().apply {
+                        put("clientName", YTM_CLIENT_NAME)
+                        put("clientVersion", YTM_CLIENT_VERSION)
+                        put("hl", hlCode)
+                        put("gl", glCode)
+                    })
+                })
+                put("target", org.json.JSONObject().apply {
+                    put("playlistId", cleanId)
+                })
+            }
+
+            val reqBuilder = okhttp3.Request.Builder()
+                .url("$origin/youtubei/v1/$endpoint")
+                .header("Content-Type", "application/json")
+                .header("User-Agent", YTM_USER_AGENT)
+                .header("Origin", origin)
+                .header("Referer", "$origin/")
+                .header("X-Origin", origin)
+                .header("X-YouTube-Client-Name", "67")
+                .header("X-YouTube-Client-Version", YTM_CLIENT_VERSION)
+
+            auth.applyAuthToRequest(reqBuilder, payload, origin)
+            reqBuilder.post(payload.toString().toRequestBody("application/json".toMediaType()))
+            HttpClientProvider.client.newCall(reqBuilder.build()).execute().use { resp ->
+                resp.isSuccessful
+            }
+        } catch (e: Exception) {
+            Log.e("MusicRepository", "saveRemotePlaylistToLibrary error: ${e.message}")
+            false
+        }
+    }
+
     suspend fun postTrackComment(videoId: String, createCommentParams: String?, commentText: String): Boolean = withContext(Dispatchers.IO) {
         if (videoId.isBlank() || commentText.isBlank()) return@withContext false
         val auth = com.ayashii.kuro.data.auth.AuthManager.getInstance()
         if (!auth.isLoggedIn() || auth.getCookie().isNullOrBlank()) return@withContext false
 
         try {
-            val paramsToUse = if (!createCommentParams.isNullOrBlank()) {
+            val fetchedParams = if (!createCommentParams.isNullOrBlank()) {
                 createCommentParams
             } else {
                 getTrackComments(videoId).createCommentParams
             }
-            if (paramsToUse.isNullOrBlank()) return@withContext false
+            val candidateParams = listOfNotNull(
+                fetchedParams?.takeIf { it.isNotBlank() },
+                synthesizeCreateCommentParams(videoId)
+            ).distinct()
 
-            val origin = "https://www.youtube.com"
             val (hlCode, glCode) = resolveHlGl()
-            val clientVersion = "2.20260415.01.00"
+            val visitorData = ensureVisitorData()
+            val targets = listOf(
+                Triple("https://www.youtube.com", "WEB", "2.20250214.01.00" to "1"),
+                Triple("https://music.youtube.com", YTM_CLIENT_NAME, YTM_CLIENT_VERSION to "67")
+            )
 
-            val payload = org.json.JSONObject().apply {
-                put("context", org.json.JSONObject().apply {
-                    put("client", org.json.JSONObject().apply {
-                        put("clientName", "WEB")
-                        put("clientVersion", clientVersion)
-                        put("hl", hlCode)
-                        put("gl", glCode)
-                    })
-                })
-                put("createCommentParams", paramsToUse)
-                put("commentText", commentText.trim())
+            for (paramsToUse in candidateParams) {
+                for ((origin, clientName, verAndId) in targets) {
+                    val (clientVer, clientIdNum) = verAndId
+                    val payload = org.json.JSONObject().apply {
+                        put("context", org.json.JSONObject().apply {
+                            put("client", org.json.JSONObject().apply {
+                                put("clientName", clientName)
+                                put("clientVersion", clientVer)
+                                put("hl", hlCode)
+                                put("gl", glCode)
+                                if (!visitorData.isNullOrBlank()) {
+                                    put("visitorData", visitorData)
+                                }
+                            })
+                        })
+                        put("createCommentParams", paramsToUse)
+                        put("commentText", commentText.trim())
+                    }
+
+                    val reqBuilder = okhttp3.Request.Builder()
+                        .url("$origin/youtubei/v1/comment/create_comment")
+                        .header("Content-Type", "application/json")
+                        .header("User-Agent", YTM_USER_AGENT)
+                        .header("Origin", origin)
+                        .header("Referer", "$origin/watch?v=$videoId")
+                        .header("X-Origin", origin)
+                        .header("X-YouTube-Client-Name", clientIdNum)
+                        .header("X-YouTube-Client-Version", clientVer)
+                    if (!visitorData.isNullOrBlank()) {
+                        reqBuilder.header("X-Goog-Visitor-Id", visitorData)
+                    }
+
+                    auth.applyAuthToRequest(reqBuilder, payload, origin)
+                    reqBuilder.post(payload.toString().toRequestBody("application/json".toMediaType()))
+
+                    val ok = HttpClientProvider.client.newCall(reqBuilder.build()).execute().use { resp ->
+                        val bodyStr = resp.body?.string().orEmpty()
+                        resp.isSuccessful && (
+                            bodyStr.contains("actions") ||
+                                bodyStr.contains("comment") ||
+                                bodyStr.contains("frameworkUpdates") ||
+                                !bodyStr.contains("\"error\"")
+                            )
+                    }
+                    if (ok) return@withContext true
+                }
             }
-
-            val reqBuilder = okhttp3.Request.Builder()
-                .url("$origin/youtubei/v1/comment/create_comment")
-                .header("Content-Type", "application/json")
-                .header("User-Agent", YTM_USER_AGENT)
-                .header("Origin", origin)
-                .header("Referer", "$origin/watch?v=$videoId")
-                .header("X-Origin", origin)
-                .header("X-YouTube-Client-Name", "1")
-                .header("X-YouTube-Client-Version", clientVersion)
-
-            auth.applyAuthToRequest(reqBuilder, payload, origin)
-            reqBuilder.post(payload.toString().toRequestBody("application/json".toMediaType()))
-
-            HttpClientProvider.client.newCall(reqBuilder.build()).execute().use { resp ->
-                resp.isSuccessful
-            }
+            false
         } catch (e: Exception) {
             Log.e("MusicRepository", "postTrackComment failed: ${e.message}")
             false
