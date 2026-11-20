@@ -163,7 +163,10 @@ fun PlaylistDetailSheet(
                                     putExtra(Intent.EXTRA_TEXT, "${details.title} - $shareUrl")
                                     type = "text/plain"
                                 }
-                                context.startActivity(Intent.createChooser(sendIntent, details.title))
+                                val chooser = Intent.createChooser(sendIntent, details.title).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                context.startActivity(chooser)
                             }
                         }
                     },
@@ -371,7 +374,10 @@ fun PlaylistDetailSheet(
                                                     putExtra(Intent.EXTRA_TEXT, "${details.title} - $shareUrl")
                                                     type = "text/plain"
                                                 }
-                                                context.startActivity(Intent.createChooser(sendIntent, details.title))
+                                                val chooser = Intent.createChooser(sendIntent, details.title).apply {
+                                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                }
+                                                context.startActivity(chooser)
                                             }
                                         }
                                     },

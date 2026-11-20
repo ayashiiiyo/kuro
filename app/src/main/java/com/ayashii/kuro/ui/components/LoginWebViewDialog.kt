@@ -183,11 +183,12 @@ fun LoginWebViewDialog(
                 Spacer(modifier = Modifier.height(2.dp))
             }
 
+            val hostContext = androidx.compose.ui.platform.LocalView.current.context
             Box(modifier = Modifier.fillMaxSize()) {
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
-                    factory = { context ->
-                        WebView(context).apply {
+                    factory = {
+                        WebView(hostContext).apply {
                             layoutParams = ViewGroup.LayoutParams(
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                                 ViewGroup.LayoutParams.MATCH_PARENT

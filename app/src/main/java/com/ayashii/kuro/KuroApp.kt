@@ -36,6 +36,9 @@ class KuroApp : Application(), ImageLoaderFactory {
                     getSystemService(LocaleManager::class.java)?.applicationLocales =
                         LocaleList.forLanguageTags(tag)
                 }
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                getSystemService(LocaleManager::class.java)?.applicationLocales =
+                    LocaleList.getEmptyLocaleList()
             }
         } catch (_: Throwable) {}
         try {
@@ -54,10 +57,7 @@ class KuroApp : Application(), ImageLoaderFactory {
             false
         }
         val allowHardwareBitmaps = is64BitRuntime && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
-        val imageHttpClient = OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(15, TimeUnit.SECONDS)
-            .retryOnConnectionFailure(true)
+        val imageHttpClient = com.ayashii.kuro.data.remote.HttpClientProvider.baseClient.newBuilder()
             .addInterceptor { chain ->
                 val req = chain.request().newBuilder()
                     .header(

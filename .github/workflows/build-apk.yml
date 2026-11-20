@@ -109,18 +109,21 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.9.7 — YTM 2026 UI, Dynamic Home & Fixes
+          ## Kuro v3.9.8 — Offline Playback, Critical Fixes & Performance
 
-          - **YTM 2026 UI**:
-            - Dynamic Home and Search layouts with refreshed player, mini player, and sheet styling.
-          - **Comments**:
-            - Modern comment parsing via framework updates/entity payloads with legacy fallback; wider comment sheet with avatars and likes, plus posting fixes.
-          - **Search & Radio**:
-            - Native song/video parsing, official-shelf prioritization, and forced radio refresh.
-          - **Controls**:
-            - Audio output shortcut in the mini player, open-collection/artist action in track options, and queue dismiss-on-tap.
-          - **Fixes**:
-            - Restored the missing fillMaxSize import and general stability/performance tuning.
+          - **Offline Audio & Thumbnails**:
+            - Wrapped ExoPlayer cache data source with `DefaultDataSource.Factory` so local `file://` and `content://` offline audio plays reliably without internet.
+            - Downloaded and persisted local offline thumbnails alongside audio, eliminated Coil memory cache clearing on `onStop()`, and preserved MIME type and offline session restore.
+          - **Critical UI, Sharing & Release Fixes**:
+            - Fixed "Add to Playlist" no-op across Home, Search, Library, and Vibe screens.
+            - Fixed all Share buttons (`FLAG_ACTIVITY_NEW_TASK`) and WebView Activity context, restored full-screen lyrics auto-scroll after manual drag, and fixed queue swipe-to-remove index drift.
+            - Added missing Mozilla Rhino subpackage R8/ProGuard keep rules and exported `PlaybackService` (`MediaSessionService`) for Android 13–14 media controls.
+          - **Data, Lyrics & Rust Native Core**:
+            - Fixed lyrics translation cache poisoning, negative-cache handling on network errors, `UiStateCache` collection metadata loss, `UpdateManager` receiver race, and comment posting validation.
+            - Hardened Rust JNI exception clearing, relaxed `LiriqoResponse` deserialization, fixed provider ranking and multi-timestamp/offset LRC parsing, and improved duration/thumbnail sanitization.
+          - **Performance Optimizations**:
+            - Unified all 5 OkHttp clients onto a shared `ConnectionPool` and `Dispatcher` via `HttpClientProvider.baseClient`.
+            - Throttled offline download progress emissions, switched playback polling to adaptive intervals (100ms expanded / 500ms collapsed) with active-widget checks, and moved startup disk I/O off the main thread.
           - Published signed release, per-ABI, and debug APKs.
           EOF
           gh release delete "$RELEASE_TAG" --yes --cleanup-tag 2>/dev/null || true
@@ -129,7 +132,7 @@ jobs:
             "${{ steps.apk.outputs.arm64_path }}" \
             "${{ steps.apk.outputs.arm32_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (YTM 2026 UI, Dynamic Home & Fixes)" \
+            --title "Kuro $RELEASE_TAG (Offline Playback, Critical Fixes & Performance)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 

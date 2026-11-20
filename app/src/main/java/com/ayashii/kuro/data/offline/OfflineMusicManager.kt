@@ -15,7 +15,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
@@ -28,13 +31,15 @@ data class OfflineTrack(
     val qualityBadge: String,
     val mimeType: String,
     val fileSizeBytes: Long,
-    val downloadedAtMs: Long
+    val downloadedAtMs: Long,
+    val localThumbnailUri: String? = null
 )
 
 class OfflineMusicManager private constructor(private val context: Context) {
 
     private val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val indexMutex = Mutex()
 
     private val _offlineTracks = MutableStateFlow<List<OfflineTrack>>(emptyList())
     val offlineTracks: StateFlow<List<OfflineTrack>> = _offlineTracks.asStateFlow()
@@ -43,14 +48,18 @@ class OfflineMusicManager private constructor(private val context: Context) {
     val downloadProgress: StateFlow<Map<String, Float>> = _downloadProgress.asStateFlow()
 
     init {
-        loadIndex()
+        scope.launch {
+            indexMutex.withLock {
+                loadIndex()
+            }
+        }
     }
 
     fun isDownloaded(trackId: String): Boolean {
         return getLocalAudioUri(trackId) != null
     }
 
-    fun getLocalAudioUri(trackId: String): String? {
+    fun getLocalAudioInfo(trackId: String): Pair<String, String>? {
         val entry = _offlineTracks.value.firstOrNull { it.track.id == trackId } ?: return null
         val uriStr = entry.localUri
         val exists = if (uriStr.startsWith("content://")) {
@@ -61,16 +70,102 @@ class OfflineMusicManager private constructor(private val context: Context) {
             val path = uriStr.removePrefix("file://")
             File(path).exists()
         }
-        return if (exists) uriStr else null
+        return if (exists) Pair(uriStr, entry.mimeType) else null
+    }
+
+    fun getLocalAudioUri(trackId: String): String? {
+        return getLocalAudioInfo(trackId)?.first
+    }
+
+    fun getLocalThumbnailUri(trackId: String): String? {
+        val entry = _offlineTracks.value.firstOrNull { it.track.id == trackId }
+        val stored = entry?.localThumbnailUri
+        if (!stored.isNullOrBlank()) {
+            val file = File(stored.removePrefix("file://"))
+            if (file.exists() && file.length() > 0L) return stored
+        }
+        val fallbackFile = File(File(context.filesDir, "offline_thumbs"), "$trackId.jpg")
+        return if (fallbackFile.exists() && fallbackFile.length() > 0L) {
+            Uri.fromFile(fallbackFile).toString()
+        } else {
+            null
+        }
+    }
+
+    private fun resolveStreamUserAgent(streamUrl: String): String {
+        return when {
+            streamUrl.contains("c=IOS") ->
+                "com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)"
+            streamUrl.contains("c=ANDROID_VR") ->
+                "com.google.android.apps.youtube.vr.oculus/1.56.21 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip"
+            streamUrl.contains("c=ANDROID_MUSIC") ->
+                "com.google.android.apps.youtube.music/7.21.50 (Linux; U; Android 14) gzip"
+            streamUrl.contains("c=ANDROID") ->
+                "com.google.android.youtube/19.44.38 (Linux; U; Android 14) gzip"
+            else ->
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+        }
+    }
+
+    private fun downloadLocalThumbnail(track: Track): String? {
+        val remoteUrl = track.thumbnailUrlForDisplay(512)
+        if (remoteUrl.isBlank()) return null
+        if (remoteUrl.startsWith("file://") || remoteUrl.startsWith("content://")) return remoteUrl
+        return runCatching {
+            val thumbDir = File(context.filesDir, "offline_thumbs").apply { mkdirs() }
+            val thumbFile = File(thumbDir, "${track.id}.jpg")
+            val tempFile = File(thumbDir, "${track.id}.jpg.tmp")
+            val req = Request.Builder()
+                .url(remoteUrl)
+                .header(
+                    "User-Agent",
+                    "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36"
+                )
+                .build()
+            HttpClientProvider.client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return@runCatching null
+                val bytes = resp.body?.bytes() ?: return@runCatching null
+                if (bytes.isEmpty()) return@runCatching null
+                tempFile.writeBytes(bytes)
+                if (thumbFile.exists()) thumbFile.delete()
+                if (!tempFile.renameTo(thumbFile)) {
+                    thumbFile.writeBytes(bytes)
+                    tempFile.delete()
+                }
+                Uri.fromFile(thumbFile).toString()
+            }
+        }.getOrNull()
+    }
+
+    private fun deleteTargetUri(uriStr: String?) {
+        if (uriStr.isNullOrBlank()) return
+        runCatching {
+            if (uriStr.startsWith("content://")) {
+                DocumentsContract.deleteDocument(context.contentResolver, Uri.parse(uriStr))
+            } else {
+                File(uriStr.removePrefix("file://")).delete()
+            }
+        }
     }
 
     fun downloadTrack(
         track: Track,
         subQuality: AudioSubQuality = SettingsManager.getInstance().downloadSubQuality.value
     ) {
-        if (_downloadProgress.value.containsKey(track.id)) return
+        var alreadyRunning = false
+        _downloadProgress.update { current ->
+            if (current.containsKey(track.id)) {
+                alreadyRunning = true
+                current
+            } else {
+                current + (track.id to 0.02f)
+            }
+        }
+        if (alreadyRunning) return
+
         scope.launch {
-            updateProgress(track.id, 0.02f)
+            var savedUriString: String? = null
+            var completed = false
             try {
                 val repo = MusicRepository.getInstance()
                 val streamUrl = repo.getAudioStreamUrl(
@@ -83,36 +178,43 @@ class OfflineMusicManager private constructor(private val context: Context) {
                     return@launch
                 }
 
-                val isOpus = subQuality.preferOpus || streamUrl.contains("audio%2Fwebm") || streamUrl.contains("itag=251")
-                val ext = if (isOpus) "webm" else "m4a"
-                val mimeType = if (isOpus) "audio/webm" else "audio/mp4"
-                val safeName = "${track.artist} - ${track.title}"
-                    .replace(Regex("[\\\\/:*?\"<>|]"), "_")
-                    .trim()
-                    .take(80)
-                    .ifBlank { track.id }
-                val fileName = "$safeName.$ext"
-
                 val req = Request.Builder()
                     .url(streamUrl)
-                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
+                    .header("User-Agent", resolveStreamUserAgent(streamUrl))
                     .build()
 
                 val customTreeUri = SettingsManager.getInstance().downloadTreeUri.value
-                var savedUriString: String? = null
                 var totalBytes = 0L
+                var resolvedMimeType = if (subQuality.preferOpus || streamUrl.contains("audio%2Fwebm") || streamUrl.contains("itag=251")) {
+                    "audio/webm"
+                } else {
+                    "audio/mp4"
+                }
 
                 HttpClientProvider.client.newCall(req).execute().use { resp ->
                     if (!resp.isSuccessful) {
                         clearProgress(track.id)
                         return@launch
                     }
+                    val contentTypeHeader = resp.header("Content-Type")?.substringBefore(";")?.trim()?.lowercase()
+                    if (!contentTypeHeader.isNullOrBlank() && contentTypeHeader.startsWith("audio/")) {
+                        resolvedMimeType = contentTypeHeader
+                    }
+                    val isWebm = resolvedMimeType.contains("webm") || resolvedMimeType.contains("opus")
+                    val ext = if (isWebm) "webm" else "m4a"
+                    val safeName = "${track.artist} - ${track.title}"
+                        .replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                        .trim()
+                        .take(80)
+                        .ifBlank { track.id }
+                    val fileName = "$safeName.$ext"
+
                     val body = resp.body ?: run {
                         clearProgress(track.id)
                         return@launch
                     }
                     val contentLength = body.contentLength()
-                    val target = openOutputTarget(customTreeUri, fileName, mimeType, track.id, ext)
+                    val target = openOutputTarget(customTreeUri, fileName, resolvedMimeType, track.id, ext)
                     if (target == null) {
                         clearProgress(track.id)
                         return@launch
@@ -122,11 +224,19 @@ class OfflineMusicManager private constructor(private val context: Context) {
                         body.byteStream().use { input ->
                             val buf = ByteArray(16 * 1024)
                             var read: Int
+                            var lastEmittedProgress = 0.02f
+                            var lastEmitTimeMs = android.os.SystemClock.elapsedRealtime()
                             while (input.read(buf).also { read = it } != -1) {
                                 out.write(buf, 0, read)
                                 totalBytes += read
                                 if (contentLength > 0) {
-                                    updateProgress(track.id, (totalBytes.toFloat() / contentLength.toFloat()).coerceIn(0.05f, 0.99f))
+                                    val pct = (totalBytes.toFloat() / contentLength.toFloat()).coerceIn(0.05f, 0.96f)
+                                    val nowMs = android.os.SystemClock.elapsedRealtime()
+                                    if (pct - lastEmittedProgress >= 0.02f || nowMs - lastEmitTimeMs >= 200L) {
+                                        lastEmittedProgress = pct
+                                        lastEmitTimeMs = nowMs
+                                        updateProgress(track.id, pct)
+                                    }
                                 }
                             }
                             out.flush()
@@ -136,23 +246,36 @@ class OfflineMusicManager private constructor(private val context: Context) {
 
                 val finalUri = savedUriString
                 if (!finalUri.isNullOrBlank() && totalBytes > 0L) {
+                    val localThumbUri = downloadLocalThumbnail(track)
+                    val offlineTrackModel = if (!localThumbUri.isNullOrBlank()) {
+                        track.copy(thumbnailUrl = localThumbUri)
+                    } else {
+                        track
+                    }
                     val offlineItem = OfflineTrack(
-                        track = track,
+                        track = offlineTrackModel,
                         localUri = finalUri,
                         qualityBadge = subQuality.badge,
-                        mimeType = mimeType,
+                        mimeType = resolvedMimeType,
                         fileSizeBytes = totalBytes,
-                        downloadedAtMs = System.currentTimeMillis()
+                        downloadedAtMs = System.currentTimeMillis(),
+                        localThumbnailUri = localThumbUri
                     )
-                    val updated = _offlineTracks.value.filterNot { it.track.id == track.id }.toMutableList().apply {
-                        add(0, offlineItem)
+                    indexMutex.withLock {
+                        val updated = _offlineTracks.value.filterNot { it.track.id == track.id }.toMutableList().apply {
+                            add(0, offlineItem)
+                        }
+                        _offlineTracks.value = updated
+                        saveIndex(updated)
                     }
-                    _offlineTracks.value = updated
-                    saveIndex(updated)
+                    completed = true
                 }
             } catch (e: Exception) {
                 Log.e("OfflineMusicManager", "Download failed for ${track.title}: ${e.message}", e)
             } finally {
+                if (!completed && !savedUriString.isNullOrBlank()) {
+                    deleteTargetUri(savedUriString)
+                }
                 clearProgress(track.id)
             }
         }
@@ -160,18 +283,18 @@ class OfflineMusicManager private constructor(private val context: Context) {
 
     fun deleteOfflineTrack(trackId: String) {
         scope.launch {
-            val entry = _offlineTracks.value.firstOrNull { it.track.id == trackId }
-            if (entry != null) {
-                runCatching {
-                    if (entry.localUri.startsWith("content://")) {
-                        DocumentsContract.deleteDocument(context.contentResolver, Uri.parse(entry.localUri))
-                    } else {
-                        File(entry.localUri.removePrefix("file://")).delete()
+            indexMutex.withLock {
+                val entry = _offlineTracks.value.firstOrNull { it.track.id == trackId }
+                if (entry != null) {
+                    deleteTargetUri(entry.localUri)
+                    deleteTargetUri(entry.localThumbnailUri)
+                    runCatching {
+                        File(File(context.filesDir, "offline_thumbs"), "$trackId.jpg").delete()
                     }
+                    val updated = _offlineTracks.value.filterNot { it.track.id == trackId }
+                    _offlineTracks.value = updated
+                    saveIndex(updated)
                 }
-                val updated = _offlineTracks.value.filterNot { it.track.id == trackId }
-                _offlineTracks.value = updated
-                saveIndex(updated)
             }
         }
     }
@@ -208,11 +331,11 @@ class OfflineMusicManager private constructor(private val context: Context) {
     }
 
     private fun updateProgress(trackId: String, value: Float) {
-        _downloadProgress.value = _downloadProgress.value.toMutableMap().apply { put(trackId, value) }
+        _downloadProgress.update { it + (trackId to value) }
     }
 
     private fun clearProgress(trackId: String) {
-        _downloadProgress.value = _downloadProgress.value.toMutableMap().apply { remove(trackId) }
+        _downloadProgress.update { it - trackId }
     }
 
     private fun loadIndex() {
@@ -223,21 +346,29 @@ class OfflineMusicManager private constructor(private val context: Context) {
             for (i in 0 until arr.length()) {
                 val obj = arr.optJSONObject(i) ?: continue
                 val tObj = obj.optJSONObject("track") ?: continue
+                val trackId = tObj.optString("id")
+                val storedThumb = obj.optString("localThumbnailUri", "").takeIf { it.isNotBlank() }
+                val verifiedThumb = storedThumb?.takeIf { File(it.removePrefix("file://")).exists() }
+                    ?: File(File(context.filesDir, "offline_thumbs"), "$trackId.jpg")
+                        .takeIf { it.exists() && it.length() > 0L }
+                        ?.let { Uri.fromFile(it).toString() }
+                val rawThumb = tObj.optString("thumbnailUrl")
                 list.add(
                     OfflineTrack(
                         track = Track(
-                            id = tObj.optString("id"),
+                            id = trackId,
                             url = tObj.optString("url"),
                             title = tObj.optString("title"),
                             artist = tObj.optString("artist"),
-                            thumbnailUrl = tObj.optString("thumbnailUrl"),
+                            thumbnailUrl = verifiedThumb ?: rawThumb,
                             durationSeconds = tObj.optLong("durationSeconds", 0L)
                         ),
                         localUri = obj.optString("localUri"),
                         qualityBadge = obj.optString("qualityBadge"),
                         mimeType = obj.optString("mimeType", "audio/mp4"),
                         fileSizeBytes = obj.optLong("fileSizeBytes", 0L),
-                        downloadedAtMs = obj.optLong("downloadedAtMs", 0L)
+                        downloadedAtMs = obj.optLong("downloadedAtMs", 0L),
+                        localThumbnailUri = verifiedThumb
                     )
                 )
             }
@@ -263,6 +394,9 @@ class OfflineMusicManager private constructor(private val context: Context) {
                     put("mimeType", item.mimeType)
                     put("fileSizeBytes", item.fileSizeBytes)
                     put("downloadedAtMs", item.downloadedAtMs)
+                    if (!item.localThumbnailUri.isNullOrBlank()) {
+                        put("localThumbnailUri", item.localThumbnailUri)
+                    }
                 })
             }
             prefs.edit().putString(KEY_INDEX, arr.toString()).apply()

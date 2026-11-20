@@ -36,10 +36,7 @@ data class UpdateInfo(
 
 class UpdateManager private constructor(private val context: Context) {
 
-    private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .build()
+    private val httpClient = com.ayashii.kuro.data.remote.HttpClientProvider.baseClient
 
     @Volatile
     private var activeDownloadReceiver: BroadcastReceiver? = null
@@ -213,27 +210,27 @@ class UpdateManager private constructor(private val context: Context) {
             destinationFile.delete()
         }
 
-        val request = DownloadManager.Request(uri)
-            .setTitle(context.getString(R.string.update_download_title, updateInfo.versionName))
-            .setDescription(context.getString(R.string.update_download_desc))
-            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            .setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, updateInfo.apkFileName)
-            .setMimeType("application/vnd.android.package-archive")
-
-        val downloadId = try {
-            downloadManager.enqueue(request)
+        val request = try {
+            DownloadManager.Request(uri)
+                .setTitle(context.getString(R.string.update_download_title, updateInfo.versionName))
+                .setDescription(context.getString(R.string.update_download_desc))
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, updateInfo.apkFileName)
+                .setMimeType("application/vnd.android.package-archive")
         } catch (e: Exception) {
-            Log.e(TAG, "Unable to enqueue update download: ${e.message}")
+            Log.e(TAG, "Invalid update download URL: ${e.message}")
             openDownloadPage(updateInfo.downloadUrl)
             return
         }
 
+        val downloadIdRef = java.util.concurrent.atomic.AtomicLong(-1L)
         val onComplete = object : BroadcastReceiver() {
             override fun onReceive(ctxt: Context, intent: Intent) {
+                val expectedId = downloadIdRef.get()
                 val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
-                if (id != downloadId) return
+                if (expectedId <= 0L || id != expectedId) return
                 try {
-                    if (!isDownloadSuccessful(downloadManager, downloadId) ||
+                    if (!isDownloadSuccessful(downloadManager, expectedId) ||
                         !destinationFile.exists() ||
                         destinationFile.length() <= 0L
                     ) {
@@ -251,8 +248,11 @@ class UpdateManager private constructor(private val context: Context) {
                     Log.e(TAG, "Failed to launch installer/notification: ${e.message}")
                 } finally {
                     try {
-                        ctxt.unregisterReceiver(this)
+                        context.unregisterReceiver(this)
                     } catch (_: Exception) {}
+                    if (activeDownloadReceiver === this) {
+                        activeDownloadReceiver = null
+                    }
                 }
             }
         }
@@ -274,6 +274,21 @@ class UpdateManager private constructor(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "Unable to register download receiver: ${e.message}")
         }
+
+        val downloadId = try {
+            downloadManager.enqueue(request)
+        } catch (e: Exception) {
+            Log.e(TAG, "Unable to enqueue update download: ${e.message}")
+            try {
+                context.unregisterReceiver(onComplete)
+            } catch (_: Exception) {}
+            if (activeDownloadReceiver === onComplete) {
+                activeDownloadReceiver = null
+            }
+            openDownloadPage(updateInfo.downloadUrl)
+            return
+        }
+        downloadIdRef.set(downloadId)
     }
 
     private fun isDownloadSuccessful(downloadManager: DownloadManager, downloadId: Long): Boolean {
@@ -373,7 +388,7 @@ class UpdateManager private constructor(private val context: Context) {
             )
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setAutoCancel(true)
-            .setContentIntent(installPendingIntent)
+            .setContentIntent(settingsPendingIntent)
             .addAction(
                 R.drawable.ic_notification,
                 context.getString(R.string.update_permission_title),

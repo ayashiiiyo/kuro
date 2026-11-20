@@ -33,8 +33,10 @@ class PlaylistManager private constructor(context: Context) {
     val watchLaterTracks: StateFlow<List<Track>> = _watchLaterTracks.asStateFlow()
 
     init {
-        loadPlaylists()
-        loadWatchLater()
+        ioScope.launch {
+            loadPlaylists()
+            loadWatchLater()
+        }
     }
 
     private fun loadPlaylists() {
@@ -43,7 +45,7 @@ class PlaylistManager private constructor(context: Context) {
             val arr = JSONArray(raw)
             val list = mutableListOf<Playlist>()
             for (i in 0 until arr.length()) {
-                val pObj = arr.getJSONObject(i)
+                val pObj = arr.optJSONObject(i) ?: continue
                 val id = pObj.optString("id", UUID.randomUUID().toString())
                 val name = pObj.optString("name", "Playlist")
                 val createdAt = pObj.optLong("createdAt", System.currentTimeMillis())
@@ -52,7 +54,7 @@ class PlaylistManager private constructor(context: Context) {
                 val tracksArr = pObj.optJSONArray("tracks") ?: JSONArray()
                 val tracks = mutableListOf<Track>()
                 for (j in 0 until tracksArr.length()) {
-                    val tObj = tracksArr.getJSONObject(j)
+                    val tObj = tracksArr.optJSONObject(j) ?: continue
                     tracks.add(
                         Track(
                             id = tObj.optString("id"),
@@ -124,7 +126,7 @@ class PlaylistManager private constructor(context: Context) {
             val arr = JSONArray(raw)
             val list = mutableListOf<Track>()
             for (i in 0 until arr.length()) {
-                val tObj = arr.getJSONObject(i)
+                val tObj = arr.optJSONObject(i) ?: continue
                 list.add(
                     Track(
                         id = tObj.optString("id"),

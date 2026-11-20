@@ -12,6 +12,7 @@ struct DeepLRequest<'a> {
 
 #[derive(Deserialize)]
 struct DeepLTranslationItem {
+    #[serde(default)]
     text: String,
 }
 

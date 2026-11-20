@@ -375,9 +375,8 @@ fun VibeScreen(
                 showSettingsDialog = true
             },
             onAddToPlaylist = {
-                val t = trackForOptions
+                trackForPlaylist = targetTrack
                 trackForOptions = null
-                trackForPlaylist = t
             }
         )
     }

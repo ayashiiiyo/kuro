@@ -50,6 +50,9 @@
 -keep class org.mozilla.javascript.Function { *; }
 -keep class org.mozilla.javascript.BaseFunction { *; }
 -keep class org.mozilla.javascript.Native* { *; }
+-keep class org.mozilla.javascript.regexp.** { *; }
+-keep class org.mozilla.javascript.typedarrays.** { *; }
+-keep class org.mozilla.javascript.json.** { *; }
 -keep class org.mozilla.javascript.VMBridge { *; }
 -keep class org.mozilla.javascript.jdk15.** { *; }
 -keep class org.mozilla.javascript.jdk18.** { *; }

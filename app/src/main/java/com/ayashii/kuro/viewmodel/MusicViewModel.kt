@@ -121,7 +121,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
 
     private val favPrefs = getApplication<Application>().getSharedPreferences("kuro_favorites", Context.MODE_PRIVATE)
 
-    private val _favorites = MutableStateFlow<List<Track>>(loadStoredFavorites())
+    private val _favorites = MutableStateFlow<List<Track>>(emptyList())
     val favorites = _favorites.asStateFlow()
 
     private fun loadStoredFavorites(): List<Track> {
@@ -130,14 +130,16 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             val arr = JSONArray(jsonStr)
             val list = mutableListOf<Track>()
             for (i in 0 until arr.length()) {
-                val obj = arr.getJSONObject(i)
+                val obj = arr.optJSONObject(i) ?: continue
+                val id = obj.optString("id")
+                if (id.isBlank()) continue
                 list.add(
                     Track(
-                        id = obj.getString("id"),
-                        url = obj.getString("url"),
-                        title = obj.getString("title"),
-                        artist = obj.getString("artist"),
-                        thumbnailUrl = obj.getString("thumbnailUrl"),
+                        id = id,
+                        url = obj.optString("url"),
+                        title = obj.optString("title"),
+                        artist = obj.optString("artist"),
+                        thumbnailUrl = obj.optString("thumbnailUrl"),
                         durationSeconds = obj.optLong("durationSeconds", 0L),
                         isFavorite = true
                     )
@@ -149,7 +151,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun saveStoredFavorites(list: List<Track>) {
+    private fun saveStoredFavorites(list: List<Track>, onSaved: (() -> Unit)? = null) {
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val arr = JSONArray()
@@ -165,6 +167,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     arr.put(obj)
                 }
                 favPrefs.edit().putString("fav_list", arr.toString()).apply()
+                onSaved?.invoke()
             } catch (e: Exception) {
                 Log.e("KuroVM", "Save favorites error: ${e.message}")
             }
@@ -297,7 +300,19 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         queueManager.addToQueue(track)
     }
 
-    fun removeFromQueue(index: Int): Boolean = queueManager.removeFromQueue(index)
+    fun removeFromQueue(index: Int): Boolean {
+        val wasCurrent = index == queueManager.currentIndex.value
+        val removed = queueManager.removeFromQueue(index)
+        if (removed && wasCurrent) {
+            if (queueManager.currentTrack.value != null) {
+                triggerServicePlayCurrent()
+            } else {
+                mediaController?.stop()
+                mediaController?.clearMediaItems()
+            }
+        }
+        return removed
+    }
 
     fun moveQueueItem(fromIndex: Int, toIndex: Int): Boolean = queueManager.moveQueueItem(fromIndex, toIndex)
 
@@ -358,8 +373,19 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun hasActiveWidgets(): Boolean {
+        return runCatching {
+            val app = getApplication<Application>()
+            val mgr = android.appwidget.AppWidgetManager.getInstance(app)
+            val compactIds = mgr.getAppWidgetIds(ComponentName(app, com.ayashii.kuro.widget.KuroCompactWidgetProvider::class.java))
+            val squareIds = mgr.getAppWidgetIds(ComponentName(app, com.ayashii.kuro.widget.KuroSquareWidgetProvider::class.java))
+            compactIds.isNotEmpty() || squareIds.isNotEmpty()
+        }.getOrDefault(true)
+    }
+
     private fun syncWidgetState() {
         val controller = mediaController ?: return
+        if (!hasActiveWidgets()) return
         persist(getApplication(), controller)
         viewModelScope.launch(Dispatchers.IO) { updateKuroWidgets(getApplication()) }
     }
@@ -494,6 +520,12 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                         retranslateActiveLyrics(existingLyrics, newTargetLang)
                     }
                 }
+            }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            val storedFavs = loadStoredFavorites()
+            if (storedFavs.isNotEmpty() && _favorites.value.isEmpty()) {
+                _favorites.value = storedFavs
             }
         }
         try {
@@ -771,7 +803,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     syncWidgetState()
                 }
 
-                delay(85)
+                delay(if (_isPlayerExpanded.value) 100L else 500L)
             }
         }
     }
@@ -1092,13 +1124,17 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 freshQuickPickTracks = emptyList(),
                 seedTrack = seed
             )
-            _homeSections.value = initialPersonalized
+            if (initialPersonalized.isNotEmpty()) {
+                _homeSections.value = initialPersonalized
+            }
             val tracks = if (initialPersonalized.isNotEmpty()) {
                 initialPersonalized.flatMap { it.tracks }.distinctBy { it.id }
             } else {
                 repository.getTrendingTracks()
             }
-            _trendingTracks.value = tracks
+            if (tracks.isNotEmpty()) {
+                _trendingTracks.value = tracks
+            }
             _isLoadingTrending.value = false
 
             if (seed != null) {
@@ -1524,13 +1560,14 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             currentFavs.add(0, track.copy(isFavorite = true))
         }
         _favorites.value = currentFavs
-        saveStoredFavorites(currentFavs)
-        try {
-            getApplication<Application>().sendBroadcast(
-                Intent(WIDGET_FAVORITES_CHANGED).setPackage(getApplication<Application>().packageName)
-            )
-        } catch (_: Exception) {}
-        syncWidgetState()
+        saveStoredFavorites(currentFavs) {
+            try {
+                getApplication<Application>().sendBroadcast(
+                    Intent(WIDGET_FAVORITES_CHANGED).setPackage(getApplication<Application>().packageName)
+                )
+            } catch (_: Exception) {}
+            syncWidgetState()
+        }
 
         if (_currentTrack.value?.id == track.id) {
             val updated = _currentTrack.value?.copy(isFavorite = newLikeState)
@@ -1609,6 +1646,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             UiStateCache.saveSnapshot(getApplication(), snapshot)
         }
         progressJob?.cancel()
+        if (lyricsJob?.isActive == true || _currentLyrics.value == null) {
+            lastLyricsLoadedForId = null
+        }
         lyricsJob?.cancel()
         searchJob?.cancel()
         suggestJob?.cancel()

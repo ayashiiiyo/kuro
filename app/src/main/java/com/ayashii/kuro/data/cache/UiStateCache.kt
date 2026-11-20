@@ -34,6 +34,9 @@ object UiStateCache {
                     secArr.put(JSONObject().apply {
                         put("title", sec.title)
                         put("subtitle", sec.subtitle)
+                        put("layoutType", sec.layoutType.name)
+                        if (!sec.headerAvatarUrl.isNullOrBlank()) put("headerAvatarUrl", sec.headerAvatarUrl)
+                        if (!sec.browseId.isNullOrBlank()) put("browseId", sec.browseId)
                         put("tracks", tracksToJson(sec.tracks.take(MAX_TRACKS_PER_SECTION)))
                     })
                 }
@@ -41,7 +44,14 @@ object UiStateCache {
                 put("trendingTracks", tracksToJson(snapshot.trendingTracks.take(MAX_TRENDING)))
             }
             val file = File(context.cacheDir, SNAPSHOT_FILE)
-            file.writeText(root.toString())
+            val tmp = File(context.cacheDir, "$SNAPSHOT_FILE.tmp")
+            synchronized(this) {
+                tmp.writeText(root.toString())
+                if (!tmp.renameTo(file)) {
+                    file.writeText(root.toString())
+                    tmp.delete()
+                }
+            }
         }
     }
 
@@ -49,16 +59,24 @@ object UiStateCache {
         return runCatching {
             val file = File(context.cacheDir, SNAPSHOT_FILE)
             if (!file.exists()) return null
-            val root = JSONObject(file.readText())
+            val raw = synchronized(this) { file.readText() }
+            val root = JSONObject(raw)
             val secArr = root.optJSONArray("homeSections") ?: JSONArray()
             val sections = ArrayList<HomeSection>(secArr.length())
             for (i in 0 until secArr.length()) {
                 val obj = secArr.optJSONObject(i) ?: continue
+                val layoutName = obj.optString("layoutType", "")
+                val layoutType = runCatching {
+                    com.ayashii.kuro.data.model.HomeSectionType.valueOf(layoutName)
+                }.getOrDefault(com.ayashii.kuro.data.model.HomeSectionType.SQUARE_CAROUSEL)
                 sections.add(
                     HomeSection(
                         title = obj.optString("title", ""),
                         subtitle = obj.optString("subtitle", ""),
-                        tracks = jsonToTracks(obj.optJSONArray("tracks"))
+                        tracks = jsonToTracks(obj.optJSONArray("tracks")),
+                        layoutType = layoutType,
+                        headerAvatarUrl = obj.optString("headerAvatarUrl", "").takeIf { it.isNotBlank() },
+                        browseId = obj.optString("browseId", "").takeIf { it.isNotBlank() }
                     )
                 )
             }
@@ -83,6 +101,8 @@ object UiStateCache {
                 put("artist", t.artist)
                 put("thumbnailUrl", t.thumbnailUrl)
                 put("durationSeconds", t.durationSeconds)
+                if (!t.browseId.isNullOrBlank()) put("browseId", t.browseId)
+                if (!t.playlistId.isNullOrBlank()) put("playlistId", t.playlistId)
             })
         }
         return arr
@@ -100,7 +120,9 @@ object UiStateCache {
                     title = obj.optString("title"),
                     artist = obj.optString("artist"),
                     thumbnailUrl = obj.optString("thumbnailUrl"),
-                    durationSeconds = obj.optLong("durationSeconds", 0L)
+                    durationSeconds = obj.optLong("durationSeconds", 0L),
+                    browseId = obj.optString("browseId", "").takeIf { it.isNotBlank() },
+                    playlistId = obj.optString("playlistId", "").takeIf { it.isNotBlank() }
                 )
             )
         }

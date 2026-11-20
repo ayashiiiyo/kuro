@@ -51,12 +51,14 @@ class HistoryStore private constructor(context: Context) {
         saveListAsync(KEY_SEARCH_RECENTS, nextSearch)
     }
 
+    @Synchronized
     fun removeFromRecents(trackId: String) {
         val updated = _searchRecents.value.filterNot { it.id == trackId }
         _searchRecents.value = updated
         saveListAsync(KEY_SEARCH_RECENTS, updated)
     }
 
+    @Synchronized
     fun clearRecents() {
         _searchRecents.value = emptyList()
         scope.launch {

@@ -134,15 +134,19 @@ class MusicRepository {
             u = "https:$u"
         }
         if (u.contains("googleusercontent.com")) {
-            return if (u.contains(THUMB_WH_CHECK_REGEX)) {
-                u.replace(THUMB_WH_REGEX, "=w1080-h1080-l90-rj")
-            } else if (u.contains(THUMB_S_CHECK_REGEX)) {
-                u.replace(THUMB_S_REGEX, "=w1080-h1080-l90-rj")
-            } else if (u.contains("=")) {
-                u.replace(THUMB_EQ_REGEX, "=w1080-h1080-l90-rj")
+            val queryIdx = u.indexOf('?')
+            val pathPart = if (queryIdx >= 0) u.substring(0, queryIdx) else u
+            val queryPart = if (queryIdx >= 0) u.substring(queryIdx) else ""
+            val resizedPath = if (pathPart.contains(THUMB_WH_CHECK_REGEX)) {
+                pathPart.replace(THUMB_WH_REGEX, "=w1080-h1080-l90-rj")
+            } else if (pathPart.contains(THUMB_S_CHECK_REGEX)) {
+                pathPart.replace(THUMB_S_REGEX, "=w1080-h1080-l90-rj")
+            } else if (pathPart.contains("=")) {
+                pathPart.replace(THUMB_EQ_REGEX, "=w1080-h1080-l90-rj")
             } else {
-                "$u=w1080-h1080-l90-rj"
+                "$pathPart=w1080-h1080-l90-rj"
             }
+            return resizedPath + queryPart
         }
         if (u.contains("ytimg.com")) {
             return u
@@ -1727,11 +1731,15 @@ class MusicRepository {
                         ?: httpAudios.minByOrNull { it.averageBitrate }
                 }
                 com.ayashii.kuro.data.settings.AudioSubQuality.LOW_OPUS_50 -> {
-                    preferredPool.minByOrNull { it.averageBitrate }
+                    preferredPool.filter { it.averageBitrate > 0 }.minByOrNull { it.averageBitrate }
+                        ?: preferredPool.minByOrNull { it.averageBitrate }
+                        ?: httpAudios.filter { it.averageBitrate > 0 }.minByOrNull { it.averageBitrate }
                         ?: httpAudios.minByOrNull { it.averageBitrate }
                 }
                 com.ayashii.kuro.data.settings.AudioSubQuality.LOW_M4A_48 -> {
-                    m4aStreams.minByOrNull { it.averageBitrate }
+                    m4aStreams.filter { it.averageBitrate > 0 }.minByOrNull { it.averageBitrate }
+                        ?: m4aStreams.minByOrNull { it.averageBitrate }
+                        ?: httpAudios.filter { it.averageBitrate > 0 }.minByOrNull { it.averageBitrate }
                         ?: httpAudios.minByOrNull { it.averageBitrate }
                 }
             } ?: httpAudios.maxByOrNull { it.averageBitrate } ?: httpAudios.firstOrNull()
@@ -2832,12 +2840,18 @@ class MusicRepository {
 
                     val ok = HttpClientProvider.client.newCall(reqBuilder.build()).execute().use { resp ->
                         val bodyStr = resp.body?.string().orEmpty()
-                        resp.isSuccessful && (
-                            bodyStr.contains("actions") ||
-                                bodyStr.contains("comment") ||
-                                bodyStr.contains("frameworkUpdates") ||
-                                !bodyStr.contains("\"error\"")
-                            )
+                        if (!resp.isSuccessful || bodyStr.isBlank()) {
+                            false
+                        } else {
+                            runCatching {
+                                val json = JSONObject(bodyStr)
+                                !json.has("error") && (
+                                    json.has("actions") ||
+                                        json.has("actionResults") ||
+                                        json.has("frameworkUpdates")
+                                    )
+                            }.getOrDefault(false)
+                        }
                     }
                     if (ok) return@withContext true
                 }

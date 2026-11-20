@@ -186,7 +186,8 @@ private object WidgetRenderer {
         artworkJob?.cancel()
         artworkJob = scope.launch(Dispatchers.IO) {
             try {
-                val request = ImageRequest.Builder(context).data(track.thumbnailUrlForDisplay(256)).allowHardware(false).build()
+                val localThumb = com.ayashii.kuro.data.offline.OfflineMusicManager.getInstance(context).getLocalThumbnailUri(track.id)
+                val request = ImageRequest.Builder(context).data(localThumb ?: track.thumbnailUrlForDisplay(256)).allowHardware(false).build()
                 val result = Coil.imageLoader(context).execute(request) as? SuccessResult
                 val bitmap = (result?.drawable as? BitmapDrawable)?.bitmap
                 if (bitmap == null) {
@@ -342,17 +343,21 @@ class KuroWidgetActionReceiver : android.content.BroadcastReceiver() {
             } catch (_: Exception) {}
         }
 
-        handler.postDelayed({ finishOnce() }, 2500L)
-
         val future = try {
             val token = SessionToken(appContext, ComponentName(appContext, PlaybackService::class.java))
             MediaController.Builder(appContext, token).buildAsync()
         } catch (e: Exception) {
             android.util.Log.e(TAG, "Unable to build MediaController: ${e.message}")
-            handler.removeCallbacksAndMessages(null)
             finishOnce()
             return
         }
+
+        handler.postDelayed({
+            try {
+                MediaController.releaseFuture(future)
+            } catch (_: Exception) {}
+            finishOnce()
+        }, 2500L)
 
         future.addListener({
             try {
@@ -395,7 +400,7 @@ class KuroWidgetActionReceiver : android.content.BroadcastReceiver() {
                     finishOnce()
                 }, 350L)
             }
-        }, MoreExecutors.directExecutor())
+        }, androidx.core.content.ContextCompat.getMainExecutor(appContext))
     }
 
     private fun toggleFavorite(context: Context, controller: MediaController) {

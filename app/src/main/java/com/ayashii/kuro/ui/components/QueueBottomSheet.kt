@@ -140,9 +140,9 @@ fun QueueBottomSheet(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     val upcomingTracks = if (currentIndex >= 0 && currentIndex + 1 < queueTracks.size) {
-                        queueTracks.subList(currentIndex + 1, queueTracks.size)
+                        queueTracks.mapIndexed { idx, t -> idx to t }.subList(currentIndex + 1, queueTracks.size)
                     } else if (currentIndex < 0) {
-                        queueTracks.filter { it.id != currentTrack?.id }
+                        queueTracks.mapIndexed { idx, t -> idx to t }.filter { (_, t) -> t.id != currentTrack?.id }
                     } else {
                         emptyList()
                     }
@@ -210,8 +210,7 @@ fun QueueBottomSheet(
                             )
                         }
                     } else {
-                        itemsIndexed(upcomingTracks, key = { idx, t -> "${t.id}_$idx" }) { relativeIndex, track ->
-                            val actualIndex = (if (currentIndex >= 0) currentIndex + 1 else 0) + relativeIndex
+                        itemsIndexed(upcomingTracks, key = { idx, pair -> "${pair.second.id}_${pair.first}_$idx" }) { relativeIndex, (actualIndex, track) ->
                             val canMoveUp = relativeIndex > 0
                             val canMoveDown = relativeIndex < upcomingTracks.size - 1
 
@@ -295,6 +294,7 @@ private fun QueueItemRow(
                 .clickable { onClick() }
                 .then(
                     if (!isCurrent && onRemove != null) {
+                        val latestOnRemove by androidx.compose.runtime.rememberUpdatedState(onRemove)
                         Modifier.pointerInput(track.id) {
                             detectHorizontalDragGestures(
                                 onDragStart = { dragOffsetX = 0f },
@@ -302,7 +302,7 @@ private fun QueueItemRow(
                                     if (abs(dragOffsetX) > 95f) {
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         dragOffsetX = 0f
-                                        onRemove()
+                                        latestOnRemove()
                                     } else {
                                         dragOffsetX = 0f
                                     }

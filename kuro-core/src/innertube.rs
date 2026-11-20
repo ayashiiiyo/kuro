@@ -512,9 +512,9 @@ fn is_metadata_noise(text: &str) -> bool {
     if parse_duration_to_seconds(&lower) > 0 {
         return true;
     }
-    if lower.contains("views")
+    let has_digit = lower.bytes().any(|b| b.is_ascii_digit());
+    if (has_digit && (lower.contains(" views") || lower.contains(" plays") || lower.ends_with("views") || lower.ends_with("plays")))
         || lower.contains("ditonton")
-        || lower.contains("plays")
         || lower.contains("diputar")
         || lower.contains("rb x")
         || lower.contains("jt x")
@@ -525,27 +525,32 @@ fn is_metadata_noise(text: &str) -> bool {
 }
 
 fn parse_duration_to_seconds(duration_str: &str) -> i64 {
-    if duration_str.is_empty() {
+    let trimmed = duration_str.trim();
+    if trimmed.is_empty() || !trimmed.contains(':') {
         return 0;
     }
-    let normalized = duration_str.trim().replace('.', ":");
-    let parts: Vec<&str> = normalized.split(':').collect();
+    let parts: Vec<&str> = trimmed.split(':').collect();
     if parts.len() != 2 && parts.len() != 3 {
         return 0;
     }
-    if !parts.iter().all(|p| !p.is_empty() && p.len() <= 2 && p.bytes().all(|b| b.is_ascii_digit())) {
+    if !parts.iter().enumerate().all(|(idx, p)| {
+        let max_len = if idx == 0 { 3 } else { 2 };
+        !p.is_empty() && p.len() <= max_len && p.bytes().all(|b| b.is_ascii_digit())
+    }) {
         return 0;
     }
     match parts.len() {
         2 => {
             let m: i64 = parts[0].parse().unwrap_or(0);
             let s: i64 = parts[1].parse().unwrap_or(0);
+            if s >= 60 { return 0; }
             (m * 60) + s
         }
         3 => {
             let h: i64 = parts[0].parse().unwrap_or(0);
             let m: i64 = parts[1].parse().unwrap_or(0);
             let s: i64 = parts[2].parse().unwrap_or(0);
+            if m >= 60 || s >= 60 { return 0; }
             (h * 3600) + (m * 60) + s
         }
         _ => 0,
@@ -561,12 +566,17 @@ fn upgrade_thumbnail(raw: &str) -> String {
         u = format!("https:{}", u);
     }
     if u.contains("googleusercontent.com") {
-        if u.contains("=") {
-            let base = u.split('=').next().unwrap_or(&u);
-            return format!("{}=w1080-h1080-l90-rj", base);
+        let (path_part, query_part) = match u.find('?') {
+            Some(idx) => (&u[..idx], &u[idx..]),
+            None => (u.as_str(), ""),
+        };
+        let resized = if path_part.contains('=') {
+            let base = path_part.split('=').next().unwrap_or(path_part);
+            format!("{}=w1080-h1080-l90-rj", base)
         } else {
-            return format!("{}=w1080-h1080-l90-rj", u);
-        }
+            format!("{}=w1080-h1080-l90-rj", path_part)
+        };
+        return format!("{}{}", resized, query_part);
     }
     if u.contains("ytimg.com") {
         return u

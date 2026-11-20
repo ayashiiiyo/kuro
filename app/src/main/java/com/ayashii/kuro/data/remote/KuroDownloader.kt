@@ -13,17 +13,13 @@ import java.util.concurrent.TimeUnit
 
 class KuroDownloader private constructor(context: Context? = null) : Downloader() {
 
-    private val client: OkHttpClient = OkHttpClient.Builder()
-        .connectionPool(ConnectionPool(8, 5, TimeUnit.MINUTES))
+    private val client: OkHttpClient = HttpClientProvider.baseClient.newBuilder()
         .apply {
             context?.let { ctx ->
                 val cacheDir = File(ctx.cacheDir, "http_cache")
                 cache(Cache(cacheDir, 30L * 1024 * 1024))
             }
         }
-        .readTimeout(15, TimeUnit.SECONDS)
-        .connectTimeout(15, TimeUnit.SECONDS)
-        .retryOnConnectionFailure(true)
         .build()
 
     override fun execute(request: Request): Response {

@@ -1,9 +1,16 @@
 use serde::{Deserialize, Serialize};
 
+fn default_neg_one() -> i64 {
+    -1
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct LiriqoWord {
+    #[serde(default)]
     pub text: String,
+    #[serde(default = "default_neg_one")]
     pub start: i64,
+    #[serde(default = "default_neg_one")]
     pub end: i64,
 }
 
@@ -11,8 +18,11 @@ pub struct LiriqoWord {
 pub struct LiriqoTimedLine {
     #[serde(default)]
     pub id: Option<usize>,
+    #[serde(default)]
     pub text: String,
+    #[serde(default = "default_neg_one")]
     pub start: i64,
+    #[serde(default = "default_neg_one")]
     pub end: i64,
     #[serde(default)]
     pub words: Option<Vec<LiriqoWord>>,
@@ -24,6 +34,7 @@ pub struct LiriqoTimedLine {
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct LiriqoTrack {
+    #[serde(default)]
     pub provider: String,
     #[serde(default, rename = "syncLevel")]
     pub sync_level: Option<String>,
@@ -91,7 +102,7 @@ fn provider_rank(provider: &str) -> usize {
     PROVIDER_RANK
         .iter()
         .position(|&p| p == provider)
-        .unwrap_or(999)
+        .unwrap_or(99)
 }
 
 fn unwrap_netease_json_line(text: &str) -> Option<(Option<i64>, String)> {
@@ -311,14 +322,23 @@ pub fn parse_liriqo_response(json_str: &str, duration_ms: i64) -> Option<Normali
 
 fn parse_lrc_lines(lrc: &str, duration_ms: i64) -> Vec<NormalizedLyricLine> {
     let mut lines = Vec::new();
+    let mut offset_ms: i64 = 0;
+
     for raw_line in lrc.lines() {
         let trimmed = raw_line.trim();
+        let lower = trimmed.to_ascii_lowercase();
+        if lower.starts_with("[offset:") && lower.ends_with(']') {
+            let val = trimmed[8..trimmed.len() - 1].trim();
+            if let Ok(parsed) = val.parse::<i64>() {
+                offset_ms = parsed;
+            }
+            continue;
+        }
         if trimmed.is_empty()
-            || trimmed.starts_with("[ti:")
-            || trimmed.starts_with("[ar:")
-            || trimmed.starts_with("[al:")
-            || trimmed.starts_with("[by:")
-            || trimmed.starts_with("[offset:")
+            || lower.starts_with("[ti:")
+            || lower.starts_with("[ar:")
+            || lower.starts_with("[al:")
+            || lower.starts_with("[by:")
         {
             continue;
         }
@@ -336,27 +356,39 @@ fn parse_lrc_lines(lrc: &str, duration_ms: i64) -> Vec<NormalizedLyricLine> {
             continue;
         }
 
-        /* Match [mm:ss.xx] or [mm:ss:xx] */
-        if let Some(close_bracket) = trimmed.find(']') {
-            if trimmed.starts_with('[') && close_bracket > 1 {
-                let tag = &trimmed[1..close_bracket];
-                let raw_text = trimmed[close_bracket + 1..].trim();
-                let (_, clean_text) = match sanitize_lyric_line_text(raw_text) {
-                    Some(pair) => pair,
-                    None => continue,
-                };
-
-                if let Some(time_ms) = parse_lrc_timestamp(tag) {
-                    if duration_ms > 0 && time_ms > duration_ms + 10_000 {
-                        continue;
-                    }
-                    lines.push(NormalizedLyricLine {
-                        time_ms,
-                        text: clean_text,
-                        end_time_ms: None,
-                    });
+        let mut rest = trimmed;
+        let mut timestamps = Vec::new();
+        while rest.starts_with('[') {
+            if let Some(close_bracket) = rest.find(']') {
+                let tag = &rest[1..close_bracket];
+                if let Some(ts) = parse_lrc_timestamp(tag) {
+                    timestamps.push((ts + offset_ms).max(0));
+                    rest = &rest[close_bracket + 1..];
+                    continue;
                 }
             }
+            break;
+        }
+
+        if timestamps.is_empty() {
+            continue;
+        }
+
+        let raw_text = rest.trim();
+        let (_, clean_text) = match sanitize_lyric_line_text(raw_text) {
+            Some(pair) => pair,
+            None => continue,
+        };
+
+        for time_ms in timestamps {
+            if duration_ms > 0 && time_ms > duration_ms + 10_000 {
+                continue;
+            }
+            lines.push(NormalizedLyricLine {
+                time_ms,
+                text: clean_text.clone(),
+                end_time_ms: None,
+            });
         }
     }
     lines
@@ -364,27 +396,53 @@ fn parse_lrc_lines(lrc: &str, duration_ms: i64) -> Vec<NormalizedLyricLine> {
 
 fn parse_lrc_timestamp(tag: &str) -> Option<i64> {
     let parts: Vec<&str> = tag.split(':').collect();
-    if parts.len() < 2 {
+    if parts.len() < 2 || parts.len() > 3 {
         return None;
     }
-    let minutes: i64 = parts[0].parse().ok()?;
-    let seconds_str = parts[1];
+    let minutes: i64 = parts[0].trim().parse().ok()?;
+    if minutes < 0 {
+        return None;
+    }
 
-    let sec_parts: Vec<&str> = seconds_str.split('.').collect();
-    if sec_parts.len() == 2 {
-        let sec: i64 = sec_parts[0].parse().ok()?;
-        let frac_str = sec_parts[1];
-        let frac: i64 = if frac_str.len() == 2 {
-            frac_str.parse::<i64>().ok()? * 10
-        } else if frac_str.len() == 3 {
-            frac_str.parse::<i64>().ok()?
-        } else {
-            0
-        };
-        Some(minutes * 60_000 + sec * 1_000 + frac)
+    let (sec, frac) = if parts.len() == 3 {
+        let s: i64 = parts[1].trim().parse().ok()?;
+        let frac_str = parts[2].trim();
+        let f = parse_frac_ms(frac_str)?;
+        (s, f)
     } else {
-        let sec: i64 = seconds_str.parse().ok()?;
-        Some(minutes * 60_000 + sec * 1_000)
+        let sec_parts: Vec<&str> = parts[1].split('.').collect();
+        if sec_parts.len() == 2 {
+            let s: i64 = sec_parts[0].trim().parse().ok()?;
+            let f = parse_frac_ms(sec_parts[1].trim())?;
+            (s, f)
+        } else {
+            let s: i64 = parts[1].trim().parse().ok()?;
+            (s, 0)
+        }
+    };
+
+    if sec < 0 {
+        return None;
+    }
+    minutes
+        .checked_mul(60_000)?
+        .checked_add(sec.checked_mul(1_000)?)?
+        .checked_add(frac)
+}
+
+fn parse_frac_ms(frac_str: &str) -> Option<i64> {
+    if frac_str.is_empty() {
+        return Some(0);
+    }
+    let v: i64 = frac_str.parse().ok()?;
+    if v < 0 {
+        return None;
+    }
+    match frac_str.len() {
+        1 => v.checked_mul(100),
+        2 => v.checked_mul(10),
+        3 => Some(v),
+        _ => Some(0),
     }
 }
 

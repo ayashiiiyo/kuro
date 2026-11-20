@@ -186,7 +186,10 @@ fun TrackOptionsBottomSheet(
                             putExtra(Intent.EXTRA_TEXT, shareTemplate)
                             type = "text/plain"
                         }
-                        context.startActivity(Intent.createChooser(sendIntent, context.getString(R.string.player_share_via)))
+                        val chooser = Intent.createChooser(sendIntent, context.getString(R.string.player_share_via)).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(chooser)
                     } catch (_: Exception) {}
                 }
             )
@@ -242,8 +245,8 @@ fun TrackOptionsBottomSheet(
                 icon = Icons.Outlined.AddCircleOutline,
                 title = stringResource(R.string.player_add_to_playlist),
                 onClick = {
-                    onDismiss()
                     onAddToPlaylist()
+                    onDismiss()
                 }
             )
 

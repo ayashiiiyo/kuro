@@ -736,9 +736,8 @@ fun LibraryScreen(
                 showSettingsDialog = true
             },
             onAddToPlaylist = {
-                val t = trackForOptions
+                trackForPlaylist = targetTrack
                 trackForOptions = null
-                trackForPlaylist = t
             },
             onRemoveFromPlaylist = if (selectedPlaylist != null) {
                 {

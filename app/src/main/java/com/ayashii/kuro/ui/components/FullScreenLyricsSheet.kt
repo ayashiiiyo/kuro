@@ -156,6 +156,7 @@ fun FullScreenLyricsSheet(
     LaunchedEffect(isUserDragging) {
         if (isUserDragging) {
             userScrolledRecently = true
+        } else if (userScrolledRecently) {
             kotlinx.coroutines.delay(3500)
             userScrolledRecently = false
         }
@@ -382,7 +383,10 @@ fun FullScreenLyricsSheet(
                                     putExtra(Intent.EXTRA_TEXT, shareText)
                                     type = "text/plain"
                                 }
-                                context.startActivity(Intent.createChooser(intent, "Bagikan Lirik"))
+                                val chooser = Intent.createChooser(intent, "Bagikan Lirik").apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                context.startActivity(chooser)
                             } catch (_: Exception) {}
                         },
                         modifier = Modifier.size(40.dp)
@@ -501,7 +505,10 @@ fun FullScreenLyricsSheet(
                                                     putExtra(Intent.EXTRA_TEXT, shareText)
                                                     type = "text/plain"
                                                 }
-                                                context.startActivity(Intent.createChooser(intent, "Bagikan"))
+                                                val chooser = Intent.createChooser(intent, "Bagikan").apply {
+                                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                }
+                                                context.startActivity(chooser)
                                             } catch (_: Exception) {}
                                         }
                                         .padding(horizontal = 16.dp, vertical = 9.dp),

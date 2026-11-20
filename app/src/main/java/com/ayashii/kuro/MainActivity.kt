@@ -155,13 +155,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
-        runCatching { coil.Coil.imageLoader(this).memoryCache?.clear() }
         viewModel.onAppBackgrounded(lastActivePage)
     }
 
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
             runCatching { coil.Coil.imageLoader(this).memoryCache?.clear() }
         }
     }
@@ -441,16 +440,22 @@ fun MainAppScreen(viewModel: MusicViewModel, onPageChanged: (Int) -> Unit = {}) 
          * Declared after Scaffold and HorizontalPager so LIFO BackHandler dispatch
          * always collapses FullPlayerSheet before any child screen intercepts Back.
          */
+        LaunchedEffect(isExpanded, currentTrack) {
+            if (isExpanded && currentTrack == null) {
+                viewModel.expandPlayer(false)
+            }
+        }
+
         BackHandler(enabled = isExpanded) {
             viewModel.expandPlayer(false)
         }
 
-        if (availableUpdate != null) {
+        availableUpdate?.let { updateInfo ->
             UpdateDialog(
-                updateInfo = availableUpdate!!,
+                updateInfo = updateInfo,
                 onDownloadClick = {
-                    UpdateManager.getInstance(context).startDownloadAndInstall(availableUpdate!!)
                     availableUpdate = null
+                    UpdateManager.getInstance(context).startDownloadAndInstall(updateInfo)
                 },
                 onDismiss = {
                     availableUpdate = null

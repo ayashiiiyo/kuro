@@ -331,11 +331,9 @@ class PlaybackService : MediaSessionService() {
             .setUsage(C.USAGE_MEDIA)
             .build()
 
-        val streamHttpClient = OkHttpClient.Builder()
-            .connectionPool(ConnectionPool(8, 5, TimeUnit.MINUTES))
+        val streamHttpClient = com.ayashii.kuro.data.remote.HttpClientProvider.baseClient.newBuilder()
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
-            .retryOnConnectionFailure(true)
             .addInterceptor { chain ->
                 val orig = chain.request()
                 val urlStr = orig.url.toString()
@@ -379,7 +377,8 @@ class PlaybackService : MediaSessionService() {
             .setUpstreamDataSourceFactory(httpDataSourceFactory)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
 
-        val mediaSourceFactory = DefaultMediaSourceFactory(cacheDataSourceFactory, extractorsFactory)
+        val defaultDataSourceFactory = androidx.media3.datasource.DefaultDataSource.Factory(this, cacheDataSourceFactory)
+        val mediaSourceFactory = DefaultMediaSourceFactory(defaultDataSourceFactory, extractorsFactory)
 
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
@@ -411,8 +410,12 @@ class PlaybackService : MediaSessionService() {
                 val failedTrackId = current?.id
                 servicePlayJob?.cancel()
                 servicePlayJob = serviceScope.launch {
+                    val isLocalSource = current?.streamUrl?.let {
+                        it.startsWith("file://") || it.startsWith("content://")
+                    } == true
                     if (current != null &&
                         current.streamUrl != null &&
+                        !isLocalSource &&
                         lastFallbackTriedTrackId != failedTrackId
                     ) {
                         lastFallbackTriedTrackId = failedTrackId
@@ -423,12 +426,11 @@ class PlaybackService : MediaSessionService() {
                             fallbackUrl != current.streamUrl &&
                             PlayerQueueManager.currentTrack.value?.id == failedTrackId
                         ) {
-                            val fallbackTrack = current.copy(streamUrl = fallbackUrl, mimeType = "audio/webm")
+                            val fallbackTrack = current.copy(streamUrl = fallbackUrl, mimeType = null)
                             PlayerQueueManager.updateCurrentTrack(fallbackTrack)
                             val item = MediaItem.Builder()
                                 .setMediaId(fallbackTrack.id)
                                 .setUri(fallbackUrl)
-                                .setMimeType("audio/webm")
                                 .setMediaMetadata(buildTrackMediaMetadata(fallbackTrack))
                                 .build()
                             exoPlayer.setMediaItem(item)
@@ -900,9 +902,12 @@ class PlaybackService : MediaSessionService() {
             }
             try {
                 val quality = SettingsManager.getInstance().audioQuality.value
-                val offlineUri = OfflineMusicManager.getInstance(this@PlaybackService).getLocalAudioUri(track.id)
-                val resolved = if (offlineUri != null) {
-                    com.ayashii.kuro.data.remote.ResolvedStream(url = offlineUri, mimeType = null)
+                val offlineMgr = OfflineMusicManager.getInstance(this@PlaybackService)
+                val offlineAudio = offlineMgr.getLocalAudioInfo(track.id)
+                val offlineUri = offlineAudio?.first
+                val offlineThumbUri = offlineMgr.getLocalThumbnailUri(track.id)
+                val resolved = if (offlineAudio != null) {
+                    com.ayashii.kuro.data.remote.ResolvedStream(url = offlineAudio.first, mimeType = offlineAudio.second)
                 } else {
                     withContext(Dispatchers.IO) {
                         runCatching { repository.getAudioStream(track.url, quality) }.getOrNull()
@@ -926,11 +931,11 @@ class PlaybackService : MediaSessionService() {
                 }
 
                 val updatedTrack = track.copy(
+                    thumbnailUrl = offlineThumbUri ?: track.thumbnailUrl,
                     streamUrl = resolved.url,
                     mimeType = resolved.mimeType
                 )
                 PlayerQueueManager.updateCurrentTrack(updatedTrack)
-                PlayerQueueManager.recordPlaybackSuccess()
                 HistoryStore.getInstance(this@PlaybackService).recordTrackPlayed(updatedTrack)
                 if (offlineUri == null && AuthManager.getInstance().isLoggedIn()) {
                     launch(Dispatchers.IO) {
@@ -955,6 +960,7 @@ class PlaybackService : MediaSessionService() {
                 }
                 syncNotificationAndWidgets()
 
+                if (offlineUri == null) {
                 launch(Dispatchers.IO) {
                     val bestThumbnail = runCatching { repository.resolveBestThumbnail(track) }.getOrDefault(track.thumbnailUrl)
                     if (bestThumbnail != track.thumbnailUrl && PlayerQueueManager.currentTrack.value?.id == track.id) {
@@ -990,9 +996,13 @@ class PlaybackService : MediaSessionService() {
                         val updatedQueue = PlayerQueueManager.queueState.value
                         val nextIdx = PlayerQueueManager.currentIndex.value + 1
                         if (nextIdx in updatedQueue.indices) {
-                            repository.getAudioStreamUrl(updatedQueue[nextIdx].url, quality)
+                            val nextTrack = updatedQueue[nextIdx]
+                            if (!offlineMgr.isDownloaded(nextTrack.id)) {
+                                repository.getAudioStreamUrl(nextTrack.url, quality)
+                            }
                         }
                     } catch (_: Exception) {}
+                }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error playing track: ${e.message}", e)
@@ -1022,15 +1032,18 @@ class PlaybackService : MediaSessionService() {
         restoringSession = true
         serviceScope.launch {
             try {
-                val track = loadPersistedTrack(this@PlaybackService) ?: return@launch
-                if (track.url.isBlank()) return@launch
+                val rawTrack = loadPersistedTrack(this@PlaybackService) ?: return@launch
+                val offlineMgr = OfflineMusicManager.getInstance(this@PlaybackService)
+                val offlineAudio = offlineMgr.getLocalAudioInfo(rawTrack.id)
+                if (offlineAudio == null && rawTrack.url.isBlank()) return@launch
+                val localThumb = offlineMgr.getLocalThumbnailUri(rawTrack.id)
+                val track = if (!localThumb.isNullOrBlank()) rawTrack.copy(thumbnailUrl = localThumb) else rawTrack
                 if (PlayerQueueManager.queueState.value.isEmpty()) {
                     PlayerQueueManager.playTrack(track, listOf(track))
                 }
                 val quality = SettingsManager.getInstance().audioQuality.value
-                val offlineUri = OfflineMusicManager.getInstance(this@PlaybackService).getLocalAudioUri(track.id)
-                val resolved = if (offlineUri != null) {
-                    com.ayashii.kuro.data.remote.ResolvedStream(url = offlineUri, mimeType = null)
+                val resolved = if (offlineAudio != null) {
+                    com.ayashii.kuro.data.remote.ResolvedStream(url = offlineAudio.first, mimeType = offlineAudio.second)
                 } else {
                     withContext(Dispatchers.IO) {
                         runCatching { repository.getAudioStream(track.url, quality) }.getOrNull()

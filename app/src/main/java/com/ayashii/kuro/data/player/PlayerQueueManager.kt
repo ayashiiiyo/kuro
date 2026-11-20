@@ -100,7 +100,9 @@ object PlayerQueueManager : IPlayerQueueManager {
     override fun playTrack(track: Track, newQueue: List<Track>) {
         synchronized(lock) {
             _consecutiveErrors.value = 0
-            if (newQueue.isNotEmpty() && newQueue != queue) {
+            val isDifferentQueue = newQueue.size != queue.size ||
+                newQueue.indices.any { newQueue[it].id != queue[it].id }
+            if (newQueue.isNotEmpty() && isDifferentQueue) {
                 queue.clear()
                 queue.addAll(newQueue)
                 playbackHistory.clear()
@@ -252,6 +254,7 @@ object PlayerQueueManager : IPlayerQueueManager {
                     queue.removeAt(queue.size - 1)
                 }
                 shuffleDeck.removeAll { it >= retainCount }
+                playbackHistory.removeAll { it >= retainCount }
                 _queueState.value = queue.toList()
             }
         }
@@ -274,6 +277,8 @@ object PlayerQueueManager : IPlayerQueueManager {
                     shuffleDeck.clear()
                     shuffleDeck.addAll(newDeck)
                     nextIndex = if (shuffleDeck.isNotEmpty()) shuffleDeck.removeAt(0) else -1
+                } else if (_repeatMode.value == Player.REPEAT_MODE_ALL && queue.size == 1) {
+                    nextIndex = 0
                 } else {
                     nextIndex = -1
                 }
@@ -306,10 +311,11 @@ object PlayerQueueManager : IPlayerQueueManager {
         synchronized(lock) {
             if (queue.isEmpty()) return null
 
-            if (playbackHistory.isNotEmpty()) {
+            while (playbackHistory.isNotEmpty()) {
                 val prevIndex = playbackHistory.removeLast()
                 if (prevIndex in queue.indices) {
                     if (_isShuffle.value && _currentIndex.value in queue.indices) {
+                        shuffleDeck.remove(_currentIndex.value)
                         shuffleDeck.add(0, _currentIndex.value)
                     }
                     _currentIndex.value = prevIndex

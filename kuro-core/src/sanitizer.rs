@@ -94,7 +94,7 @@ fn strip_bracketed_noise(input: &str) -> String {
 }
 
 fn strip_pipe_noise(input: &str) -> String {
-    if let Some(pipe_idx) = input.find('|') {
+    for (pipe_idx, _) in input.match_indices('|') {
         let after = normalize_ascii_spaces(&input[pipe_idx + 1..]);
         if after.starts_with("official music video")
             || after.starts_with("official video")

@@ -10,13 +10,23 @@ use jni::JNIEnv;
 
 /** JNI bridge matching package: com.ayashii.kuro.data.native.KuroNativeCore */
 
+fn clear_pending_exception(env: &mut JNIEnv) {
+    if env.exception_check().unwrap_or(false) {
+        let _ = env.exception_clear();
+    }
+}
+
 fn to_jstring(env: &mut JNIEnv, s: &str) -> jstring {
+    clear_pending_exception(env);
     match env.new_string(s) {
         Ok(js) => js.into_raw(),
-        Err(_) => match env.new_string("") {
-            Ok(empty) => empty.into_raw(),
-            Err(_) => std::ptr::null_mut(),
-        },
+        Err(_) => {
+            clear_pending_exception(env);
+            match env.new_string("") {
+                Ok(empty) => empty.into_raw(),
+                Err(_) => std::ptr::null_mut(),
+            }
+        }
     }
 }
 

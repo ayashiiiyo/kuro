@@ -24,6 +24,7 @@ data class Track(
 ) {
     val isCollection: Boolean
         get() {
+            if (isArtistProfile) return false
             val b = browseId.orEmpty()
             val p = playlistId.orEmpty()
             if (b.startsWith("VL") || b.startsWith("PL") || b.startsWith("MPRE") || b.startsWith("OLAK") || b.startsWith("FEmusic_")) {
@@ -45,19 +46,26 @@ data class Track(
         get() {
             if (thumbnailUrl.isBlank()) return thumbnailUrl
             var u = thumbnailUrl.trim()
+            if (u.startsWith("file://") || u.startsWith("content://")) {
+                return u
+            }
             if (u.startsWith("//")) {
                 u = "https:$u"
             }
             if (u.contains("googleusercontent.com")) {
-                return if (u.contains(THUMB_WH_CHECK_REGEX)) {
-                    u.replace(THUMB_WH_REGEX, "=w1080-h1080-l90-rj")
-                } else if (u.contains(THUMB_S_CHECK_REGEX)) {
-                    u.replace(THUMB_S_REGEX, "=w1080-h1080-l90-rj")
-                } else if (u.contains("=")) {
-                    u.replace(THUMB_EQ_REGEX, "=w1080-h1080-l90-rj")
+                val queryIdx = u.indexOf('?')
+                val pathPart = if (queryIdx >= 0) u.substring(0, queryIdx) else u
+                val queryPart = if (queryIdx >= 0) u.substring(queryIdx) else ""
+                val resizedPath = if (pathPart.contains(THUMB_WH_CHECK_REGEX)) {
+                    pathPart.replace(THUMB_WH_REGEX, "=w1080-h1080-l90-rj")
+                } else if (pathPart.contains(THUMB_S_CHECK_REGEX)) {
+                    pathPart.replace(THUMB_S_REGEX, "=w1080-h1080-l90-rj")
+                } else if (pathPart.contains("=")) {
+                    pathPart.replace(THUMB_EQ_REGEX, "=w1080-h1080-l90-rj")
                 } else {
-                    "$u=w1080-h1080-l90-rj"
+                    "$pathPart=w1080-h1080-l90-rj"
                 }
+                return resizedPath + queryPart
             }
             if (u.contains("ytimg.com")) {
                 return u
