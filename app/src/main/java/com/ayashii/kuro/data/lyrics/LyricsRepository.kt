@@ -6,6 +6,7 @@ import android.util.LruCache
 import com.ayashii.kuro.data.settings.LyricsLanguage
 import com.ayashii.kuro.data.settings.SettingsManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
