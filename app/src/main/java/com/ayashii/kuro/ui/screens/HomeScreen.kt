@@ -413,7 +413,7 @@ fun HomeScreen(
                                 modifier = Modifier.fillMaxSize(),
                                 contentPadding = PaddingValues(top = 6.dp)
                             ) {
-                                items(genreTracks, key = { it.id }, contentType = { "track" }) { track ->
+                                itemsIndexed(genreTracks, key = { idx, t -> "genre_${idx}_${t.id}" }, contentType = { _, _ -> "track" }) { _, track ->
                                     val isFav = track.id in favoriteIds
                                     TrackItem(
                                         track = track.copy(isFavorite = isFav),

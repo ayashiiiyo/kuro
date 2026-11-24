@@ -32,6 +32,7 @@ import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.data.remote.MusicRepository
 import com.ayashii.kuro.service.PlaybackService
 import com.google.common.util.concurrent.MoreExecutors
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -50,11 +51,14 @@ private const val KEY_REPEAT_MODE = "repeat_mode"
 
 private object WidgetRenderer {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val stateLock = Any()
     @Volatile private var artworkLoadedFor: String? = null
     @Volatile private var artworkLoadInProgressFor: String? = null
     @Volatile private var artworkJob: Job? = null
     @Volatile private var cachedArtworkBitmap: Bitmap? = null
     @Volatile private var cachedAccentColor: Int = Color.parseColor("#1E1F24")
+    @Volatile private var cachedBackdropKey: String? = null
+    @Volatile private var cachedBackdropBitmap: Bitmap? = null
 
     fun update(context: Context) {
         try {
@@ -72,9 +76,11 @@ private object WidgetRenderer {
 
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val track = prefs.getString(KEY_TRACK, null)?.let(::decodeTrack)
-        if (track != null && artworkLoadedFor != track.id) {
-            cachedArtworkBitmap = null
-            cachedAccentColor = Color.parseColor("#1E1F24")
+        synchronized(stateLock) {
+            if (track != null && artworkLoadedFor != track.id) {
+                cachedArtworkBitmap = null
+                cachedAccentColor = Color.parseColor("#1E1F24")
+            }
         }
         val repeatMode = prefs.getInt(KEY_REPEAT_MODE, Player.REPEAT_MODE_OFF)
         compactIds.forEach { id ->
@@ -84,8 +90,15 @@ private object WidgetRenderer {
             render(context, manager, id, true, track, prefs.getBoolean(KEY_PLAYING, false), prefs.getLong(KEY_POSITION, 0), prefs.getLong(KEY_DURATION, 0), repeatMode)
         }
         track?.let {
-            if (artworkLoadedFor != it.id && artworkLoadInProgressFor != it.id) {
-                artworkLoadInProgressFor = it.id
+            val shouldLoad = synchronized(stateLock) {
+                if (artworkLoadedFor != it.id && artworkLoadInProgressFor != it.id) {
+                    artworkLoadInProgressFor = it.id
+                    true
+                } else {
+                    false
+                }
+            }
+            if (shouldLoad) {
                 loadArtwork(context, manager, compact, square, it)
             }
         }
@@ -101,11 +114,10 @@ private object WidgetRenderer {
         val maxH = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0)?.takeIf { it > 0 } ?: minH
         val widthDp = ((minW + maxW) / 2f).coerceIn(140f, 520f)
         val heightDp = ((minH + maxH) / 2f).coerceIn(64f, 420f)
-        val rawDensity = context.resources.displayMetrics.density.coerceIn(1.5f, 3.0f)
-        val scale = rawDensity.coerceAtMost(2.25f)
-        val widthPx = (widthDp * scale).toInt().coerceAtLeast(220)
-        val heightPx = (heightDp * scale).toInt().coerceAtLeast(110)
-        val cornerRadiusPx = 24f * scale
+        val aspect = (widthDp / heightDp).coerceIn(0.6f, 4.5f)
+        val widthPx = 220
+        val heightPx = (widthPx / aspect).toInt().coerceIn(72, 160)
+        val cornerRadiusPx = (24f * (widthPx / widthDp)).coerceIn(10f, 28f)
         return Triple(widthPx, heightPx, cornerRadiusPx)
     }
 
@@ -202,9 +214,11 @@ private object WidgetRenderer {
                 }
                 val rounded = roundedBitmap(bitmap)
                 val accentColor = extractWidgetAccentColor(bitmap)
-                cachedArtworkBitmap = rounded
-                cachedAccentColor = accentColor
-                artworkLoadedFor = track.id
+                synchronized(stateLock) {
+                    cachedArtworkBitmap = rounded
+                    cachedAccentColor = accentColor
+                    artworkLoadedFor = track.id
+                }
                 val compactIds = manager.getAppWidgetIds(compact)
                 val squareIds = manager.getAppWidgetIds(square)
                 (compactIds + squareIds).forEach { id ->
@@ -217,9 +231,15 @@ private object WidgetRenderer {
                     views.setImageViewBitmap(R.id.widget_bg_art, renderGradientBackdrop(wPx, hPx, radiusPx, accentColor))
                     manager.partiallyUpdateAppWidget(id, views)
                 }
-                if (artworkLoadInProgressFor == track.id) artworkLoadInProgressFor = null
+                synchronized(stateLock) {
+                    if (artworkLoadInProgressFor == track.id) artworkLoadInProgressFor = null
+                }
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Exception) {
-                if (artworkLoadInProgressFor == track.id) artworkLoadInProgressFor = null
+                synchronized(stateLock) {
+                    if (artworkLoadInProgressFor == track.id) artworkLoadInProgressFor = null
+                }
             }
         }
     }
@@ -237,6 +257,13 @@ private object WidgetRenderer {
     }
 
     private fun renderGradientBackdrop(width: Int, height: Int, cornerRadius: Float, accentRgb: Int): Bitmap {
+        val cacheKey = "${width}x${height}_${cornerRadius.toInt()}_$accentRgb"
+        synchronized(stateLock) {
+            val existing = cachedBackdropBitmap
+            if (cachedBackdropKey == cacheKey && existing != null && !existing.isRecycled) {
+                return existing
+            }
+        }
         val output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(output)
         val r = (Color.red(accentRgb) * 0.44f).toInt().coerceIn(12, 115)
@@ -271,6 +298,10 @@ private object WidgetRenderer {
             (cornerRadius - inset).coerceAtLeast(0f),
             strokePaint
         )
+        synchronized(stateLock) {
+            cachedBackdropKey = cacheKey
+            cachedBackdropBitmap = output
+        }
         return output
     }
 

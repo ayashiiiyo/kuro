@@ -420,9 +420,7 @@ class SettingsManager private constructor(private val context: Context) {
                 File(context.cacheDir, "lyrics_cache_v4"),
                 File(context.cacheDir, "lyrics_cache_v3"),
                 File(context.cacheDir, "lyrics_cache_v2"),
-                File(context.cacheDir, "lyrics_cache"),
-                File(context.cacheDir, "image_cache"),
-                File(context.cacheDir, "http_cache")
+                File(context.cacheDir, "lyrics_cache")
             )
             cacheDirs.forEach { dir ->
                 if (dir.exists()) {
@@ -432,6 +430,14 @@ class SettingsManager private constructor(private val context: Context) {
                         }
                     }
                 }
+            }
+            runCatching {
+                val loader = coil.Coil.imageLoader(context)
+                loader.memoryCache?.clear()
+                loader.diskCache?.clear()
+            }
+            runCatching {
+                com.ayashii.kuro.data.remote.KuroDownloader.getInstance().clearHttpCache()
             }
             true
         } catch (_: Exception) {
@@ -449,9 +455,7 @@ class SettingsManager private constructor(private val context: Context) {
                 File(context.cacheDir, "lyrics_cache_v4"),
                 File(context.cacheDir, "lyrics_cache_v3"),
                 File(context.cacheDir, "lyrics_cache_v2"),
-                File(context.cacheDir, "lyrics_cache"),
-                File(context.cacheDir, "image_cache"),
-                File(context.cacheDir, "http_cache")
+                File(context.cacheDir, "lyrics_cache")
             )
             cacheDirs.forEach { dir ->
                 if (dir.exists()) {
@@ -461,6 +465,14 @@ class SettingsManager private constructor(private val context: Context) {
                         }
                     }
                 }
+            }
+            runCatching {
+                val loader = coil.Coil.imageLoader(context)
+                loader.memoryCache?.clear()
+                loader.diskCache?.clear()
+            }
+            runCatching {
+                com.ayashii.kuro.data.remote.KuroDownloader.getInstance().clearHttpCache()
             }
             true
         } catch (_: Exception) {

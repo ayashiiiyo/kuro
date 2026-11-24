@@ -94,6 +94,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -500,16 +501,20 @@ fun FullPlayerSheet(
                             .clip(RoundedCornerShape(12.dp))
                             .background(colors.card)
                             .border(1.dp, colors.border.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-                            .pointerInput(track.id) {
-                                detectTapGestures(
-                                    onDoubleTap = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        showHeartBurst = true
-                                        if (!track.isFavorite) {
-                                            onFavoriteClick()
+                            .let { mod ->
+                                val latestIsFav by rememberUpdatedState(track.isFavorite)
+                                val latestOnFav by rememberUpdatedState(onFavoriteClick)
+                                mod.pointerInput(track.id) {
+                                    detectTapGestures(
+                                        onDoubleTap = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            showHeartBurst = true
+                                            if (!latestIsFav) {
+                                                latestOnFav()
+                                            }
                                         }
-                                    }
-                                )
+                                    )
+                                }
                             }
                             .pointerInput(track.id) {
                                 detectHorizontalDragGestures(

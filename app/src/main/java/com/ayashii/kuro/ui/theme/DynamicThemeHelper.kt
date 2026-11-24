@@ -36,8 +36,8 @@ object DynamicThemeHelper {
 
     fun extractDominantColorFast(imageUrl: String?): Color? = getCachedColor(imageUrl)
 
-    suspend fun extractDominantColor(context: Context, imageUrl: String?): Color = withContext(Dispatchers.IO) {
-        if (imageUrl.isNullOrBlank()) return@withContext DarkCard
+    suspend fun extractDominantColor(context: Context, imageUrl: String?): Color? = withContext(Dispatchers.IO) {
+        if (imageUrl.isNullOrBlank()) return@withContext null
 
         colorCache.get(imageUrl)?.let { return@withContext it }
 
@@ -51,18 +51,11 @@ object DynamicThemeHelper {
 
             val result = loader.execute(request)
             if (result is SuccessResult) {
-                val rawBitmap = result.drawable.toBitmap()
-                val scaledBitmap = if (rawBitmap.width > 32 || rawBitmap.height > 32) {
-                    Bitmap.createScaledBitmap(rawBitmap, 32, 32, false)
-                } else {
-                    rawBitmap
-                }
-
-                val softwareBitmap = if (scaledBitmap.config == Bitmap.Config.HARDWARE) {
-                    scaledBitmap.copy(Bitmap.Config.ARGB_8888, false)
-                } else {
-                    scaledBitmap
-                }
+                val softwareBitmap = result.drawable.toBitmap(
+                    width = 32,
+                    height = 32,
+                    config = Bitmap.Config.ARGB_8888
+                )
 
                 val palette = Palette.from(softwareBitmap)
                     .maximumColorCount(16)
@@ -73,13 +66,13 @@ object DynamicThemeHelper {
                     ?: palette.vibrantSwatch
                     ?: palette.mutedSwatch
 
-                val extractedColor = swatch?.let { Color(it.rgb) } ?: DarkCard
+                val extractedColor = swatch?.let { Color(it.rgb) } ?: return@withContext null
                 colorCache.put(imageUrl, extractedColor)
                 return@withContext extractedColor
             }
         } catch (_: Exception) {}
 
-        DarkCard
+        null
     }
 }
 
@@ -103,7 +96,7 @@ fun rememberDynamicDominantColor(
             dominantColor = cached
         }
         if (!imageUrl.isNullOrBlank()) {
-            dominantColor = DynamicThemeHelper.extractDominantColor(context, imageUrl)
+            dominantColor = DynamicThemeHelper.extractDominantColor(context, imageUrl) ?: defaultColor
         } else {
             dominantColor = defaultColor
         }

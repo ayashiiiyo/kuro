@@ -25,7 +25,8 @@ data class Playlist(
 class PlaylistManager private constructor(context: Context) {
 
     private val prefs: SharedPreferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-    private val ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val ioScope = CoroutineScope(Dispatchers.IO.limitedParallelism(1) + SupervisorJob())
     private val _playlists = MutableStateFlow<List<Playlist>>(emptyList())
     val playlists: StateFlow<List<Playlist>> = _playlists.asStateFlow()
 
@@ -39,6 +40,7 @@ class PlaylistManager private constructor(context: Context) {
         }
     }
 
+    @Synchronized
     private fun loadPlaylists() {
         val raw = prefs.getString(KEY_PLAYLISTS, "[]") ?: "[]"
         try {
@@ -120,6 +122,7 @@ class PlaylistManager private constructor(context: Context) {
         }
     }
 
+    @Synchronized
     private fun loadWatchLater() {
         val raw = prefs.getString(KEY_WATCH_LATER, null) ?: return
         try {

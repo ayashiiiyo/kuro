@@ -180,7 +180,9 @@ class LyricsRepository(private val context: Context) {
             if (!hadNetworkError && liriqoVerifiedEmpty) {
                 synchronized(negativeCache) { negativeCache.put(trackId, System.currentTimeMillis()) }
                 try {
-                    emptyMarker.createNewFile()
+                    if (!emptyMarker.createNewFile()) {
+                        emptyMarker.setLastModified(System.currentTimeMillis())
+                    }
                 } catch (_: Exception) {}
             }
         }
@@ -324,7 +326,6 @@ class LyricsRepository(private val context: Context) {
                 if (cached != null && cached.lines.any { !it.translation.isNullOrBlank() }) {
                     synchronized(memCache) {
                         memCache.put(cacheKey, cached)
-                        memCache.put(lyrics.trackId, cached)
                     }
                     return@withContext cached
                 }

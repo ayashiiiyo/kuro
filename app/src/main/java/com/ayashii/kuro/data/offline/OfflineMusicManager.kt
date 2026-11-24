@@ -112,9 +112,10 @@ class OfflineMusicManager private constructor(private val context: Context) {
         if (remoteUrl.isBlank()) return null
         if (remoteUrl.startsWith("file://") || remoteUrl.startsWith("content://")) return remoteUrl
         return runCatching {
+            val safeId = sanitizeIdForFilename(track.id)
             val thumbDir = File(context.filesDir, "offline_thumbs").apply { mkdirs() }
-            val thumbFile = File(thumbDir, "${track.id}.jpg")
-            val tempFile = File(thumbDir, "${track.id}.jpg.tmp")
+            val thumbFile = File(thumbDir, "$safeId.jpg")
+            val tempFile = File(thumbDir, "$safeId.jpg.tmp")
             val req = Request.Builder()
                 .url(remoteUrl)
                 .header(
@@ -244,7 +245,11 @@ class OfflineMusicManager private constructor(private val context: Context) {
                     }
                 }
 
-                val finalUri = savedUriString
+                if (contentLength > 0L && totalBytes < contentLength) {
+                    throw java.io.IOException("Incomplete download: $totalBytes / $contentLength")
+                }
+                val finalUri = promoteTempFileIfNeeded(savedUriString)
+                savedUriString = finalUri
                 if (!finalUri.isNullOrBlank() && totalBytes > 0L) {
                     val localThumbUri = downloadLocalThumbnail(track)
                     val offlineTrackModel = if (!localThumbUri.isNullOrBlank()) {
@@ -261,12 +266,17 @@ class OfflineMusicManager private constructor(private val context: Context) {
                         downloadedAtMs = System.currentTimeMillis(),
                         localThumbnailUri = localThumbUri
                     )
+                    var previousUri: String? = null
                     indexMutex.withLock {
+                        previousUri = _offlineTracks.value.firstOrNull { it.track.id == track.id }?.localUri
                         val updated = _offlineTracks.value.filterNot { it.track.id == track.id }.toMutableList().apply {
                             add(0, offlineItem)
                         }
                         _offlineTracks.value = updated
                         saveIndex(updated)
+                    }
+                    if (!previousUri.isNullOrBlank() && previousUri != finalUri) {
+                        deleteTargetUri(previousUri)
                     }
                     completed = true
                 }
@@ -319,15 +329,39 @@ class OfflineMusicManager private constructor(private val context: Context) {
                     mimeType,
                     displayFileName
                 ) ?: return@runCatching null
-                val stream = context.contentResolver.openOutputStream(docUri) ?: return@runCatching null
+                val stream = context.contentResolver.openOutputStream(docUri)
+                if (stream == null) {
+                    runCatching { DocumentsContract.deleteDocument(context.contentResolver, docUri) }
+                    return@runCatching null
+                }
                 Pair(docUri.toString(), stream)
             }.getOrNull()
             if (created != null) return created
         }
 
+        val safeId = sanitizeIdForFilename(trackId)
         val dir = File(context.filesDir, "offline_music").apply { mkdirs() }
-        val file = File(dir, "$trackId.$ext")
-        return Pair(Uri.fromFile(file).toString(), file.outputStream())
+        val tempFile = File(dir, "$safeId.$ext.tmp")
+        return Pair(Uri.fromFile(tempFile).toString(), tempFile.outputStream())
+    }
+
+    private fun sanitizeIdForFilename(rawId: String): String {
+        val cleaned = rawId.replace(Regex("[^A-Za-z0-9_-]"), "_").take(80)
+        return cleaned.ifBlank { "track_${System.currentTimeMillis()}" }
+    }
+
+    private fun promoteTempFileIfNeeded(uriString: String?): String? {
+        if (uriString.isNullOrBlank() || !uriString.startsWith("file://")) return uriString
+        val path = Uri.parse(uriString).path ?: return uriString
+        if (!path.endsWith(".tmp")) return uriString
+        val tempFile = File(path)
+        val finalFile = File(path.removeSuffix(".tmp"))
+        if (finalFile.exists()) finalFile.delete()
+        return if (tempFile.renameTo(finalFile)) {
+            Uri.fromFile(finalFile).toString()
+        } else {
+            uriString
+        }
     }
 
     private fun updateProgress(trackId: String, value: Float) {

@@ -243,7 +243,7 @@ pub fn parse_liriqo_response(json_str: &str, duration_ms: i64) -> Option<Normali
                         Some(pair) => pair,
                         None => continue,
                     };
-                    if line.start < 0 || line.end <= line.start {
+                    if line.start < 0 {
                         continue;
                     }
                     /* Fits duration guard: skip line if starts > 10s after track duration */
@@ -254,7 +254,7 @@ pub fn parse_liriqo_response(json_str: &str, duration_ms: i64) -> Option<Normali
                     valid_lines.push(NormalizedLyricLine {
                         time_ms: line.start,
                         text: clean_text,
-                        end_time_ms: Some(line.end),
+                        end_time_ms: if line.end > line.start { Some(line.end) } else { None },
                     });
                 }
 

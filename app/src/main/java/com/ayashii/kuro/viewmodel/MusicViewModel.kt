@@ -38,6 +38,7 @@ import com.ayashii.kuro.widget.updateKuroWidgets
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import java.util.Collections
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -167,7 +168,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     arr.put(obj)
                 }
                 favPrefs.edit().putString("fav_list", arr.toString()).apply()
-                onSaved?.invoke()
+                if (onSaved != null) {
+                    withContext(Dispatchers.Main.immediate) {
+                        onSaved.invoke()
+                    }
+                }
             } catch (e: Exception) {
                 Log.e("KuroVM", "Save favorites error: ${e.message}")
             }
@@ -344,6 +349,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     private var lyricsJob: Job? = null
     private var searchJob: Job? = null
     private var genreJob: Job? = null
+    private var radioJob: Job? = null
+    private var browseDetailsJob: Job? = null
     private var commentsJob: Job? = null
     private var lastCommentsVideoId: String? = null
     private var hasPendingServicePlay = false
@@ -443,10 +450,13 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
-        viewModelScope.launch(Dispatchers.IO) {
+        radioJob?.cancel()
+        radioJob = viewModelScope.launch(Dispatchers.IO) {
             try {
                 delay(1800L)
+                if (_currentTrack.value?.id != track.id) return@launch
                 val radioTracks = repository.getRadioTracks(track.id)
+                if (_currentTrack.value?.id != track.id) return@launch
                 if (radioTracks.isNotEmpty()) {
                     _relatedTracks.value = radioTracks
                     val remaining = queueManager.queueState.value.size - queueManager.currentIndex.value
@@ -454,6 +464,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                         appendRadioTracks(radioTracks)
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.d("KuroVM", "Automix radio fetch: ${e.message}")
             }
@@ -1250,7 +1262,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                 if (genre.startsWith("FEmusic_")) {
                     val exploreShelves = repository.getExploreShelves(genre)
                     _genreSections.value = exploreShelves.distinctBy { it.title.trim().lowercase() }
-                    val flat = exploreShelves.flatMap { it.tracks }.filter { !it.isCollection && !it.isArtistProfile }
+                    val flat = exploreShelves.flatMap { it.tracks }
+                        .filter { !it.isCollection && !it.isArtistProfile }
+                        .distinctBy { it.id }
                     _genreTracks.value = flat
                     return@launch
                 }
@@ -1264,7 +1278,9 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     val moodShelves = repository.getHomeShelves(forceRefresh = true, filterParams = matchedToken)
                     if (moodShelves.isNotEmpty()) {
                         _genreSections.value = moodShelves.distinctBy { it.title.trim().lowercase() }
-                        _genreTracks.value = moodShelves.flatMap { it.tracks }.filter { !it.isCollection && !it.isArtistProfile }
+                        _genreTracks.value = moodShelves.flatMap { it.tracks }
+                            .filter { !it.isCollection && !it.isArtistProfile }
+                            .distinctBy { it.id }
                         return@launch
                     }
                 }
@@ -1284,18 +1300,23 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
                 _genreTracks.value = combined
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e("KuroMusicViewModel", "Load genre tracks error: ${e.message}")
                 _genreTracks.value = emptyList()
                 _genreSections.value = emptyList()
             } finally {
-                _isLoadingGenre.value = false
+                if (genreJob === coroutineContext[Job]) {
+                    _isLoadingGenre.value = false
+                }
             }
         }
     }
 
     fun openBrowseItemDetails(item: Track) {
-        viewModelScope.launch {
+        browseDetailsJob?.cancel()
+        browseDetailsJob = viewModelScope.launch {
             _isLoadingBrowseDetails.value = true
             _activeBrowseDetails.value = PlaylistBrowseDetails(
                 title = item.title,
@@ -1314,13 +1335,19 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     fallbackThumb = item.thumbnailUrl
                 )
                 _activeBrowseDetails.value = details
+            } catch (e: CancellationException) {
+                throw e
             } finally {
-                _isLoadingBrowseDetails.value = false
+                if (browseDetailsJob === coroutineContext[Job]) {
+                    _isLoadingBrowseDetails.value = false
+                }
             }
         }
     }
 
     fun closeBrowseItemDetails() {
+        browseDetailsJob?.cancel()
+        browseDetailsJob = null
         _activeBrowseDetails.value = null
         _isLoadingBrowseDetails.value = false
     }

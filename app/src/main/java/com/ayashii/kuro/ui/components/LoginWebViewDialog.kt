@@ -101,13 +101,22 @@ fun LoginWebViewDialog(
     var pageProgress by remember { mutableFloatStateOf(0f) }
     var isLoading by remember { mutableStateOf(true) }
     var hasCompletedLogin by remember { mutableStateOf(false) }
+    var isDisposed by remember { mutableStateOf(false) }
+    var pendingCheckRunnable by remember { mutableStateOf<Runnable?>(null) }
     val colors = KuroAppTheme.colors
 
     androidx.compose.runtime.DisposableEffect(Unit) {
         onDispose {
-            webViewInstance?.stopLoading()
-            webViewInstance?.removeJavascriptInterface("KuroBridge")
-            webViewInstance?.destroy()
+            isDisposed = true
+            val wv = webViewInstance
+            pendingCheckRunnable?.let { wv?.removeCallbacks(it) }
+            pendingCheckRunnable = null
+            if (wv != null) {
+                wv.stopLoading()
+                wv.removeJavascriptInterface("KuroBridge")
+                (wv.parent as? android.view.ViewGroup)?.removeView(wv)
+                wv.destroy()
+            }
             webViewInstance = null
         }
     }
@@ -358,12 +367,15 @@ fun LoginWebViewDialog(
                                     val currentUrl = url ?: ""
                                     canNavigateBack = view?.canGoBack() == true && !isInitialSignInEntryUrl(currentUrl)
                                     if (!isTrustedGoogleAuthHost(currentUrl)) return
-                                    if (currentUrl.contains("music.youtube.com")) {
-                                        view?.postDelayed({
-                                            if (!hasCompletedLogin) {
+                                    if (currentUrl.contains("music.youtube.com") && !isDisposed) {
+                                        pendingCheckRunnable?.let { view?.removeCallbacks(it) }
+                                        val r = Runnable {
+                                            if (!isDisposed && !hasCompletedLogin) {
                                                 extractAndFinalizeLogin(view, currentUrl)
                                             }
-                                        }, 650L)
+                                        }
+                                        pendingCheckRunnable = r
+                                        view?.postDelayed(r, 650L)
                                     }
                                 }
                             }

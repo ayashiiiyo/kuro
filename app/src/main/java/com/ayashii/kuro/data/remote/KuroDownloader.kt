@@ -13,6 +13,10 @@ import java.util.concurrent.TimeUnit
 
 class KuroDownloader private constructor(context: Context? = null) : Downloader() {
 
+    fun clearHttpCache() {
+        runCatching { client.cache?.evictAll() }
+    }
+
     private val client: OkHttpClient = HttpClientProvider.baseClient.newBuilder()
         .apply {
             context?.let { ctx ->

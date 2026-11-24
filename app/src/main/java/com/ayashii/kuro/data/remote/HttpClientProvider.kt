@@ -21,7 +21,9 @@ object HttpClientProvider {
                 val request = chain.request()
                 val response = chain.proceed(request)
                 val host = request.url.host.lowercase()
-                if (host == "youtube.com" || host.endsWith(".youtube.com") || host == "google.com" || host.endsWith(".google.com")) {
+                if (!request.header("Cookie").isNullOrBlank() &&
+                    (host == "youtube.com" || host.endsWith(".youtube.com") || host == "google.com" || host.endsWith(".google.com"))
+                ) {
                     val setCookies = response.headers("Set-Cookie")
                     if (setCookies.isNotEmpty()) {
                         runCatching { AuthManager.getInstance().mergeResponseCookies(setCookies) }

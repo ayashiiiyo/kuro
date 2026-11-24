@@ -344,12 +344,14 @@ object KuroNativeCore {
                         val cleanText = LrcParser.sanitizeLyricText(rawText) ?: continue
                         val start = line.optLong("start", -1L)
                         val end = line.optLong("end", -1L)
-                        if (start < 0 || end <= start) continue
+                        if (start < 0) continue
                         if (durationMs > 0 && start > durationMs + 10000) continue
                         val item = JSONObject()
                         item.put("time_ms", start)
                         item.put("text", cleanText)
-                        item.put("end_time_ms", end)
+                        if (end > start) {
+                            item.put("end_time_ms", end)
+                        }
                         items.add(item)
                     }
                     if (items.isNotEmpty()) {

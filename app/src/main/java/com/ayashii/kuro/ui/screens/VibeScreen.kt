@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -341,7 +342,7 @@ fun VibeScreen(
                 )
             }
 
-            items(candidatePool.take(15), key = { "vibe_track_${it.id}" }, contentType = { "track" }) { track ->
+            itemsIndexed(candidatePool.take(15), key = { idx, t -> "vibe_track_${idx}_${t.id}" }, contentType = { _, _ -> "track" }) { _, track ->
                 val isFav = track.id in favoriteIds
                 TrackItem(
                     track = track.copy(isFavorite = isFav),

@@ -83,7 +83,14 @@ private class KuroNotificationBitmapLoader(
     private val scope: CoroutineScope
 ) : BitmapLoader {
 
-    private val bitmapCache = LruCache<String, Bitmap>(24)
+    private val is64Bit = try { android.os.Process.is64Bit() } catch (_: Throwable) { true }
+    private val bitmapCache = LruCache<String, Bitmap>(if (is64Bit) 10 else 4)
+
+    fun clearCache() {
+        synchronized(bitmapCache) {
+            bitmapCache.evictAll()
+        }
+    }
     private val inFlightRequests = HashMap<String, ListenableFuture<Bitmap>>()
 
     override fun supportsMimeType(mimeType: String): Boolean = true
@@ -195,8 +202,9 @@ private class KuroNotificationBitmapLoader(
      */
     private fun badgeNotificationArtwork(source: Bitmap): Bitmap {
         return try {
-            val size = 512
-            val out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            val size = if (is64Bit) 512 else 256
+            val cfg = if (is64Bit) Bitmap.Config.ARGB_8888 else Bitmap.Config.RGB_565
+            val out = Bitmap.createBitmap(size, size, cfg)
             val canvas = Canvas(out)
             val imgPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 
@@ -289,6 +297,7 @@ class PlaybackService : MediaSessionService() {
 
     private var player: Player? = null
     private var mediaSession: MediaSession? = null
+    private var notificationBitmapLoader: KuroNotificationBitmapLoader? = null
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val repository = MusicRepository.getInstance()
 
@@ -578,7 +587,7 @@ class PlaybackService : MediaSessionService() {
 
         mediaSession = MediaSession.Builder(this, forwardingPlayer)
             .setSessionActivity(pendingIntent)
-            .setBitmapLoader(KuroNotificationBitmapLoader(this, serviceScope))
+            .setBitmapLoader(KuroNotificationBitmapLoader(this, serviceScope).also { notificationBitmapLoader = it })
             .setCallback(object : MediaSession.Callback {
                 override fun onConnect(
                     session: MediaSession,
@@ -1096,7 +1105,16 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND) {
+            notificationBitmapLoader?.clearCache()
+        }
+    }
+
     override fun onDestroy() {
+        notificationBitmapLoader?.clearCache()
+        notificationBitmapLoader = null
         try {
             unregisterReceiver(favSyncReceiver)
         } catch (_: Exception) {}

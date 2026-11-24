@@ -93,7 +93,7 @@ class MusicRepository {
                 .header("User-Agent", YTM_USER_AGENT)
                 .header("Referer", "https://music.youtube.com/")
                 .build()
-            HttpClientProvider.client.newCall(req).execute().use { resp ->
+            HttpClientProvider.baseClient.newCall(req).execute().use { resp ->
                 if (!resp.isSuccessful) return null
                 val raw = resp.body?.string().orEmpty()
                 val match = VISITOR_DATA_REGEX.find(raw)?.groupValues?.getOrNull(1)

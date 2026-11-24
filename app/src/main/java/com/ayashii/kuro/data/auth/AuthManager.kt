@@ -186,6 +186,7 @@ class AuthManager private constructor(private val context: Context) {
         return bytes.joinToString("") { "%02x".format(it) }
     }
 
+    @Synchronized
     fun handleLoginSuccess(
         cookie: String,
         initialName: String = "",
@@ -267,7 +268,6 @@ class AuthManager private constructor(private val context: Context) {
             val updatedCookie = merged.entries.joinToString("; ") { "${it.key}=${it.value}" }
             prefs.edit()
                 .putString(KEY_COOKIE, updatedCookie)
-                .putLong(KEY_LAST_CHECK, System.currentTimeMillis())
                 .apply()
             _authState.value = current.copy(cookie = updatedCookie)
         }
@@ -291,6 +291,7 @@ class AuthManager private constructor(private val context: Context) {
         }
     }
 
+    @Synchronized
     fun updateProfile(
         name: String,
         email: String,
@@ -582,6 +583,7 @@ class AuthManager private constructor(private val context: Context) {
         return false
     }
 
+    @Synchronized
     fun logout() {
         prefs.edit().clear().apply()
         _authState.value = null

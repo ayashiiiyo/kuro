@@ -109,21 +109,21 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.9.8 — Offline Playback, Critical Fixes & Performance
+          ## Kuro v3.9.9 — Critical & High Severity Bugfixes
 
-          - **Offline Audio & Thumbnails**:
-            - Wrapped ExoPlayer cache data source with `DefaultDataSource.Factory` so local `file://` and `content://` offline audio plays reliably without internet.
-            - Downloaded and persisted local offline thumbnails alongside audio, eliminated Coil memory cache clearing on `onStop()`, and preserved MIME type and offline session restore.
-          - **Critical UI, Sharing & Release Fixes**:
-            - Fixed "Add to Playlist" no-op across Home, Search, Library, and Vibe screens.
-            - Fixed all Share buttons (`FLAG_ACTIVITY_NEW_TASK`) and WebView Activity context, restored full-screen lyrics auto-scroll after manual drag, and fixed queue swipe-to-remove index drift.
-            - Added missing Mozilla Rhino subpackage R8/ProGuard keep rules and exported `PlaybackService` (`MediaSessionService`) for Android 13–14 media controls.
-          - **Data, Lyrics & Rust Native Core**:
-            - Fixed lyrics translation cache poisoning, negative-cache handling on network errors, `UiStateCache` collection metadata loss, `UpdateManager` receiver race, and comment posting validation.
-            - Hardened Rust JNI exception clearing, relaxed `LiriqoResponse` deserialization, fixed provider ranking and multi-timestamp/offset LRC parsing, and improved duration/thumbnail sanitization.
-          - **Performance Optimizations**:
-            - Unified all 5 OkHttp clients onto a shared `ConnectionPool` and `Dispatcher` via `HttpClientProvider.baseClient`.
-            - Throttled offline download progress emissions, switched playback polling to adaptive intervals (100ms expanded / 500ms collapsed) with active-widget checks, and moved startup disk I/O off the main thread.
+          - **Player & Playback**:
+            - Player sheet no longer auto-collapses while a track is active, and queue/playback handling hardened (`MainActivity`, `PlayerQueueManager`, `PlaybackService`).
+          - **Auth & Sync**:
+            - `@Synchronized` on login/profile update paths to prevent concurrent state races; stop persisting stale last-check timestamps (`AuthManager`).
+            - Serialized history-store writes via single-threaded dispatcher (`HistoryStore`).
+          - **Offline Playback**:
+            - Sanitized offline filenames, detects incomplete downloads, promotes `*.tmp` downloads to final files and cleans stale offline URIs (`OfflineMusicManager`, `KuroDownloader`).
+          - **Lyrics & Rust Native Core**:
+            - Fixed empty-lyrics marker race and removed a stale cache entry (`LyricsRepository`); LRC parser only emits `end_time_ms` when valid and relaxes negative start handling (`liriqo.rs`, `KuroNativeCore`).
+          - **Updates, Settings & Theme**:
+            - Hardened update-check receiver flow (`UpdateManager`), safer settings initialization (`SettingsManager`), theme helper rework (`DynamicThemeHelper`), and download/HTTP client cleanup (`HttpClientProvider`, `MusicRepository`).
+          - **UI & Widgets**:
+            - Fixes in full-player sheet, login WebView dialog, Home/Vibe screens, and playback widget state handling (`FullPlayerSheet`, `LoginWebViewDialog`, `HomeScreen`, `VibeScreen`, `KuroWidgets`, `MusicViewModel`).
           - Published signed release, per-ABI, and debug APKs.
           EOF
           gh release delete "$RELEASE_TAG" --yes --cleanup-tag 2>/dev/null || true
@@ -132,7 +132,7 @@ jobs:
             "${{ steps.apk.outputs.arm64_path }}" \
             "${{ steps.apk.outputs.arm32_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (Offline Playback, Critical Fixes & Performance)" \
+            --title "Kuro $RELEASE_TAG (Critical & High Severity Bugfixes)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 

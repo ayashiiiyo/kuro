@@ -62,22 +62,29 @@ class UpdateManager private constructor(private val context: Context) {
         }
     }
 
-    private fun resolveDevicePrimaryAbi(): String {
-        val supported = try {
-            Build.SUPPORTED_ABIS?.firstOrNull { abi ->
-                abi.equals("arm64-v8a", ignoreCase = true) ||
-                    abi.equals("armeabi-v7a", ignoreCase = true)
-            }
+    private fun resolveDevicePrimaryAbi(): String = resolveDeviceSupportedAbis().firstOrNull() ?: "armeabi-v7a"
+
+    private fun resolveDeviceSupportedAbis(): List<String> {
+        val abis = try {
+            Build.SUPPORTED_ABIS?.map { it.lowercase() }?.filter { it.isNotBlank() }.orEmpty()
         } catch (_: Throwable) {
-            null
+            emptyList()
         }
-        if (!supported.isNullOrBlank()) return supported.lowercase()
+        if (abis.isNotEmpty()) return abis
         val is64 = try {
             Process.is64Bit()
         } catch (_: Throwable) {
             true
         }
-        return if (is64) "arm64-v8a" else "armeabi-v7a"
+        return listOf(if (is64) "arm64-v8a" else "armeabi-v7a")
+    }
+
+    private fun isAbiTaggedApk(name: String): Boolean {
+        val lower = name.lowercase()
+        return lower.contains("arm64-v8a") ||
+            lower.contains("armeabi-v7a") ||
+            lower.contains("x86_64") ||
+            lower.contains("x86")
     }
 
     /**
@@ -116,7 +123,7 @@ class UpdateManager private constructor(private val context: Context) {
                 response.close()
             } ?: return@withContext null
             val json = JSONObject(bodyString)
-            val tagName = json.optString("tag_name", "").removePrefix("v").trim()
+            val tagName = json.optString("tag_name", "").trim().removePrefix("v").removePrefix("V").trim()
             val releaseNotes = json.optString("body", "").trim()
 
             if (tagName.isBlank()) return@withContext null
@@ -124,40 +131,34 @@ class UpdateManager private constructor(private val context: Context) {
             val currentVersion = BuildConfig.VERSION_NAME
             if (isNewerVersion(currentVersion, tagName)) {
                 val assets = json.optJSONArray("assets") ?: return@withContext null
-                val preferredAbi = resolveDevicePrimaryAbi()
+                val supportedAbis = resolveDeviceSupportedAbis()
                 var downloadUrl: String? = null
                 var fileName: String? = null
 
-                for (i in 0 until assets.length()) {
-                    val asset = assets.getJSONObject(i)
-                    val name = asset.optString("name", "")
-                    if (name.endsWith(".apk", ignoreCase = true) &&
-                        !name.contains("debug", ignoreCase = true) &&
-                        name.contains(preferredAbi, ignoreCase = true)
-                    ) {
-                        downloadUrl = asset.optString("browser_download_url")
-                        fileName = name
-                        break
-                    }
-                }
-
-                if (downloadUrl == null) {
+                for (abi in supportedAbis) {
                     for (i in 0 until assets.length()) {
                         val asset = assets.getJSONObject(i)
                         val name = asset.optString("name", "")
-                        if (name.endsWith("-release.apk", ignoreCase = true)) {
+                        if (name.endsWith(".apk", ignoreCase = true) &&
+                            !name.contains("debug", ignoreCase = true) &&
+                            name.contains(abi, ignoreCase = true)
+                        ) {
                             downloadUrl = asset.optString("browser_download_url")
                             fileName = name
                             break
                         }
                     }
+                    if (downloadUrl != null) break
                 }
 
                 if (downloadUrl == null) {
                     for (i in 0 until assets.length()) {
                         val asset = assets.getJSONObject(i)
                         val name = asset.optString("name", "")
-                        if (name.endsWith(".apk", ignoreCase = true) && !name.contains("debug", ignoreCase = true)) {
+                        if (name.endsWith(".apk", ignoreCase = true) &&
+                            !name.contains("debug", ignoreCase = true) &&
+                            !isAbiTaggedApk(name)
+                        ) {
                             downloadUrl = asset.optString("browser_download_url")
                             fileName = name
                             break
@@ -459,8 +460,12 @@ class UpdateManager private constructor(private val context: Context) {
      * Compares semantic versioning (e.g. "3.4.5" vs "3.5.0").
      */
     private fun isNewerVersion(current: String, latest: String): Boolean {
-        val currParts = current.split(".").mapNotNull { it.toIntOrNull() }
-        val latestParts = latest.split(".").mapNotNull { it.toIntOrNull() }
+        val cleanCurr = current.trim().removePrefix("v").removePrefix("V")
+        val cleanLatest = latest.trim().removePrefix("v").removePrefix("V")
+        val currCore = cleanCurr.substringBefore("-").substringBefore("+")
+        val latestCore = cleanLatest.substringBefore("-").substringBefore("+")
+        val currParts = currCore.split(".").mapNotNull { it.toIntOrNull() }
+        val latestParts = latestCore.split(".").mapNotNull { it.toIntOrNull() }
 
         val maxLen = maxOf(currParts.size, latestParts.size)
         for (i in 0 until maxLen) {
@@ -469,6 +474,8 @@ class UpdateManager private constructor(private val context: Context) {
             if (latestVal > currVal) return true
             if (latestVal < currVal) return false
         }
-        return false
+        val currIsPre = cleanCurr.contains("-")
+        val latestIsPre = cleanLatest.contains("-")
+        return currIsPre && !latestIsPre
     }
 }

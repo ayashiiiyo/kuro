@@ -440,8 +440,11 @@ fun MainAppScreen(viewModel: MusicViewModel, onPageChanged: (Int) -> Unit = {}) 
          * Declared after Scaffold and HorizontalPager so LIFO BackHandler dispatch
          * always collapses FullPlayerSheet before any child screen intercepts Back.
          */
+        var hadNonNullTrack by remember { mutableStateOf(false) }
         LaunchedEffect(isExpanded, currentTrack) {
-            if (isExpanded && currentTrack == null) {
+            if (currentTrack != null) {
+                hadNonNullTrack = true
+            } else if (isExpanded && hadNonNullTrack) {
                 viewModel.expandPlayer(false)
             }
         }

@@ -137,6 +137,9 @@ object PlayerQueueManager : IPlayerQueueManager {
                 } else {
                     val insertIdx = (_currentIndex.value + 1).coerceIn(0, queue.size)
                     queue.add(insertIdx, track)
+                    val remappedHistory = playbackHistory.map { if (it >= insertIdx) it + 1 else it }
+                    playbackHistory.clear()
+                    playbackHistory.addAll(remappedHistory)
                     if (_currentIndex.value in queue.indices) {
                         playbackHistory.addLast(_currentIndex.value)
                         if (playbackHistory.size > 200) playbackHistory.removeFirst()
@@ -172,7 +175,7 @@ object PlayerQueueManager : IPlayerQueueManager {
             queue.add(track)
             val newIndex = queue.size - 1
             if (_queueState.value.isEmpty() || _currentIndex.value == -1) {
-                _currentIndex.value = 0
+                _currentIndex.value = newIndex
                 _currentTrack.value = track
             } else if (_isShuffle.value) {
                 if (shuffleDeck.isEmpty()) {
@@ -410,9 +413,11 @@ object PlayerQueueManager : IPlayerQueueManager {
 
     fun updateCurrentTrack(track: Track) {
         synchronized(lock) {
+            val activeId = _currentTrack.value?.id
+            if (activeId != null && activeId != track.id) return
             _currentTrack.value = track
             val idx = _currentIndex.value
-            if (idx in queue.indices) {
+            if (idx in queue.indices && queue[idx].id == track.id) {
                 queue[idx] = track
                 _queueState.value = queue.toList()
             }
