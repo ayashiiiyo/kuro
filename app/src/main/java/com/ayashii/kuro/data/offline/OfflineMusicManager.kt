@@ -243,10 +243,9 @@ class OfflineMusicManager private constructor(private val context: Context) {
                             out.flush()
                         }
                     }
-                }
-
-                if (contentLength > 0L && totalBytes < contentLength) {
-                    throw java.io.IOException("Incomplete download: $totalBytes / $contentLength")
+                    if (contentLength > 0L && totalBytes < contentLength) {
+                        throw java.io.IOException("Incomplete download: $totalBytes / $contentLength")
+                    }
                 }
                 val finalUri = promoteTempFileIfNeeded(savedUriString)
                 savedUriString = finalUri
