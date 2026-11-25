@@ -1,19 +1,17 @@
 package com.ayashii.kuro.ui.components
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,8 +23,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Speaker
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -58,8 +54,9 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.ayashii.kuro.R
 import com.ayashii.kuro.data.model.Track
+import com.ayashii.kuro.ui.motion.KuroFlowEngine
+import com.ayashii.kuro.ui.motion.KuroFlowEngine.kuroElasticPress
 import com.ayashii.kuro.ui.theme.KuroAppTheme
-import com.ayashii.kuro.ui.theme.KuroMotion
 import com.ayashii.kuro.ui.theme.Typography
 import kotlin.math.abs
 
@@ -84,35 +81,39 @@ fun MiniPlayer(
     var dragOffsetX by remember { mutableFloatStateOf(0f) }
     var dragOffsetY by remember { mutableFloatStateOf(0f) }
     var lockedAxis by remember { mutableIntStateOf(0) }
+    val interactionSource = remember { MutableInteractionSource() }
 
     val animatedOffsetX by animateFloatAsState(
         targetValue = dragOffsetX,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
+        animationSpec = KuroFlowEngine.elasticSpring(),
         label = "mini_swipe_offset_x"
     )
 
     val animatedOffsetY by animateFloatAsState(
         targetValue = dragOffsetY,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMedium
-        ),
+        animationSpec = KuroFlowEngine.elasticSpring(),
         label = "mini_swipe_offset_y"
     )
 
+    val liftProgress = ((-animatedOffsetY) / 140f).coerceIn(0f, 1f)
+    val dynamicCornerDp = (liftProgress * 18f).dp
     val solidContainerColor = if (colors.isDark) Color(0xFF141414) else Color(0xFFF6F6F6)
 
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .kuroElasticPress(interactionSource, pressedScale = 0.985f)
             .graphicsLayer {
-                translationY = (animatedOffsetY * 0.35f).coerceIn(-28f, 20f)
+                // Fluid ColorOS 17-style upward lift & rubber-band expansion when swiping up
+                translationY = (animatedOffsetY * 0.62f).coerceIn(-96f, 34f)
+                val liftScale = 1f + (liftProgress * 0.025f)
+                scaleX = liftScale
+                scaleY = liftScale
+                alpha = (1f - (liftProgress * 0.12f)).coerceIn(0.88f, 1f)
             }
+            .clip(RoundedCornerShape(topStart = dynamicCornerDp, topEnd = dynamicCornerDp))
             .background(solidContainerColor)
-            .clickable { onClick() }
+            .clickable(interactionSource = interactionSource, indication = null) { onClick() }
             .pointerInput(track.id, isPlaying) {
                 detectDragGestures(
                     onDragStart = {
@@ -177,7 +178,7 @@ fun MiniPlayer(
                             }
                         }
                         if (lockedAxis == 2) {
-                            dragOffsetY = (dragOffsetY + dragAmount.y).coerceIn(-140f, 120f)
+                            dragOffsetY = (dragOffsetY + dragAmount.y).coerceIn(-160f, 120f)
                             change.consume()
                         } else {
                             dragOffsetX = (dragOffsetX + dragAmount.x).coerceIn(-180f, 180f)
@@ -199,7 +200,7 @@ fun MiniPlayer(
                 .fillMaxWidth()
                 .padding(horizontal = 14.dp, vertical = 8.dp)
                 .graphicsLayer {
-                    translationX = animatedOffsetX * 0.35f
+                    translationX = animatedOffsetX * 0.42f
                 },
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -211,8 +212,12 @@ fun MiniPlayer(
                     targetState = track,
                     contentKey = { it.id },
                     transitionSpec = {
-                        fadeIn(tween(220, easing = KuroMotion.EmphasizedDecelerate))
-                            .togetherWith(fadeOut(tween(160, easing = KuroMotion.EmphasizedAccelerate)))
+                        (fadeIn(tween(220, easing = KuroFlowEngine.EmphasizedDecelerate)) +
+                            slideInHorizontally(animationSpec = KuroFlowEngine.fluidSpring()) { it / 6 })
+                            .togetherWith(
+                                fadeOut(tween(150, easing = KuroFlowEngine.EmphasizedAccelerate)) +
+                                    slideOutHorizontally(animationSpec = tween(150)) { -it / 6 }
+                            )
                     },
                     label = "mini_artwork"
                 ) { animatedTrack ->
@@ -221,7 +226,7 @@ fun MiniPlayer(
                         contentDescription = animatedTrack.title,
                         modifier = Modifier
                             .size(44.dp)
-                            .clip(RoundedCornerShape(6.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .background(colors.card),
                         contentScale = ContentScale.Crop
                     )
@@ -237,8 +242,11 @@ fun MiniPlayer(
                     targetState = track,
                     contentKey = { it.id },
                     transitionSpec = {
-                        fadeIn(tween(220, easing = KuroMotion.EmphasizedDecelerate))
-                            .togetherWith(fadeOut(tween(160, easing = KuroMotion.EmphasizedAccelerate)))
+                        (fadeIn(tween(220, easing = KuroFlowEngine.EmphasizedDecelerate)) +
+                            slideInHorizontally(animationSpec = KuroFlowEngine.fluidSpring()) { it / 8 })
+                            .togetherWith(
+                                fadeOut(tween(150, easing = KuroFlowEngine.EmphasizedAccelerate))
+                            )
                     },
                     label = "mini_metadata"
                 ) { animatedTrack ->

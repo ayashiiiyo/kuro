@@ -31,6 +31,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -107,6 +109,7 @@ import com.ayashii.kuro.ui.components.SettingsDialog
 import com.ayashii.kuro.ui.components.TrackItem
 import com.ayashii.kuro.ui.components.TrackOptionsBottomSheet
 import com.ayashii.kuro.ui.theme.KuroAppTheme
+import com.ayashii.kuro.ui.motion.KuroFlowEngine.kuroElasticPress
 import com.ayashii.kuro.ui.theme.KuroMotion
 import com.ayashii.kuro.ui.theme.PureBlack
 import com.ayashii.kuro.ui.theme.PureWhite
@@ -258,11 +261,12 @@ fun HomeScreen(
                 .background(
                     Brush.verticalGradient(
                         0.0f to topAmbientTint,
-                        0.24f to colors.background,
+                        0.28f to colors.background,
                         1.0f to colors.background
                     )
                 )
-                .padding(top = 8.dp)
+                .statusBarsPadding()
+                .padding(top = 6.dp)
         ) {
             HomeTopBar(
                 currentAccount = currentAccount,
@@ -300,12 +304,14 @@ fun HomeScreen(
                         colors.isDark -> PureWhite.copy(alpha = 0.14f)
                         else -> colors.border.copy(alpha = 0.6f)
                     }
+                    val chipInteraction = remember { MutableInteractionSource() }
                     Box(
                         modifier = Modifier
+                            .kuroElasticPress(chipInteraction, pressedScale = 0.94f)
                             .clip(RoundedCornerShape(8.dp))
                             .background(chipBg)
                             .border(1.dp, chipBorder, RoundedCornerShape(8.dp))
-                            .clickable {
+                            .clickable(interactionSource = chipInteraction, indication = null) {
                                 if (isResetChip || isSelected) {
                                     if (selectedGenre != "Semua") {
                                         selectedGenre = "Semua"
@@ -1072,10 +1078,12 @@ private fun SpeedDialGridPage(
                 rowItems.forEachIndexed { cIdx, track ->
                     val isPlaying = currentTrackId == track.id
                     val isHighlighted = isPlaying || (isFirstPage && rIdx == 0 && cIdx == 0 && currentTrackId == null)
+                    val tileInteraction = remember { MutableInteractionSource() }
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .height(106.dp)
+                            .kuroElasticPress(tileInteraction, pressedScale = 0.94f)
                             .clip(RoundedCornerShape(10.dp))
                             .background(colors.card)
                             .border(
@@ -1084,6 +1092,8 @@ private fun SpeedDialGridPage(
                                 RoundedCornerShape(10.dp)
                             )
                             .combinedClickable(
+                                interactionSource = tileInteraction,
+                                indication = null,
                                 onClick = { onTrackClick(track) },
                                 onLongClick = { onLongClick(track) }
                             )
@@ -1179,10 +1189,17 @@ private fun WideVideoMusicCard(
     onLongClick: () -> Unit
 ) {
     val colors = KuroAppTheme.colors
+    val cardInteraction = remember { MutableInteractionSource() }
     Column(
         modifier = Modifier
             .width(232.dp)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .kuroElasticPress(cardInteraction, pressedScale = 0.96f)
+            .combinedClickable(
+                interactionSource = cardInteraction,
+                indication = null,
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
     ) {
         Box(
             modifier = Modifier
@@ -1412,10 +1429,14 @@ fun YtmMusicCard(
     val isArtist = track.isArtistProfile
     val shape = if (isArtist) CircleShape else RoundedCornerShape(10.dp)
 
+    val cardInteraction = remember { MutableInteractionSource() }
     Column(
         modifier = modifier
             .width(156.dp)
+            .kuroElasticPress(cardInteraction, pressedScale = 0.95f)
             .combinedClickable(
+                interactionSource = cardInteraction,
+                indication = null,
                 onClick = onClick,
                 onLongClick = onLongClick
             ),
@@ -1592,10 +1613,17 @@ private fun HomeCompactTrackRow(
     onMoreClick: () -> Unit
 ) {
     val colors = KuroAppTheme.colors
+    val rowInteraction = remember { MutableInteractionSource() }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .kuroElasticPress(rowInteraction, pressedScale = 0.97f)
+            .combinedClickable(
+                interactionSource = rowInteraction,
+                indication = null,
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
             .padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

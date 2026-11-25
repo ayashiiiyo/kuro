@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -196,7 +197,7 @@ fun LibraryScreen(
                     onMoreClick = { trackForOptions = it }
                 )
             } else {
-                Box(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
                     Column(modifier = Modifier.fillMaxSize()) {
                         Row(
                             modifier = Modifier
@@ -316,6 +317,7 @@ fun LibraryScreen(
 
                         HorizontalPager(
                             state = libPagerState,
+                            beyondBoundsPageCount = 1,
                             modifier = Modifier.fillMaxSize()
                         ) { tab ->
                             Box(

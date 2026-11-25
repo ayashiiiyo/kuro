@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -125,8 +126,9 @@ fun VibeScreen(
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(colors.background),
-        contentPadding = PaddingValues(top = 18.dp, bottom = 140.dp)
+            .background(colors.background)
+            .statusBarsPadding(),
+        contentPadding = PaddingValues(top = 14.dp, bottom = 140.dp)
     ) {
         item(key = "vibe_header") {
             Column(

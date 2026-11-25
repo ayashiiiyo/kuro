@@ -109,21 +109,18 @@ jobs:
           VERSION_NAME: ${{ steps.apk.outputs.version }}
         run: |
           cat > RELEASE_NOTES.md <<'EOF'
-          ## Kuro v3.9.9 — Critical & High Severity Bugfixes
+          ## Kuro v4.0.0 — KuroFlow Motion Engine & Fullscreen UI
 
-          - **Player & Playback**:
-            - Player sheet no longer auto-collapses while a track is active, and queue/playback handling hardened (`MainActivity`, `PlayerQueueManager`, `PlaybackService`).
-          - **Auth & Sync**:
-            - `@Synchronized` on login/profile update paths to prevent concurrent state races; stop persisting stale last-check timestamps (`AuthManager`).
-            - Serialized history-store writes via single-threaded dispatcher (`HistoryStore`).
-          - **Offline Playback**:
-            - Sanitized offline filenames, detects incomplete downloads, promotes `*.tmp` downloads to final files and cleans stale offline URIs (`OfflineMusicManager`, `KuroDownloader`).
-          - **Lyrics & Rust Native Core**:
-            - Fixed empty-lyrics marker race and removed a stale cache entry (`LyricsRepository`); LRC parser only emits `end_time_ms` when valid and relaxes negative start handling (`liriqo.rs`, `KuroNativeCore`).
-          - **Updates, Settings & Theme**:
-            - Hardened update-check receiver flow (`UpdateManager`), safer settings initialization (`SettingsManager`), theme helper rework (`DynamicThemeHelper`), and download/HTTP client cleanup (`HttpClientProvider`, `MusicRepository`).
-          - **UI & Widgets**:
-            - Fixes in full-player sheet, login WebView dialog, Home/Vibe screens, and playback widget state handling (`FullPlayerSheet`, `LoginWebViewDialog`, `HomeScreen`, `VibeScreen`, `KuroWidgets`, `MusicViewModel`).
+          - **KuroFlow Motion Engine**:
+            - New shared motion module (`KuroFlowEngine`) with elastic press feedback, flow pager transitions and GPU-only `graphicsLayer` animations.
+          - **Fullscreen / Edge-to-Edge UI**:
+            - Edge-to-edge layout with transparent system bars (`enableEdgeToEdge`, `WindowCompat.setDecorFitsSystemWindows`), updated themes for fullscreen rendering.
+          - **Player Experience**:
+            - Reworked fullscreen player (`MainActivity`) and animated mini player; track rows redesigned with press/motion feedback (`MiniPlayer`, `TrackItem`).
+          - **Screens & Theme**:
+            - Home, Library, Search and Vibe screens aligned to the new motion system; simplified theme (`Theme.kt`) and removed legacy `KuroMotion` helpers.
+          - **ViewModel**:
+            - Cleaned up `MusicViewModel` state/queue paths to match the new UI motion flows.
           - Published signed release, per-ABI, and debug APKs.
           EOF
           gh release delete "$RELEASE_TAG" --yes --cleanup-tag 2>/dev/null || true
@@ -132,7 +129,7 @@ jobs:
             "${{ steps.apk.outputs.arm64_path }}" \
             "${{ steps.apk.outputs.arm32_path }}" \
             "${{ steps.apk.outputs.debug_path }}" \
-            --title "Kuro $RELEASE_TAG (Critical & High Severity Bugfixes)" \
+            --title "Kuro $RELEASE_TAG (KuroFlow Motion Engine & Fullscreen UI)" \
             --notes-file RELEASE_NOTES.md \
             --latest
 

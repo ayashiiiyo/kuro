@@ -831,6 +831,8 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private var homeRefreshCycle = 0
+    private var trendingJob: Job? = null
+    private var lastHomeLoadedAtMs: Long = 0L
 
     private fun <T> rotateListBy(items: List<T>, offset: Int): List<T> {
         if (items.size <= 1) return items
@@ -1124,58 +1126,65 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun loadTrending() {
-        viewModelScope.launch {
+    fun loadTrending(force: Boolean = false) {
+        if (!force && trendingJob?.isActive == true) return
+        trendingJob?.cancel()
+        trendingJob = viewModelScope.launch {
             _isLoadingTrending.value = true
-            val ytmShelves = repository.getHomeShelves()
-            val baseSongs = ytmShelves.flatMap { it.tracks }
-            val seed = selectRotatingHomeSeed(baseSongs)
-            val initialPersonalized = personalizeHomeShelves(
-                shelves = ytmShelves,
-                rotateTop = true,
-                freshQuickPickTracks = emptyList(),
-                seedTrack = seed
-            )
-            if (initialPersonalized.isNotEmpty()) {
-                _homeSections.value = initialPersonalized
-            }
-            val tracks = if (initialPersonalized.isNotEmpty()) {
-                initialPersonalized.flatMap { it.tracks }.distinctBy { it.id }
-            } else {
-                repository.getTrendingTracks()
-            }
-            if (tracks.isNotEmpty()) {
-                _trendingTracks.value = tracks
-            }
-            _isLoadingTrending.value = false
+            try {
+                val ytmShelves = repository.getHomeShelves()
+                val baseSongs = ytmShelves.flatMap { it.tracks }
+                val seed = selectRotatingHomeSeed(baseSongs)
+                val initialPersonalized = personalizeHomeShelves(
+                    shelves = ytmShelves,
+                    rotateTop = false,
+                    freshQuickPickTracks = emptyList(),
+                    seedTrack = seed
+                )
+                if (initialPersonalized.isNotEmpty()) {
+                    _homeSections.value = initialPersonalized
+                }
+                val tracks = if (initialPersonalized.isNotEmpty()) {
+                    initialPersonalized.flatMap { it.tracks }.distinctBy { it.id }
+                } else {
+                    repository.getTrendingTracks()
+                }
+                if (tracks.isNotEmpty()) {
+                    _trendingTracks.value = tracks
+                }
+                lastHomeLoadedAtMs = System.currentTimeMillis()
+                _isLoadingTrending.value = false
 
-            if (seed != null) {
-                launch(Dispatchers.IO) {
-                    try {
-                        val tuners = listOf("AUTOMIX_SETTING_NORMAL", "AUTOMIX_SETTING_DISCOVER", "AUTOMIX_SETTING_FAMILIAR")
-                        val freshRadio = repository.getRadioTracks(
-                            seed.id,
-                            tunerSetting = tuners[homeRefreshCycle % tuners.size],
-                            forceRefresh = false
-                        )
-                        if (freshRadio.isNotEmpty()) {
-                            val enriched = personalizeHomeShelves(
-                                shelves = ytmShelves,
-                                rotateTop = false,
-                                freshQuickPickTracks = freshRadio,
-                                seedTrack = seed
+                if (seed != null) {
+                    launch(Dispatchers.IO) {
+                        try {
+                            val tuners = listOf("AUTOMIX_SETTING_NORMAL", "AUTOMIX_SETTING_DISCOVER", "AUTOMIX_SETTING_FAMILIAR")
+                            val freshRadio = repository.getRadioTracks(
+                                seed.id,
+                                tunerSetting = tuners[homeRefreshCycle % tuners.size],
+                                forceRefresh = false
                             )
-                            _homeSections.value = enriched
-                        }
-                    } catch (_: Exception) {}
+                            if (freshRadio.isNotEmpty()) {
+                                val enriched = personalizeHomeShelves(
+                                    shelves = ytmShelves,
+                                    rotateTop = false,
+                                    freshQuickPickTracks = freshRadio,
+                                    seedTrack = seed
+                                )
+                                _homeSections.value = enriched
+                            }
+                        } catch (_: Exception) {}
+                    }
                 }
-            }
 
-            launch(Dispatchers.IO) {
-                delay(2000)
-                tracks.firstOrNull { it.browseId == null && it.playlistId == null }?.let {
-                    repository.getAudioStreamUrl(it.url, settingsManager.audioQuality.value)
+                launch(Dispatchers.IO) {
+                    delay(2000)
+                    tracks.firstOrNull { it.browseId == null && it.playlistId == null }?.let {
+                        repository.getAudioStreamUrl(it.url, settingsManager.audioQuality.value)
+                    }
                 }
+            } finally {
+                _isLoadingTrending.value = false
             }
         }
     }
@@ -1685,19 +1694,11 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
     fun onAppForegrounded() {
         viewModelScope.launch(Dispatchers.IO) {
             val snapshot = UiStateCache.loadSnapshot(getApplication())
+            // Always lock entry page to Home (page 0)
+            _restoredPage.value = 0
             if (snapshot != null) {
-                _restoredPage.value = snapshot.lastPage
                 if (_homeSections.value.isEmpty() && snapshot.homeSections.isNotEmpty()) {
-                    val rotatedSnapshot = personalizeHomeShelves(
-                        shelves = snapshot.homeSections,
-                        rotateTop = true
-                    )
-                    _homeSections.value = rotatedSnapshot
-                } else if (_homeSections.value.isNotEmpty()) {
-                    _homeSections.value = personalizeHomeShelves(
-                        shelves = _homeSections.value,
-                        rotateTop = true
-                    )
+                    _homeSections.value = snapshot.homeSections
                 }
                 if (_trendingTracks.value.isEmpty() && snapshot.trendingTracks.isNotEmpty()) {
                     _trendingTracks.value = snapshot.trendingTracks
@@ -1708,9 +1709,10 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     startProgressTracking()
                 }
             }
-            val needsRefresh = snapshot == null ||
-                (System.currentTimeMillis() - snapshot.savedAtMs) > 45 * 1000L
-            if (needsRefresh || _homeSections.value.isEmpty()) {
+            val now = System.currentTimeMillis()
+            val recentlyLoaded = lastHomeLoadedAtMs > 0L && (now - lastHomeLoadedAtMs) < 5 * 60 * 1000L
+            val snapshotStale = snapshot == null || (now - snapshot.savedAtMs) > 5 * 60 * 1000L
+            if (!recentlyLoaded && (snapshotStale || _homeSections.value.isEmpty()) && trendingJob?.isActive != true) {
                 loadTrending()
             }
         }

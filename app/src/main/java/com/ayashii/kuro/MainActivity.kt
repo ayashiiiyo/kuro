@@ -4,11 +4,15 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color as AndroidColor
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
@@ -16,25 +20,30 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,6 +52,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -53,13 +63,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -67,20 +77,22 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import com.ayashii.kuro.data.model.Track
 import com.ayashii.kuro.data.update.UpdateInfo
 import com.ayashii.kuro.data.update.UpdateManager
 import com.ayashii.kuro.ui.components.FullPlayerSheet
 import com.ayashii.kuro.ui.components.MiniPlayer
 import com.ayashii.kuro.ui.components.UpdateDialog
+import com.ayashii.kuro.ui.motion.KuroFlowEngine
+import com.ayashii.kuro.ui.motion.KuroFlowEngine.kuroElasticPress
+import com.ayashii.kuro.ui.motion.KuroFlowEngine.kuroFlowPagerTransition
 import com.ayashii.kuro.ui.navigation.Screen
 import com.ayashii.kuro.ui.screens.HomeScreen
 import com.ayashii.kuro.ui.screens.LibraryScreen
 import com.ayashii.kuro.ui.screens.SearchScreen
 import com.ayashii.kuro.ui.screens.VibeScreen
 import com.ayashii.kuro.ui.theme.KuroAppTheme
-import com.ayashii.kuro.ui.theme.KuroMotion
-import com.ayashii.kuro.ui.theme.KuroMotion.pagerMotionBlurTransition
 import com.ayashii.kuro.ui.theme.KuroTheme
 import com.ayashii.kuro.viewmodel.MusicViewModel
 import kotlinx.coroutines.launch
@@ -126,7 +138,22 @@ class MainActivity : ComponentActivity() {
     private var lastActivePage: Int = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.auto(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.auto(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
+        )
         super.onCreate(savedInstanceState)
+
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes = window.attributes.apply {
+                layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             try {
@@ -143,6 +170,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             val themeMode by viewModel.themeMode.collectAsState()
             KuroTheme(themeMode = themeMode) {
+                val isDark = KuroAppTheme.colors.isDark
+                SideEffect {
+                    val controller = WindowCompat.getInsetsController(window, window.decorView)
+                    controller.isAppearanceLightStatusBars = !isDark
+                    controller.isAppearanceLightNavigationBars = !isDark
+                }
                 MainAppScreen(viewModel = viewModel, onPageChanged = { lastActivePage = it })
             }
         }
@@ -182,14 +215,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainAppScreen(viewModel: MusicViewModel, onPageChanged: (Int) -> Unit = {}) {
     val navItems = Screen.bottomNavItems
-    val restoredPage by viewModel.restoredPage.collectAsState()
-    val pagerState = rememberPagerState(initialPage = restoredPage.coerceIn(0, navItems.lastIndex), pageCount = { navItems.size })
-    LaunchedEffect(restoredPage) {
-        val target = restoredPage.coerceIn(0, navItems.lastIndex)
-        if (pagerState.currentPage != target && !pagerState.isScrollInProgress) {
-            pagerState.scrollToPage(target)
-        }
-    }
+    // Always lock initial entry to Home (page 0)
+    val pagerState = rememberPagerState(initialPage = 0, pageCount = { navItems.size })
     LaunchedEffect(pagerState.currentPage) {
         onPageChanged(pagerState.currentPage)
     }
@@ -213,7 +240,7 @@ fun MainAppScreen(viewModel: MusicViewModel, onPageChanged: (Int) -> Unit = {}) 
             coroutineScope.launch {
                 pagerState.animateScrollToPage(
                     page = clamped,
-                    animationSpec = KuroMotion.appleFluidSpring()
+                    animationSpec = KuroFlowEngine.fluidSpring()
                 )
             }
         }
@@ -234,23 +261,25 @@ fun MainAppScreen(viewModel: MusicViewModel, onPageChanged: (Int) -> Unit = {}) 
     Box(modifier = Modifier.fillMaxSize().background(colors.background)) {
         Scaffold(
             containerColor = colors.background,
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
             bottomBar = {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(colors.surface)
+                        .background(colors.surface.copy(alpha = 0.96f))
                 ) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(1.dp)
-                            .background(colors.border.copy(alpha = 0.45f))
+                            .height(0.8.dp)
+                            .background(colors.border.copy(alpha = 0.42f))
                     )
-                    Row(
+                    BoxWithConstraints(
                         modifier = Modifier
                             .fillMaxWidth()
                             .navigationBarsPadding()
-                            .height(58.dp)
+                            .height(60.dp)
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
                             .pointerInput(pagerState.currentPage) {
                                 detectHorizontalDragGestures(
                                     onDragStart = { navSwipeOffsetX = 0f },
@@ -272,54 +301,89 @@ fun MainAppScreen(viewModel: MusicViewModel, onPageChanged: (Int) -> Unit = {}) 
                                     }
                                 )
                             }
-                            .padding(horizontal = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        navItems.forEachIndexed { index, screen ->
-                            val selected = pagerState.currentPage == index
-                            val itemAlpha by animateFloatAsState(
-                                targetValue = if (selected) 1f else 0.56f,
-                                animationSpec = KuroMotion.appleSnappySpring(),
-                                label = "nav_item_alpha"
-                            )
-                            val interactionSource = remember { MutableInteractionSource() }
-                            Column(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickable(
-                                        interactionSource = interactionSource,
-                                        indication = null
-                                    ) {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        navigateToPage(index)
-                                    }
-                                    .padding(vertical = 6.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                Icon(
-                                    imageVector = screen.icon,
-                                    contentDescription = stringResource(screen.titleRes),
-                                    tint = if (selected) colors.textPrimary else colors.textMuted,
+                        val density = LocalDensity.current
+                        val tabWidthDp = maxWidth / navItems.size
+                        val tabWidthPx = with(density) { tabWidthDp.toPx() }
+                        val pillColor = if (colors.isDark) {
+                            Color.White.copy(alpha = 0.11f)
+                        } else {
+                            Color.Black.copy(alpha = 0.07f)
+                        }
+
+                        // ColorOS 17-style Floating Island sliding active pill
+                        Box(
+                            modifier = Modifier
+                                .width(tabWidthDp)
+                                .fillMaxHeight()
+                                .graphicsLayer {
+                                    val livePage = (pagerState.currentPage + pagerState.currentPageOffsetFraction)
+                                        .coerceIn(0f, (navItems.size - 1).toFloat())
+                                    translationX = livePage * tabWidthPx
+                                }
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(pillColor)
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            navItems.forEachIndexed { index, screen ->
+                                val selected = pagerState.currentPage == index
+                                val itemAlpha by animateFloatAsState(
+                                    targetValue = if (selected) 1f else 0.56f,
+                                    animationSpec = KuroFlowEngine.snappySpring(),
+                                    label = "nav_item_alpha"
+                                )
+                                val iconScale by animateFloatAsState(
+                                    targetValue = if (selected) 1.08f else 0.96f,
+                                    animationSpec = KuroFlowEngine.elasticSpring(),
+                                    label = "nav_item_scale"
+                                )
+                                val interactionSource = remember { MutableInteractionSource() }
+                                Column(
                                     modifier = Modifier
-                                        .size(22.dp)
-                                        .graphicsLayer {
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .kuroElasticPress(interactionSource, pressedScale = 0.92f)
+                                        .clickable(
+                                            interactionSource = interactionSource,
+                                            indication = null
+                                        ) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            navigateToPage(index)
+                                        },
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = screen.icon,
+                                        contentDescription = stringResource(screen.titleRes),
+                                        tint = if (selected) colors.textPrimary else colors.textMuted,
+                                        modifier = Modifier
+                                            .size(22.dp)
+                                            .graphicsLayer {
+                                                alpha = itemAlpha
+                                                scaleX = iconScale
+                                                scaleY = iconScale
+                                            }
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = stringResource(screen.titleRes),
+                                        fontSize = 11.sp,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (selected) colors.textPrimary else colors.textMuted,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.graphicsLayer {
                                             alpha = itemAlpha
                                         }
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    text = stringResource(screen.titleRes),
-                                    fontSize = 11.sp,
-                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (selected) colors.textPrimary else colors.textMuted,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.graphicsLayer {
-                                        alpha = itemAlpha
-                                    }
-                                )
+                                    )
+                                }
                             }
                         }
                     }
@@ -329,11 +393,11 @@ fun MainAppScreen(viewModel: MusicViewModel, onPageChanged: (Int) -> Unit = {}) 
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
+                    .padding(bottom = innerPadding.calculateBottomPadding())
             ) {
                 HorizontalPager(
                     state = pagerState,
-                    beyondBoundsPageCount = 0,
+                    beyondBoundsPageCount = 1,
                     modifier = Modifier.fillMaxSize()
                 ) { page ->
                     val pageOffsetProvider = {
@@ -342,7 +406,7 @@ fun MainAppScreen(viewModel: MusicViewModel, onPageChanged: (Int) -> Unit = {}) 
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .pagerMotionBlurTransition(pageOffsetProvider = pageOffsetProvider)
+                            .kuroFlowPagerTransition(pageOffsetProvider = pageOffsetProvider)
                     ) {
                         when (page) {
                             0 -> HomeScreen(
@@ -376,13 +440,13 @@ fun MainAppScreen(viewModel: MusicViewModel, onPageChanged: (Int) -> Unit = {}) 
                     visible = currentTrack != null && !isExpanded,
                     modifier = Modifier.align(Alignment.BottomCenter),
                     enter = slideInVertically(
-                        animationSpec = tween(260, easing = KuroMotion.EmphasizedDecelerate),
+                        animationSpec = KuroFlowEngine.fluidSpring(),
                         initialOffsetY = { it }
-                    ) + fadeIn(tween(220)),
+                    ) + fadeIn(tween(200)),
                     exit = slideOutVertically(
-                        animationSpec = tween(220, easing = KuroMotion.EmphasizedAccelerate),
+                        animationSpec = KuroFlowEngine.snappySpring(),
                         targetOffsetY = { it }
-                    ) + fadeOut(tween(180))
+                    ) + fadeOut(tween(150))
                 ) {
                     currentTrack?.let { activeTrack ->
                         Box(
@@ -409,13 +473,19 @@ fun MainAppScreen(viewModel: MusicViewModel, onPageChanged: (Int) -> Unit = {}) 
         AnimatedVisibility(
             visible = isExpanded && currentTrack != null,
             enter = slideInVertically(
-                animationSpec = tween(durationMillis = 300, easing = KuroMotion.EmphasizedDecelerate),
+                animationSpec = KuroFlowEngine.sheetSpring(),
                 initialOffsetY = { it }
-            ) + fadeIn(animationSpec = tween(200, easing = KuroMotion.EmphasizedDecelerate)),
+            ) + scaleIn(
+                initialScale = 0.95f,
+                animationSpec = KuroFlowEngine.sheetSpring()
+            ) + fadeIn(animationSpec = tween(180, easing = KuroFlowEngine.EmphasizedDecelerate)),
             exit = slideOutVertically(
-                animationSpec = tween(durationMillis = 220, easing = KuroMotion.EmphasizedDecelerate),
+                animationSpec = KuroFlowEngine.snappySpring(),
                 targetOffsetY = { it }
-            ) + fadeOut(animationSpec = tween(170, easing = KuroMotion.EmphasizedDecelerate))
+            ) + scaleOut(
+                targetScale = 0.96f,
+                animationSpec = tween(180, easing = KuroFlowEngine.EmphasizedAccelerate)
+            ) + fadeOut(animationSpec = tween(150, easing = KuroFlowEngine.EmphasizedAccelerate))
         ) {
             currentTrack?.let { track ->
                 FullPlayerSheet(
